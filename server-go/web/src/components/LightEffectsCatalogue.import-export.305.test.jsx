@@ -22,7 +22,7 @@ const CATALOG = {
   groups: { ambiance: 4, animateur: 1, public: 0 },
   effects: [
     fx('pulsation', 'Pulsation', ['chrono'], { used_by: [{ zone: 'ambiance', moment: 'chrono' }] }),
-    fx('degrade', 'Dégradé', ['calm'], { origin: 'override', file: 'degrade.yaml', min_groups: 2 }),
+    fx('degrade', 'Dégradé', ['calm'], { origin: 'override', file: 'degrade.yaml', min_groups: 2, applicable: { ambiance: true, animateur: false, public: false } }),
     fx('aller-retour', 'Aller-retour', ['calm', 'chrono'], { origin: 'user', file: 'aller-retour.yaml', used_by: [{ zone: 'public', moment: 'calm' }] }),
     fx('vague', 'Vague', ['calm'], { origin: 'user', file: 'vague.yaml' }),
   ],
@@ -69,7 +69,7 @@ describe('Catalogue — boutons selon l\'origine (§01)', () => {
   it('effet livré : Télécharger, sans Supprimer ni Revenir', () => {
     mount()
     const c = card('pulsation')
-    expect(c.getByRole('link', { name: /Télécharger/ }) || c.getByRole('button', { name: /Télécharger/ })).toBeTruthy()
+    expect(c.getByRole('link', { name: /Télécharger/ })).toBeInTheDocument()
     expect(c.queryByRole('button', { name: /Supprimer/ })).toBeNull()
     expect(c.queryByRole('button', { name: /Revenir/ })).toBeNull()
   })
@@ -248,7 +248,7 @@ describe('Supprimer / Revenir à l\'effet d\'origine (§03, §11.5)', () => {
     expect(dlg.getByText(/Supprimer « Aller-retour » ?/)).toBeInTheDocument()
     expect(dlg.getByText(/utilisé : Public/)).toBeInTheDocument()
     expect(dlg.getByText(/aller-retour\.yaml/)).toBeInTheDocument()
-    expect(dlg.getByRole('button', { name: /Télécharger/ }) || dlg.getByRole('link', { name: /Télécharger/ })).toBeTruthy()
+    expect(dlg.getByRole('link', { name: /Télécharger/ })).toHaveAttribute('href', '/api/lighting/effects/aller-retour/download')
     expect(calls(/effects\/aller-retour$/, 'DELETE')).toHaveLength(0)
   })
 
@@ -299,48 +299,64 @@ describe('Supprimer / Revenir à l\'effet d\'origine (§03, §11.5)', () => {
   })
 })
 
-describe('Essayer sur la salle — choix de la zone (§01, E7)', () => {
-  it('la liste ne propose que les zones qui ont au moins un groupe (Ambiance, Animateur ; pas Public)', () => {
+describe('Essayer sur la salle — choix de la zone (§01, E7 ; maquette : liste déroulante accolée au bouton)', () => {
+  const zoneSelect = (id) => card(id).getByLabelText("Zone où jouer l'essai")
+  const tryBtn = (id) => card(id).getByRole('button', { name: /Essayer sur la salle/ })
+  const optionOf = (sel, re) => within(sel).queryAllByRole('option').find((o) => re.test(o.textContent))
+
+  it('la liste propose Ambiance et Animateur ; la zone Public (aucun groupe) n\'est pas sélectionnable', () => {
     mount()
-    fireEvent.click(card('pulsation').getByRole('button', { name: /zone|▾|Essayer/ }))
-    const menu = screen.getByRole('menu')
-    expect(within(menu).getByText(/Ambiance/)).toBeInTheDocument()
-    expect(within(menu).getByText(/Animateur/)).toBeInTheDocument()
-    expect(within(menu).queryByText(/^Public/)).toBeNull()
+    const sel = zoneSelect('pulsation')
+    expect(optionOf(sel, /Ambiance/)).toBeTruthy()
+    expect(optionOf(sel, /Animateur/)).toBeTruthy()
+    const pub = optionOf(sel, /Public/)
+    expect(pub === undefined || pub.disabled).toBe(true)
   })
 
-  it('choisir une zone lance l\'essai sur cette zone (onTry reçoit l\'id et la zone)', async () => {
+  it('choisir une zone puis « Essayer sur la salle » lance l\'essai sur cette zone (onTry reçoit l\'id et la zone)', async () => {
     const onTry = vi.fn().mockResolvedValue({ ok: true, duration_ms: 10000 })
     mount({ onTry })
-    fireEvent.click(card('pulsation').getByRole('button', { name: /zone|▾|Essayer/ }))
-    fireEvent.click(within(screen.getByRole('menu')).getByText(/Animateur/))
+    fireEvent.change(zoneSelect('pulsation'), { target: { value: 'animateur' } })
+    fireEvent.click(tryBtn('pulsation'))
     await waitFor(() => expect(onTry).toHaveBeenCalled())
     expect(onTry.mock.calls[0][0]).toBe('pulsation')
-    expect(JSON.stringify(onTry.mock.calls[0].slice(1))).toContain('animateur')
+    expect(onTry.mock.calls[0][1]).toBe('animateur')
   })
 
-  it('zone grisée avec la raison quand l\'effet demande plus de groupes que la zone n\'en a', () => {
+  it('sans choix, l\'essai joue la zone Ambiance', async () => {
+    localStorage.clear()
+    const onTry = vi.fn().mockResolvedValue({ ok: true, duration_ms: 10000 })
+    mount({ onTry })
+    fireEvent.click(tryBtn('pulsation'))
+    await waitFor(() => expect(onTry).toHaveBeenCalled())
+    expect(onTry.mock.calls[0][1]).toBe('ambiance')
+  })
+
+  it('essai grisé, avec la raison, quand l\'effet demande plus de groupes que la zone choisie n\'en a', () => {
     mount()
-    fireEvent.click(card('degrade').getByRole('button', { name: /zone|▾|Essayer/ }))
-    const item = within(screen.getByRole('menu')).getByText(/Animateur/).closest('[role="menuitem"], button')
-    expect(item).toBeDisabled()
-    expect(item.getAttribute('title') || item.textContent).toMatch(/demande 2 groupes/)
+    fireEvent.change(zoneSelect('degrade'), { target: { value: 'animateur' } })
+    const btn = tryBtn('degrade')
+    expect(btn).toBeDisabled()
+    expect(btn.getAttribute('title')).toMatch(/demande 2 groupes/i)
+    expect(btn.getAttribute('title')).toMatch(/Animateur en a 1/)
   })
 
-  it('la dernière zone choisie est retenue pour les autres cartes (par navigateur)', async () => {
+  it('la dernière zone choisie est retenue (par navigateur) et reprise par les autres cartes', async () => {
     localStorage.clear()
     mount()
-    fireEvent.click(card('pulsation').getByRole('button', { name: /zone|▾|Essayer/ }))
-    fireEvent.click(within(screen.getByRole('menu')).getByText(/Animateur/))
+    fireEvent.change(zoneSelect('pulsation'), { target: { value: 'animateur' } })
     await waitFor(() => expect(JSON.stringify(Object.entries(localStorage))).toMatch(/animateur/))
+    expect(zoneSelect('aller-retour').value).toBe('animateur')
   })
 
-  it('tryUnavailable(zone) grise la zone concernée avec sa raison', () => {
+  it('tryUnavailable(zone) grise l\'essai pour la zone concernée avec sa raison, et pour elle seule', () => {
     mount({ tryUnavailable: (zone) => (zone === 'ambiance' ? 'éclairage forcé sur ON' : '') })
-    fireEvent.click(card('pulsation').getByRole('button', { name: /zone|▾|Essayer/ }))
-    const amb = within(screen.getByRole('menu')).getByText(/Ambiance/).closest('[role="menuitem"], button')
-    expect(amb).toBeDisabled()
-    expect(amb.getAttribute('title') || amb.textContent).toMatch(/forcé sur ON/)
+    localStorage.clear()
+    fireEvent.change(zoneSelect('pulsation'), { target: { value: 'ambiance' } })
+    expect(tryBtn('pulsation')).toBeDisabled()
+    expect(tryBtn('pulsation').getAttribute('title')).toMatch(/forcé sur ON/)
+    fireEvent.change(zoneSelect('pulsation'), { target: { value: 'animateur' } })
+    expect(tryBtn('pulsation')).not.toBeDisabled()
   })
 })
 
