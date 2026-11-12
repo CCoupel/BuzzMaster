@@ -118,6 +118,14 @@ La section **Sauvegarde** permet de choisir quoi inclure dans l'archive :
 | Joueurs | Fichier `bumpers.json` |
 | Historique | Fichier `history.json` |
 | Fonds | Images de fond d'ecran |
+| Réglages de jeu | Réglages de jeu (délai, effet néon, réglages d'ambiance) et **effets lumière personnalisés** : les fichiers de `data/files/effects/`, sans le dossier `natifs/` (copie de référence des effets livrés) |
+
+**Effets lumière dans les sauvegardes (v11.8.0)** :
+
+- Les effets personnalisés partent avec la case **Réglages de jeu** de la sauvegarde sélective, et **toujours** avec la sauvegarde complète (`/fs-backup`, `/backup`) et la sauvegarde « partie » (`/game-backup`).
+- La case **Questions** seule exporte les manches, mais **sans** les fichiers d'effets qu'elles citent : cochez aussi **Réglages de jeu** pour les joindre.
+- À la **restauration**, les effets de l'archive sont **ajoutés** : un fichier de même nom remplace le fichier existant, les autres effets déjà présents sont conservés. Le catalogue est rechargé aussitôt.
+- **Limites** : le choix global des effets (quel effet et quelle vitesse, par zone et par moment : Ambiance › Lumière › Effets) n'est dans aucune sauvegarde. À la restauration, deux fichiers de noms différents portant le même identifiant : le second est écarté, sans question posée. Un effet cité mais absent joue sa valeur par défaut.
 
 ### Endpoints API
 
@@ -135,7 +143,7 @@ Retourne un fichier TAR contenant uniquement les elements selectionnes.
 - `bumpers` — configuration des joueurs
 - `history` — historique des parties
 - `medias` — images de fond / ressources
-- `ambiance` — configuration ambiance (fonds d'ecran, musique, effets) — independant de `history`
+- `ambiance` — case « Réglages de jeu » : configuration ambiance (fonds d'ecran, musique, effets) et fichiers des effets lumière personnalisés — independant de `history`
 
 #### Sauvegarde complete (legacy)
 
