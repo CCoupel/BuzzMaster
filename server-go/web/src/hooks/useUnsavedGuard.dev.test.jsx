@@ -51,7 +51,7 @@ describe('useUnsavedGuard (#210)', () => {
     window.dispatchEvent(ev2)
     expect(ev2.defaultPrevented).toBe(false)
   })
-  it('Précédent : confirmation ; refus = la garde est remise en place', () => {
+  it('Précédent : confirmation ; la garde est remise en place', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     const push = vi.spyOn(window.history, 'pushState')
     render(<Probe dirty />)
@@ -60,11 +60,36 @@ describe('useUnsavedGuard (#210)', () => {
     expect(window.confirm).toHaveBeenCalled()
     expect(push).toHaveBeenCalledTimes(2)
   })
+
+  it('onBlocked : le clic est annulé, la page décide ; proceed() rejoue le clic sans le réintercepter', () => {
+    const blocked = vi.fn()
+    function WithHandler() { useUnsavedGuard(true, { onBlocked: blocked }); return <a href="/admin/quiz">Quiz</a> }
+    render(<WithHandler />)
+    const first = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+    screen.getByText('Quiz').dispatchEvent(first)
+    expect(first.defaultPrevented).toBe(true)
+    expect(blocked).toHaveBeenCalledTimes(1)
+    const seen = []
+    document.addEventListener('click', (e) => seen.push(e.defaultPrevented), true)
+    blocked.mock.calls[0][0].proceed()
+    expect(blocked).toHaveBeenCalledTimes(1) // le clic rejoué n'est pas intercepté
+  })
+  it('onBlocked sur Précédent : garde remise, proceed() remonte de deux entrées', () => {
+    const blocked = vi.fn()
+    const go = vi.spyOn(window.history, 'go').mockImplementation(() => {})
+    function WithHandler() { useUnsavedGuard(true, { onBlocked: blocked }); return null }
+    render(<WithHandler />)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(blocked).toHaveBeenCalledTimes(1)
+    expect(go).not.toHaveBeenCalled()
+    blocked.mock.calls[0][0].proceed()
+    expect(go).toHaveBeenCalledWith(-2)
+  })
   it('Précédent confirmé : la page est quittée (history.back)', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    const go = vi.spyOn(window.history, 'go').mockImplementation(() => {})
     render(<Probe dirty />)
     window.dispatchEvent(new PopStateEvent('popstate'))
-    expect(back).toHaveBeenCalledTimes(1)
+    expect(go).toHaveBeenCalledWith(-2) // la garde a été remise : on repasse avant la page
   })
 })

@@ -96,25 +96,34 @@ describe('AmbiancePage › éditeur d\'effet (#210)', () => {
     expect(calls.some(c => /pulsation\/source$/.test(c.url))).toBe(true)
   })
 
-  it('éditeur modifié : quitter par un lien interne demande confirmation ; rien de modifié ou éditeur fermé : aucune question', async () => {
+  it('éditeur modifié : un lien interne ouvre la question de l\'éditeur (Rester / Abandonner) ; rien de modifié : aucune question', async () => {
     server()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const link = document.createElement('a'); link.href = '/admin/quiz'; link.textContent = 'vers le quiz'; document.body.appendChild(link)
     await openEffects()
     fireEvent.click(within(screen.getByTestId('fx-perso')).getByRole('button', { name: /Modifier/ }))
     await settled()
     fireEvent.click(link)
-    expect(confirm).not.toHaveBeenCalled() // rien n'est modifié
+    expect(screen.queryByRole('dialog')).toBeNull() // rien n'est modifié
     fireEvent.click(screen.getByTestId('cell-0-g1'))
     expect(await screen.findByText('modifications non enregistrées')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText('Vérification par le serveur…')).toBeNull())
     const ev = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
     link.dispatchEvent(ev)
-    expect(confirm).toHaveBeenCalledTimes(1)
     expect(ev.defaultPrevented).toBe(true)
+    const dlg = within(await screen.findByRole('dialog'))
+    expect(dlg.getByText(/Modifications non enregistrées/)).toBeInTheDocument()
+    fireEvent.click(dlg.getByRole('button', { name: 'Rester' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByTestId('effect-editor')).toBeInTheDocument()
     const beforeUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(beforeUnload)
     expect(beforeUnload.defaultPrevented).toBe(true)
+    // Abandonner : le clic est rejoué (non intercepté) et l'éditeur n'est pas fermé par la garde elle-même
+    const seen = vi.fn()
+    link.addEventListener('click', (e) => { seen(e.defaultPrevented); e.preventDefault() })
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /Abandonner/ }))
+    await waitFor(() => expect(seen).toHaveBeenCalled())
     link.remove()
   })
 })

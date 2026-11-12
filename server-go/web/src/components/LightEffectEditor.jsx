@@ -26,6 +26,8 @@ import './LightEffectEditor.css'
 //   create        le premier enregistrement crée le fichier (`PUT … create: true`)
 //   zoneGroups    { ambiance, animateur, public } : groupes par zone — rangées « zone réelle » du simulateur et zones de l'essai
 //   tryUnavailable(zone) -> '' | raison ; onStopTry() : « Essayer sur la salle » (brouillon, §11.10)
+//   leaveRequest { proceed } / onLeaveCancel() : la page intercepte une navigation (barre de navigation, Précédent) ; l'éditeur pose la même
+//     question que « ← Retour au catalogue » (Enregistrer / Abandonner / Rester) puis appelle `leaveRequest.proceed()` ou `onLeaveCancel()`
 //   onDirtyChange(bool) : modifications non enregistrées (la page garde l'éditeur monté)
 //   onClose()     « ← Retour au catalogue » (après la question « modifications non enregistrées » le cas échéant)
 //   onSaved(catalogue)  catalogue renvoyé par PUT, à appliquer par le parent
@@ -55,7 +57,7 @@ function placeErrors(errors) {
 
 export default function LightEffectEditor({
   id, initialDoc = null, create = false, zoneGroups = { ambiance: 0, animateur: 0, public: 0 }, tryUnavailable, onStopTry,
-  onDirtyChange, onClose, onSaved, onDuplicate = null,
+  onDirtyChange, onClose, onSaved, onDuplicate = null, leaveRequest = null, onLeaveCancel,
 }) {
   // Tailles simulées : 1, 3, 6, 12 + le nombre de groupes de chaque zone réelle qui n'y est pas déjà (8 au plus, §11.3).
   const simRows = useMemo(() => {
@@ -93,6 +95,7 @@ export default function LightEffectEditor({
   }, [doc?.tick_ms])
 
   useEffect(() => { onDirtyChange?.(!!d.dirty) }, [d.dirty]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (leaveRequest) setDialog('leave') }, [leaveRequest])
   const placed = useMemo(() => placeErrors(d.draft?.from === 'text' ? [] : d.errors), [d.draft, d.errors])
   const textErrors = d.draft?.from === 'text' ? d.errors : []
   const editable = !readOnly
@@ -124,6 +127,9 @@ export default function LightEffectEditor({
     if (out.ok) onSaved?.(out.catalogue)
     return out
   }
+  // Fin de la question « modifications non enregistrées » : quitter vers le catalogue, ou reprendre la navigation interceptée par la page.
+  const finishLeave = () => { if (leaveRequest) leaveRequest.proceed(); else onClose?.() }
+  const stayHere = () => { setDialog(null); if (leaveRequest) onLeaveCancel?.() }
   const askRemoveGroup = () => { if (starRowUsed(doc)) setDialog('removeGroup'); else doRemoveGroup() }
   const doRemoveGroup = () => { edit(x => removeGroup(x, numbered)); setNumbered(n => Math.max(0, n - 1)); setDialog(null) }
 
@@ -284,12 +290,12 @@ export default function LightEffectEditor({
       />
 
       {dialog === 'leave' && (
-        <Modal titleId="efx-leave-title" title="Modifications non enregistrées" onCancel={() => setDialog(null)}>
+        <Modal titleId="efx-leave-title" title="Modifications non enregistrées" onCancel={() => stayHere()}>
           <p>« {doc.name} » a été modifié.</p>
           <div className="efx-modal-actions">
-            <Button variant="primary" size="sm" disabled={!d.canSave} onClick={async () => { const out = await save(); if (out.ok) { setDialog(null); onClose?.() } else setDialog(null) }}>Enregistrer</Button>
-            <Button variant="secondary" size="sm" onClick={() => { setDialog(null); onClose?.() }}>Abandonner les modifications</Button>
-            <Button variant="secondary" size="sm" onClick={() => setDialog(null)}>Rester</Button>
+            <Button variant="primary" size="sm" disabled={!d.canSave} onClick={async () => { const out = await save(); setDialog(null); if (out.ok) finishLeave(); else if (leaveRequest) onLeaveCancel?.() }}>Enregistrer</Button>
+            <Button variant="secondary" size="sm" onClick={() => { setDialog(null); finishLeave() }}>Abandonner les modifications</Button>
+            <Button variant="secondary" size="sm" onClick={() => stayHere()}>Rester</Button>
           </div>
         </Modal>
       )}

@@ -11,30 +11,38 @@ import { useEffect } from 'react'
 
 export const UNSAVED_MESSAGE = 'Des modifications de l\'effet ne sont pas enregistrées. Quitter la page et les perdre ?'
 
-export function useUnsavedGuard(dirty, message = UNSAVED_MESSAGE) {
+// `onBlocked({ proceed })` (facultatif) : appelé quand une navigation interne est interceptée ; l'appelant demande la confirmation (fenêtre
+// de l'application) puis appelle `proceed()` pour reprendre la navigation (lien : le clic est rejoué ; Précédent : retour en arrière).
+// Sans `onBlocked` : `window.confirm(message)`.
+export function useUnsavedGuard(dirty, { onBlocked = null, message = UNSAVED_MESSAGE } = {}) {
   useEffect(() => {
     if (!dirty) return undefined
 
     const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = '' }
 
+    let replay = false // clic rejoué par `proceed()` : ne pas l'intercepter de nouveau
     const onClick = (e) => {
-      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      if (replay || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
       const a = e.target?.closest?.('a[href]')
       if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download')) return
       let url
       try { url = new URL(a.href, window.location.href) } catch { return }
       if (url.origin !== window.location.origin) return
       if (url.pathname === window.location.pathname && url.search === window.location.search) return
-      if (!window.confirm(message)) { e.preventDefault(); e.stopPropagation() }
+      if (onBlocked) {
+        e.preventDefault(); e.stopPropagation()
+        onBlocked({ proceed: () => { replay = true; try { a.click() } finally { replay = false } } })
+      } else if (!window.confirm(message)) { e.preventDefault(); e.stopPropagation() }
     }
 
-    // Entrée d'historique « garde » : Précédent revient sur la page elle-même.
+    // Entrée d'historique « garde » : Précédent revient sur la page elle-même, la garde est remise, puis on demande.
     let leaving = false
     window.history.pushState({ __unsavedGuard: true }, '')
     const onPop = () => {
       if (leaving) return
-      if (window.confirm(message)) { leaving = true; window.history.back() }
-      else window.history.pushState({ __unsavedGuard: true }, '')
+      window.history.pushState({ __unsavedGuard: true }, '')
+      if (onBlocked) onBlocked({ proceed: () => { leaving = true; window.history.go(-2) } })
+      else if (window.confirm(message)) { leaving = true; window.history.go(-2) }
     }
 
     window.addEventListener('beforeunload', onBeforeUnload)
@@ -45,5 +53,5 @@ export function useUnsavedGuard(dirty, message = UNSAVED_MESSAGE) {
       document.removeEventListener('click', onClick, true)
       window.removeEventListener('popstate', onPop)
     }
-  }, [dirty, message])
+  }, [dirty, onBlocked, message])
 }

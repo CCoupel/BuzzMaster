@@ -394,7 +394,11 @@ export default function AmbiancePage() {
   const [editing, setEditing] = useState(null) // { key, id, initialDoc?, create? }
   const [dupDialog, setDupDialog] = useState(null) // { doc, name, id } : « Dupliquer » demandé depuis l'éditeur
   const [editorDirty, setEditorDirty] = useState(false)
-  useUnsavedGuard(!!editing && editorDirty) // quitter la page avec un effet modifié : confirmation (lien interne, Précédent, fermeture de l'onglet)
+  // Quitter la page avec un effet modifié : la barre de navigation et Précédent sont interceptés (question de l'éditeur : Enregistrer /
+  // Abandonner / Rester), la fermeture de l'onglet par `beforeunload`.
+  const [leaveRequest, setLeaveRequest] = useState(null)
+  const onNavBlocked = useCallback(({ proceed }) => setLeaveRequest({ proceed: () => { setLeaveRequest(null); proceed() } }), [])
+  useUnsavedGuard(!!editing && editorDirty, { onBlocked: onNavBlocked })
   const effectsSettings = useMemo(() => ({
     light: {
       mode: lighting.default_mode || 'AUTO',
@@ -1262,7 +1266,7 @@ export default function AmbiancePage() {
             <LightEffectEditor
               key={editing.key} id={editing.id} initialDoc={editing.initialDoc || null} create={!!editing.create}
               zoneGroups={zoneGroups} tryUnavailable={(zone = 'ambiance') => tryUnavailable(zone)} onStopTry={handleStopTry}
-              onDirtyChange={setEditorDirty} onClose={() => { setEditorDirty(false); setEditing(null); refreshCatalog() }}
+              onDirtyChange={setEditorDirty} leaveRequest={leaveRequest} onLeaveCancel={() => setLeaveRequest(null)} onClose={() => { setEditorDirty(false); setEditing(null); refreshCatalog() }}
               onSaved={(c) => { if (c) applyCatalogue(c); setToast({ message: 'Effet enregistré.', type: 'success' }) }}
               onDuplicate={(src, doc) => setDupDialog({ doc: doc || docOfSource(src), name: src?.effect?.name || doc?.name || '', id: src?.id || doc?.id })}
             />
