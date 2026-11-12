@@ -3,19 +3,19 @@
 > Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
-## État courant (2026-11-11) — v11.6.0 en PROD
+## État courant (2026-11-12) — v11.7.0 en PROD
 
-- **PROD = v11.6.0** « Ambiance : portée étendue (son, types de question, manches) » : bump `f901bf26` (alignement des fichiers de version), merge `main` `37b228b1` (`--no-ff`), tag `v11.6.0` annoté sur `37b228b1` (recréé le 2026-11-10), Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.6.0 (4 assets : firmware merged, linux-arm64, windows-amd64, SHA256SUMS), `release.yml` run 42861022331 vert. Notes + posts : `97f4d338` (`docs/releases/v11.6.0/`), merge final `6ba25995`. Milestone #36 clôturé 5/5. Branche milestone supprimée. Branche courante : `main` (état final workflow `63dad491`).
-- Site `gh-pages` mis à jour v11.2.2 → v11.6.0 (`6d2b8c4b`, carte « Ambiance par manche » badge Nouveau v11.6.0) ; posts réseaux à publier par l'utilisateur ; rendu en ligne non vérifié par un agent.
+- **PROD = v11.7.0** « Ambiance lumière : nouveaux effets de salle » : bump `ba34f440` (6 emplacements à 11.7.0, job Checking rejoué en local avant tag), merge `main` `32969267` (`--no-ff`), tag `v11.7.0` annoté, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.7.0 (4 assets), `release.yml` run 43184530829 vert. Notes `docs/releases/v11.7.0/release-notes.md` (`36db98b2`, pas de posts), merge final `80637f80`. Site gh-pages `5d92da58` (schéma animé des zones). Milestone #45 clôturé (5 issues fermées). Branche courante : `main` (`f935ed25`), branche milestone supprimée.
+- **Livré** : LOT-1 #225 (groupes à trois zones Ambiance / Animateur / Public, sans nom, 12 par zone, essai en séquence 6 s) ; LOT-2 #223 + #211 (effets en fichiers YAML pas à pas dans `data/files/effects/`, variables de groupe `gA: g1; +1` / listes, `pre` / `pas` / `dernier` / `post`, PRE/LAST/POST n'avancent pas les variables, un effet + une vitesse ×0,5–×2 par moment et par zone, « Tester », 5 natifs pulsation / chenillard / chenillard-traine / couleur-equipe / degrade) ; LOT-3 #299 (catalogue, aperçu calculé par le serveur tick par tick, essai sur la salle). QUALIF validées : 11.7.0.4 (LOT-1+2), 11.7.0.5 (LOT-3).
+- **Sortis du milestone, à replanifier** : #300 remplissage, #301 vague, #302 scintillement (format « noyau seul », sans variantes 10 s/5 s, hasard, étalement chrono, départ équipe).
+- **Décisions techniques** : modèle des effets figé par chronogramme validé par l'utilisateur (`docs/LIGHT_EFFECTS.md`, contrat `contracts/light-effects.md` révision 4) ; pulsation au nouveau rendu (non identique à v11.6.0, décision utilisateur) ; zone Public non pilotée sans effet et hors ON/OFF/Flash ; Go 1.26.11 (GO-2026-6859) ; helpers de test `config.Mutate` / `config.PatchJSON` (copy-on-write, jamais d'écriture en place dans `config.Get()`).
 
-### Livré (4 lots, tous VALID-HUMAINE, GATE LOT validés sur QUALIF)
-- LOT-1 #283 #232 (QUALIF 11.6.0.6) ; LOT-2 #235 (11.6.0.11) ; LOT-3 #231 (11.6.0.16) ; LOT-4 #290 sons et ambiance par manche (refusé une fois en 11.6.0.21 — ajout des fichiers de son par manche —, validé en 11.6.0.24).
-- QA LOT-4 validée avec réserves (couverture `internal/audio` 65,8 %, durées > budget, suivies par #291/#296-#298) ; `internal/server` remonté à 71,1 %.
-
-### Incidents / leçons (v11.6.0)
-1. Le commit « Release 11.6.0 » n'avait posé la version que dans `server-go/config.json` ; 4 fichiers restaient à 11.5.0 (`server-go/internal/server/config.json`, `server-go/web/package.json`, `platformio.ini` VERSION+FIRMWARE_VERSION, `server-go/assets/firmware/version.txt`) → job Checking de `release.yml` en échec après le tag. `ci-branch.yml` ne contrôle pas cette cohérence. Résolution validée par l'utilisateur : bump, re-merge, suppression puis recréation du tag (aucune Release n'existait). Suivi : **#304**. Règle : en PUBLISH PROD, vérifier les 5 fichiers de version avec la logique du job Checking **avant** de poser le tag.
-2. Interruption de session pendant la PUBLISH PROD : reprise via `.claude/workflow-state.json` sans perte ; le fichier est commité à l'état final de chaque milestone (`chore(workflow): état final …`).
-3. Template à jour : v5.6.0 (`be4a7a8d`, sync 2026-11-11 : panneau milestone en arbre lots / sous-lots, objectif de lot = description du label `LOT-n`, plan du planner par lots).
+### Incidents / leçons (v11.7.0) — à formuler en règles courtes
+1. **Modèle mal compris au cadrage** : GATE LOT-1 refusé 2 fois (11.7.0.2, 11.7.0.3), plan révisé 4 fois (motifs calculés → pas à pas ; groupe animateur unique → multiple → zones). Leçon : pour un format ou un modèle de données nouveau, faire valider un **exemple concret** (fichier + chronogramme) au GATE 1.5, avant toute maquette d'écran.
+2. **CI des pushes intermédiaires non surveillée** : 5 runs `ci-branch.yml` rouges sont passés inaperçus (data race de test, tests transitoires). Leçon : après chaque push d'un agent, vérifier le run `ci-branch.yml` du SHA.
+3. **Data race de test** : `json.Unmarshal(..., config.Get())` dans des tests écrit dans la config vivante → course avec le writer d'ambiance ; corrigé par `config.Mutate` / `PatchJSON`. Règle : un test publie une copie (SetInstance), jamais d'écriture en place.
+4. **Version PROD** : 4 fichiers + FIRMWARE_VERSION encore à 11.7.0.0 avant le tag, détecté par infra avant tout tag ; règle inscrite dans `.claude/agents/environments/publish.prod.md` (EC-02 context-audit, `f935ed25`). #304 toujours au backlog.
+5. **Ordres d'arrêt trop tardifs** : deux fois un STOP est arrivé après que les agents avaient commité (Batch 2.3, Batch R). Pas de revert ; adapter le plan au code livré.
 
 ### Règles permanentes (adoptées par l'utilisateur)
 1. dev-* et test-writer ne lancent que les tests touchés ; `qa` et la CI seuls lancent les suites complètes.
@@ -23,10 +23,16 @@
 3. Maquettes ouvertes avec `cmd.exe /c start chrome <chemin Windows>`.
 4. Jamais d'amend ni de réécriture dans le dépôt principal.
 
-### Backlog / suite
-- Milestones ouverts : v11.7.0 (effets lumière de salle : #211 #223 #225 #299-#302, effets déclaratifs), v11.8.0 (#210 éditeur de scènes), v12.0/v12.1 Roue, v13.0 PICTIONARY ; hors milestone #209 #259 #281 #296 #297 #298 #303 #304.
-- Stash : 18 entrées anciennes (v2.x–v7.0.0) jamais nettoyées.
+## Backlog / suite
+- Milestones ouverts : v11.8.0 (#210 éditeur de scènes, à baser sur le format pas à pas : grille ticks × groupes), v12.0 / v12.1 Roue, v13.0 PICTIONARY, vX.0.x DNS, vx.x.x Scoring MEMORY ; hors milestone #209 #259 #281 #296 #297 #298 #300 #301 #302 #303 #304.
+- À remonter au template : Go 1.26.11 dans `env-template.yaml` (puis retirer l'étape projet de `.claude-launcher/env.yaml`) ; défauts relevés par infra dans les modèles de procédure (messages d'échec adressés à `"main"` au lieu de `"team-lead"`, suivi CI à viser `release.yml`, contrôle CHANGELOG cherchant `X.Y.Z.a`).
+- Site marketing : règle des badges « Nouveau » = majeure en cours + 2 dernières mineures, retrait à chaque republication (`.claude/agents/marketing-release.md`).
+- Stash : 18 entrées anciennes toujours non nettoyées.
 - Toujours valables : panneau milestone-panel (sélection PLANNING), liste « Nommage des Agents » du bloc template.
+
+## État précédent (2026-11-11) — v11.6.0 en PROD (archivé)
+
+- **PROD = v11.6.0** « Ambiance : portée étendue (son, types de question, manches) », tag `v11.6.0`, milestone #36 clôturé 5/5. Incident principal : 4 fichiers de version restés à 11.5.0 → job Checking en échec après le tag (suivi #304). Détail : historique git de ce fichier.
 
 ## État précédent (2026-11-09) — v11.5.0 en PROD (archivé)
 
