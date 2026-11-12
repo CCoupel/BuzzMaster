@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within, configure } from '@testing-library/react'
 
 // ---------------------------------------------------------------------------
 // #225 (v11.7.0, LOT-1) — Ambiance › Lumière : sous-onglets « Pont et ampoules » /
@@ -7,6 +7,11 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 // des groupes. Écrit depuis contracts/light-effects.md §2.1, §2.4, §2.5 et la
 // maquette docs/mockup/v11.7.0/ui/ambiance_page__light_groups.html (sections 01-04).
 // ---------------------------------------------------------------------------
+
+// Flaky sous charge (suite complète sur 2 CPU : 1/3, 0/55 isolé) : les findBy / waitFor suivent un rendu complet de la page,
+// plus lents que le délai par défaut de 1 s. 5 s pour toutes les attentes du fichier ; test à 15 s pour ne pas couper avant.
+configure({ asyncUtilTimeout: 5000 })
+vi.setConfig({ testTimeout: 15000 })
 
 vi.mock('./AmbiancePage.css', () => ({}))
 vi.mock('../components/LightGroupsManager.css', () => ({}))
