@@ -446,7 +446,7 @@ ROUE_NEXT_TEAM           string         // ANSWER / TURN_END seulement
 ROUE_NEXT_DEFAULT        string         // SAME | NEXT (bouton conseillé), ANSWER / TURN_END seulement
 ROUE_TEAM_BANK           map[string]int // cagnotte de manche
 ROUE_TURN_GAIN           int            // gain du tour, pas encore ajouté à la cagnotte
-ROUE_BOARD               RoueBoard      // { COLS: 14, ROWS: [...] } — "_" caché, "*" caché éclairé
+ROUE_BOARD               RoueBoard      // { COLS: 14, ROWS: [...] } — "_" caché, "*" caché éclairé (sous-phase LIT)
 ROUE_LETTERS             []RoueLetter   // consonnes proposées (LETTER, TEAM, HIT)
 ROUE_CONSONANTS_LEFT     bool
 ROUE_WHEEL               RoueWheel      // LAYOUT, durées, SEGMENTS, CURRENT, STOP

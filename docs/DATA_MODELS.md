@@ -1838,7 +1838,7 @@ repliés. Mise en lignes : 4 lignes de 14 colonnes au plus, mots non coupés, ca
 | `ROUE_NEXT_DEFAULT` | string | `ANSWER` / `TURN_END` : `SAME` ou `NEXT` (bouton conseillé) |
 | `ROUE_TEAM_BANK` | map équipe → int | Cagnotte de manche |
 | `ROUE_TURN_GAIN` | int | Gain du tour, pas encore ajouté à la cagnotte |
-| `ROUE_BOARD` | `{ "COLS": 14, "ROWS": string[] }` | `_` = lettre cachée, `*` = cachée et éclairée (étape 4), autre = visible |
+| `ROUE_BOARD` | `{ "COLS": 14, "ROWS": string[] }` | `_` = lettre cachée, `*` = cachée et éclairée (sous-phase `LIT`, étape 5 de `ROUE_STEP`), autre = visible |
 | `ROUE_LETTERS` | `{ "LETTER", "TEAM", "HIT" }[]` | Consonnes proposées, dans l'ordre |
 | `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question |
 | `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |

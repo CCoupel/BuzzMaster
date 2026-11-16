@@ -14,6 +14,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Mises a jour automatiques](#mises-a-jour-automatiques)
 - [Mise a jour firmware OTA des buzzers](#mise-a-jour-firmware-ota-des-buzzers-v310)
 - [Configuration WiFi des buzzers](#configuration-wifi-des-buzzers-v310)
+- [Roue de la Fortune](#roue-de-la-fortune-v1200-144-145)
 - [Jeu Memory - Modes multi-equipes](#jeu-memory---modes-multi-equipes)
 - [Filtres categories dans GamePage](#filtres-categories-dans-gamepage-v370)
 - [Double QR code enrollment TV](#double-qr-code-enrollment-tv-v370)
@@ -107,7 +108,7 @@ Au redémarrage :
 
 ## Sauvegarde et restauration
 
-### Page Configuration (`/settings`)
+### Page Configuration (`/admin/settings`)
 
 La section **Sauvegarde** permet de choisir quoi inclure dans l'archive :
 
@@ -173,7 +174,7 @@ Apres restauration, les donnees sont rechargees en memoire.
 
 ## Reinitialisation selective
 
-### Page Configuration (`/settings`)
+### Page Configuration (`/admin/settings`)
 
 La section **Reinitialisation** permet de choisir quoi remettre a zero :
 
@@ -1580,7 +1581,7 @@ Deux providers LLM sont disponibles. Choisissez celui qui correspond à vos beso
 
 #### Accès à la configuration
 
-1. Ouvrir la page **Configuration** (`/settings` ou lien "⚙️ Paramètres" en haut à droite)
+1. Ouvrir la page **Configuration** (`/admin/settings` ou lien "⚙️ Paramètres" en haut à droite)
 2. Aller à la section **IA** (nouvelle section en bas de la page)
 3. **Sélectionner le Provider** : Cliquer sur le bouton "Claude (Anthropic)" ou "Groq" pour basculer entre les deux. Seule la carte du fournisseur sélectionné s'affiche — l'autre est masquée.
 4. **Remplir la clé API** du provider sélectionné (voir ci-dessous)
