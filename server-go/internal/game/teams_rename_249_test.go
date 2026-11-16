@@ -175,11 +175,14 @@ func TestTeamRename249_ClosedListCoversEveryTeamIndexedGameStateField(t *testing
 		"RAFALE_TEAM_COUNTERS": true, "RAFALE_TEAM_CATEGORY_COUNTERS": true, "RAFALE_TEAM_BEST": true, "RAFALE_TEAM_STREAK": true, "RAFALE_TEAM_ERRORS": true,
 		"MEMOTION_CARD_TEAMS": true, "MEMORY_PARTICIPATING_TEAMS": true, "MEMOTION_PARTICIPATING_TEAMS": true, "RAFALE_PARTICIPATING_TEAMS": true,
 		"MEMORY_CURRENT_TEAM": true, "MEMOTION_CURRENT_TEAM": true, "RAFALE_CURRENT_TEAM": true,
+		// v12.0.0 (#144) ROUE : reportés par RenameTeamState / purgeTeamStateUnsafe.
+		"ROUE_TEAMS": true, "ROUE_CURRENT_TEAM": true, "ROUE_NEXT_TEAM": true, "ROUE_TEAM_BANK": true,
 	}
 	exceptions := map[string]string{
 		"MEMORY_CURRENT_TEAM_COLOR":   "couleur : inchangée au renommage",
 		"MEMOTION_CURRENT_TEAM_COLOR": "couleur : inchangée au renommage",
 		"RAFALE_CURRENT_TEAM_COLOR":   "couleur : inchangée au renommage",
+		"ROUE_CURRENT_TEAM_COLOR":     "couleur : inchangée au renommage",
 		"TEAMS_LOCKED":                "drapeau, pas un index d'équipe",
 	}
 	typ := reflect.TypeOf(GameState{})
