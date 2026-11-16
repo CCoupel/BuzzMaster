@@ -199,6 +199,23 @@ Procédure, format et checklist : `.claude/agents/teamleader.template.md`, secti
 Chaque jalon `[NOM] EN COURS — …` d'un teammate (ex. `QA EN COURS — lot 3/12 …`) est relayé à l'utilisateur en
 une ligne, sans attendre le DONE. Un jalon n'est pas un DONE : ne pas enchaîner avant le DONE. Si un jalon signale des échecs, les nommer dans le relais.
 
+**Point périodique** : tant qu'un teammate est ACTIF, toutes les `progress.interval_min` minutes (`project-config.json`,
+défaut 10 — minuterie `CronCreate` armée au premier dispatch, supprimée quand plus personne n'est ACTIF), demander
+`AVANCEMENT ?` aux seuls teammates ACTIFS, calculer l'ETA de chacun (vitesse moyenne depuis le dispatch), et relayer
+le tableau `⏱ Avancement HH:MM` (% · ETA · tendance · stagnation) avec la fin de phase estimée.
+Procédure complète : `.claude/agents/cdp.template.md` « Point d'avancement périodique ».
+
+### Lots — démarrage du suivant seulement si le précédent est terminé ET validé
+
+**Aucun ordre** (DEV, tests, plan, maquette, doc, labels `EN COURS`) pour LOT-N+1 tant que LOT-N n'a pas : QA `DONE`
++ QUALIF, **GATE LOT validé** (par l'utilisateur, ou auto-validé sans issue `VALID-HUMAINE`), CI verte sur son SHA,
+issues fermées (sauf `close_on` = `validation`), `lots.LOT-N.status` = `completed`. Pendant QUALIF / GATE LOT / CI,
+les teammates restent IDLE. Ouverture relayée : `✅ LOT-N terminé et validé (…) → LOT-N+1 démarre`.
+**Sous-lots** (`LOT-N.M`) : un à la fois, dans l'ordre ; `LOT-N.M+1` démarre dès la QA `DONE` de `LOT-N.M`, **sans
+validation utilisateur** (ni QUALIF, ni push). Ta validation n'intervient qu'au niveau du lot parent, après son
+dernier sous-lot, et seulement si une de ses issues porte `VALID-HUMAINE`.
+Préconditions et preuves : `.claude/agents/cdp.template.md` « Verrou de démarrage d'un lot ».
+
 ### Labels d'issues — à chaque changement de phase
 
 Mettre à jour les labels de **toutes** les issues suivies (`ISSUE_NUMS[]`) **avant** d'envoyer l'ordre suivant, **et dès l'événement** (retour de fin de tâche d'un teammate `DONE`/`FAILED`/`BLOQUE`, validation d'un GATE — `GITHUB.md` §9.12), avant de le relayer. L'état dit ce qui **reste à faire** (ex. `PRET` = plan validé, DEV pas lancé), pas ce qu'un teammate fait à cet instant :

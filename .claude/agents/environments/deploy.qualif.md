@@ -20,8 +20,9 @@ Aucun build ni publication ici — le binaire deja produit par PUBLISH QUALIF
 > verifie la presence de l'exe, transmet au teamleader son chemin et la commande de lancement
 > (`--port 9090`) ; les smoke tests ci-dessous sont executes par l'utilisateur (ou par `deployer`
 > seulement si le port 9090 du poste Windows est joignable depuis le conteneur — sinon, ne pas
-> pretendre les avoir passes). `access.verified` de QUALIF = `failed` sur `local-shell` tant que
-> ce mode dure.
+> pretendre les avoir passes). Le jalon QUALIF = **fournir l'exe Windows a
+> l'utilisateur** : `access.verified` de QUALIF ne sonde que le repertoire de depot et la toolchain (`ok`,
+> 2026-11-16) ; lancement et smoke tests restent cote utilisateur.
 
 ## Variables attendues
 

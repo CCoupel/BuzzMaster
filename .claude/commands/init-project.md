@@ -51,6 +51,7 @@ jamais du texte brut listant des lettres dans le chat :
     |
     v
 [CONFIGURATION] --> Questions ou deduction
+    |                  (dont ouverture Chrome : serveur web du launcher via CL_BROWSER_PATH_MAP, sinon repli file://, Etape 9d)
     |
     v
 [GENERATION] --> project-config.json + agents dev-* + registre des agents
@@ -1787,6 +1788,52 @@ avant cette etape.
 
 Ecriture a la Finalisation (section 5, « Environnement conteneur »).
 
+### Etape 9d : Ouverture des fichiers dans Chrome (correspondance de chemins)
+
+Le teamleader ouvre dans Chrome (MCP `claude-in-chrome`) les brouillons de maquette, les procedures de tests manuels
+et l'apercu marketing de repli, et donne toujours leur chemin absolu exact (repli : l'utilisateur ouvre le fichier
+lui-meme). Claude et Chrome ne voient pas forcement le projet au meme endroit : c'est **Claude-Launcher ≥ v5.9.0 qui
+le dit** (`CL_BROWSER_PATH_MAP`, reglage `browser_paths` de sa config) — normalement vers son **serveur web embarque**
+(`http://localhost:8081<chemin absolu>`, `os: url`), sinon vers une URL `file://` mappee. Sans launcher (ou launcher
+anterieur a v5.9.0), repli `file://` par `browser.path_map`. Regle, sources et conversion :
+`TEMPLATE_claude/commands/context/COMMON.md` 14.9 (fonction `browser_url`, appariement du navigateur).
+
+1. **`CL_BROWSER_PATH_MAP` fournie** (`launcher_browser_map` repond : environnement tmux de la session, sinon du
+   processus — launcher a jour) → **aucune question**. Afficher la correspondance effective pour
+   ce projet (prefixe `container` retenu ↔ `host`, `os` ; ex. `/ ↔ http://localhost:8081 (url)` = serveur web du
+   launcher) puis jouer la verification (point 3). `[]` → « aucun
+   navigateur declare par le launcher : les fichiers seront affiches par leur chemin », sans verification. Echec de
+   la verification → la correction se fait dans `browser_paths` du launcher (le dire, avec l'URL essayee), jamais
+   dans `project-config.json`. Un `browser.path_map` deja present est conserve tel quel (repli sans launcher).
+2. **Variable absente** (`launcher_browser_map` en echec : projet lance sans Claude-Launcher, ou launcher anterieur a
+   v5.9.0) →
+   **repli** `browser.path_map` :
+   - Detecter (lecture seule) : `PROJECT_ROOT=$(git rev-parse --show-toplevel)` ; WSL (`command -v wslpath`) →
+     racine Windows proposee `wslpath -w "$PROJECT_ROOT"` ; conteneur (`/.dockerenv`, `/run/.containerenv`,
+     `KUBERNETES_SERVICE_HOST`, `HOSTNAME` en `claude-launcher-*`) → racine du poste non detectable : le signaler
+     (« mettre a jour Claude-Launcher fournirait cette correspondance ») et la demander ; sinon → meme chemin, `linux`.
+     `browser.path_map` deja present → valeur par defaut.
+   - Question (le chemin du projet affiche dans la question) :
+     ```
+     AskUserQuestion : "Chrome doit ouvrir les fichiers du projet (<PROJECT_ROOT>) en file:// — à quel chemin le poste
+     qui exécute Chrome voit-il ce dossier ?"
+     - <valeur existante ou detectee> (Recommande) — ex. "Windows : C:\Users\moi\projet" (WSL detecte) ou
+       "Identique : <PROJECT_ROOT> (linux)" (execution directe)
+     - Chemin Windows a saisir — C:\… ou \\serveur\… (preciser via "Autre")
+     - Chemin Linux / macOS a saisir — /home/… (preciser via "Autre")
+     - Pas de Chrome sur ce poste — correspondance identique ; les fichiers seront seulement affiches par leur chemin
+     ```
+     Conteneur detecte : pas d'option « Identique » (Chrome ne voit pas le conteneur) — la premiere option devient
+     « Chemin Windows a saisir (Recommande) ». « Pas de Chrome » : `launcher_root` = `project_root`, `launcher_os` = `linux`.
+     Normaliser la reponse : OS deduit de la forme (`X:\…` ou `\\…` → `windows`, `/…` → `linux`), sans separateur final.
+   - Ecriture dans `project-config.json` (section 1, `browser.path_map`).
+3. **Verification** (si Chrome est disponible) : creer `_work/tmp/browser-check.html` (« Correspondance OK »), l'ouvrir
+   avec `browser_url` (serveur web du launcher : apres l'appariement du navigateur, COMMON.md 14.9), lire la page (`get_page_text`) : texte attendu → OK ; sinon afficher l'URL essayee et, en repli
+   (point 2), reposer la question (2 essais, puis enregistrer tel quel avec `⚠ correspondance non verifiee` au message
+   de fin). 404 / page inaccessible du serveur web du launcher → corriger `browser_paths` du launcher (ou verifier
+   que le navigateur apparie est bien celui du hub). URL `file://` refusee par l'extension → rappeler l'option « Autoriser l'accès aux URL de fichier » de
+   l'extension Claude in Chrome.
+
 ---
 
 ## Etape 10 : Securite
@@ -1930,6 +1977,9 @@ deplacement est fait a la Finalisation (sous-section « Elements prives »), apr
   "issues": {
     "close_on": "ci"
   },
+  "progress": {
+    "interval_min": 10
+  },
   "commands": {
     "env": "<ENV_CMD : prefixe shell de la chaine native, ex. export PATH=...>",
     "build": "<BUILD_CMD>",
@@ -1946,6 +1996,13 @@ deplacement est fait a la Finalisation (sous-section « Elements prives »), apr
   },
   "docs": {
     "mockup_dir": "docs/mockup"
+  },
+  "browser": {
+    "path_map": {
+      "project_root": "<PROJECT_ROOT : git rev-parse --show-toplevel>",
+      "launcher_root": "<racine vue par le poste du launcher, ex. C:\\Users\\moi\\projet>",
+      "launcher_os": "<windows | linux>"
+    }
   },
   "marketing": {
     "site": "auto"
@@ -1987,7 +2044,9 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `commands.coverage` | Stack : `go test -cover ./...` / `npm run test -- --coverage` / `pytest --cov` |
 | `marketing.site` | Defaut `"auto"` : un site marketing est attendu (branche `gh-pages`, uniquement — `MARKETING/` en est le worktree git, jamais un dossier de la branche de code) ; s'il n'existe pas, l'agent marketing declenche une initialisation (questions de cadrage + maquette). `false` = ordre direct de ne pas avoir de site (le CDP dispatche `PREPARE ... — SANS SITE`) |
 | `issues.close_on` | Etape 7. `ci` (defaut ; absent = `ci`) : issue fermee sur CI verte apres QA ; `validation` : issue laissee ouverte en `DONE` jusqu'a une validation utilisateur qui la couvre (GATE LOT explicite, sinon GATE 4) — `commands/context/GITHUB.md` §9.5 |
+| `progress.interval_min` | Defaut `10` (absent = `10`, aucune question, modifiable a la main ; projet deja initialise : rien a migrer). Cadence en minutes du point d'avancement periodique du teamleader (% et ETA par teammate actif) — `agents/cdp.md` « Point d'avancement periodique » |
 | `docs.mockup_dir` | Defaut `docs/mockup` (dossier des maquettes validees — voir `context/COMMON.md` §14) |
+| `browser.path_map` | Etape 9d. **Repli** quand Claude-Launcher ne fournit pas `CL_BROWSER_PATH_MAP` (projet lance sans launcher, ou launcher anterieur a v5.9.0, sans serveur web) : correspondance de chemins pour ouvrir un fichier du projet dans Chrome en `file://` — `project_root` (racine vue par Claude), `launcher_root` (meme racine vue par le poste qui execute Chrome), `launcher_os` (`windows` \| `linux`). Non pose si la variable est fournie. Absent = meme chemin (WSL : `wslpath -m`). Regle : `context/COMMON.md` 14.9 |
 | `commands.env` | Etape 9b. Prefixe shell evalue par tout agent avant ses commandes `commands.*` (chaine d'outils native de l'OS — `context/COMMON.md` 15.10). Ex. sous WSL : `export PATH=$HOME/.nvm/versions/node/v22.11.0/bin:/usr/local/go/bin:$PATH`. Vide si les outils du PATH sont deja natifs |
 | `commands.test_related` | Boucle DEV : tests lies aux fichiers source modifies, `{FILES}` = liste de fichiers. Stack : `npx vitest related --run {FILES}` / `npx jest --findRelatedTests {FILES}` — vide pour Go/pytest (les dev-* utilisent alors `commands.test_targeted` sur les paquets/dossiers touches) |
 | `commands.test_fast` | **Obsolete** (conserve s'il existe, plus utilise par les dev-*) : il relancait toute la suite hors tag `slow`. Remplace par `commands.test_related` / `commands.test_targeted` |
@@ -2844,6 +2903,7 @@ Configuration :
 - Conteneur    : .claude-launcher/env-template.yaml <cree | regenere | inchange | non genere> — local : <chemins> ;
                  env.yaml <non touche | migre (image <x> gardee)> ; necessite Claude-Launcher ≥ v5.5.0 ;
                  <⚠ outil version socle < requis | rien a signaler>   (Etape 9c)
+- Chrome       : <fournie par Claude-Launcher : container ↔ host (os) | repli projet : PROJECT_ROOT ↔ launcher_root (os)> — <verifiee | ⚠ correspondance non verifiee | pas de Chrome>   (Etape 9d)
 
 Memoire projet : .claude/memory/MEMORY.md initialisee (si absente)
 Teamleader : <modele> / <effort> ecrits dans .claude/settings.json (surcharge : compagnon .claude/agents/teamleader.md)
@@ -3229,6 +3289,44 @@ Lecture seule ici : jouer la detection et la composition de l'Etape 9c (`templat
   Finalisation (« Environnement conteneur »), `.gitignore` et `PRIVATE/gitconfig` compris ; la question de l'Etape 9c
   seulement si `launcher_env` est absent.
 
+#### Etape d1k — Correspondance de chemins pour Chrome
+
+Lecture seule ici : jouer l'Etape 9d sans question.
+- `launcher_browser_map` repond → `[=] ouverture Chrome — fournie par Claude-Launcher : <container> ↔ <host> (<os>)`
+  (`[]` → `aucun navigateur declare par le launcher`) ; un `browser.path_map` present est garde comme repli.
+- Variable absente, `browser.path_map` absent → `[+] browser.path_map — a definir (launcher sans CL_BROWSER_PATH_MAP :
+  repli projet ; mettre a jour Claude-Launcher le fournirait)`.
+- Variable absente, `project_root` different de `git rev-parse --show-toplevel` (projet deplace) →
+  `[~] browser.path_map — project_root <ancien> → <actuel>`.
+- Sinon → `[=] browser.path_map — <launcher_root> (<launcher_os>), repli projet`.
+- A l'etape d5 : verification de l'Etape 9d (point 3) dans tous les cas ; pour `[+]`/`[~]`, question du point 2 et
+  ecriture de `browser.path_map` seul (migration additive, le reste du fichier inchange).
+
+#### Etape d1l — Section « Confinement des fichiers de travail » de CLAUDE.md
+
+Section hors bloc `TEAMLEADER_PROTOCOL` (non resynchronisee par d6). Un projet initialise avant l'exception `/tmp`
+(temporaire non vital) a l'ancienne version, qui interdit `/tmp` en contradiction avec `agents/context/COMMON.md`.
+Lecture seule ici :
+
+```bash
+grep -q '^## Confinement des fichiers de travail' CLAUDE.md \
+  && ! awk '/^## Confinement des fichiers de travail/{p=1;next} p&&/^## /{exit} p' CLAUDE.md | grep -q 'non vital' \
+  && echo "[~] CLAUDE.md — Confinement : exception /tmp (temporaire non vital) a ajouter"
+```
+
+- Sortie vide (section a jour, ou absente : rien a migrer) → rien au rapport d4.
+- `[~]` → a l'etape d5, montrer le diff de la section (`## Confinement des fichiers de travail` jusqu'au `## ` suivant)
+  avec celle de `TEMPLATE_claude/CLAUDE_TEMPLATE.md` et la remplacer apres accord, le reste de `CLAUDE.md` inchange :
+
+```bash
+mkdir -p _work/tmp
+awk '/^## Confinement des fichiers de travail/{p=1} p&&/^## /&&!/^## Confinement/{exit} p' TEMPLATE_claude/CLAUDE_TEMPLATE.md > _work/tmp/confinement.md
+awk 'FNR==NR{s=s $0 "\n"; next}
+     /^## Confinement des fichiers de travail/{printf "%s", s; skip=1; next}
+     skip&&/^## /{skip=0} !skip' _work/tmp/confinement.md CLAUDE.md > CLAUDE.md.tmp \
+  && mv CLAUDE.md.tmp CLAUDE.md && rm -f _work/tmp/confinement.md && echo "✓ CLAUDE.md — section Confinement mise a jour"
+```
+
 #### Etape d2 — Calculer les noms deployes attendus
 
 ```bash
@@ -3373,6 +3471,9 @@ Synchronisation depuis github.com/<repo>
 
   Environnement conteneur (etape d1j) :
   [~] .claude-launcher/env-template.yaml — local web/node_modules, watch web/package-lock.json
+
+  Ouverture dans Chrome (etape d1k) :
+  [=] ouverture Chrome — fournie par Claude-Launcher : / ↔ http://localhost:8081 (url)
 
   Graphe des fichiers de définition locaux (etape d1e, etat avant mise a jour) :
   [⛓] CLAUDE.md:42 → .claude/agents/old.md          ← lien casse (cible absente)
@@ -3834,6 +3935,7 @@ Synchronisation terminee.
   Elements prives (PRIVATE/)        : [N deplaces, N attendus | inchange] — rotation recommandee : <elements> (etape d1h)
   Toolchain / tests cibles          : [native | Linux activee (commands.env) | ⚠ Windows conservee] ; test_related [ajoute | inchange] (etape d1i)
   Environnement conteneur           : [.claude-launcher/env-template.yaml cree | regenere | inchange | non gere] ; env.yaml [non touche | migre | migration reportee] (etape d1j)
+  Ouverture dans Chrome             : [fournie par Claude-Launcher | repli projet defini | mis a jour | inchange] — [verifiee | ⚠ non verifiee] (etape d1k)
 
   Fichiers PROJET preserves (non touches) :
     ✓ CLAUDE.md (hors bloc TEAMLEADER_PROTOCOL et hors table Agents Disponibles)
