@@ -22,6 +22,7 @@ import { getTypeState } from '../utils/typeState'
 import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
 import { getArdoiseTvLayout } from '../utils/ardoiseTvLayout'
 import TvPointsAward from '../components/TvPointsAward'
+import RoueTv from '../components/roue/RoueTv'
 import { usePointsAward } from '../hooks/usePointsAward'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
@@ -708,7 +709,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // renseigné qui ne correspond à aucune des 4 branches ci-dessus (donc
   // inconnu des 5 types gérés) n'est plus traité comme SPEEDY par défaut —
   // inatteignable avec les données actuelles (5 types connus).
-  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale || isEntracte
+  // ROUE (v12.0.0, #144, contrat roue.md) — dispatch positif, jamais de repli sur le bloc SPEEDY générique.
+  const isRoue = gameState.question?.TYPE === 'ROUE'
+  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale || isEntracte || isRoue
   const isSpeedy = !isKnownOtherType && (!gameState.question?.TYPE || gameState.question?.TYPE === 'SPEEDY')
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
@@ -3120,6 +3123,20 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   </div>
                 </motion.div>
               </div>
+            )}
+
+            {/* ROUE (v12.0.0, #144, maquettes M1 TV / M5 tablette) — composant dédié ; TV statique.
+                Aucune phrase ici : seulement ROUE_BOARD (contrat roue.md §9). Sur la tablette, le bouton STOP
+                réutilise onMediaClick (BUTTON, VPlayerPage.handleBuzz). */}
+            {isRoue && (showGameContent || showReady || showCountdown) && (
+              <RoueTv
+                gameState={gameState}
+                teams={teams}
+                catMeta={categoryMeta(gameState.question?.CATEGORY, apiCategories)}
+                isVPlayer={isVPlayer}
+                teamName={teamName}
+                onStop={onMediaClick}
+              />
             )}
 
             {/* RAFALE TV Content — RÉVISION 2026-08-28 (contrat rafale.md

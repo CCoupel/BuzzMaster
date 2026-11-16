@@ -1,0 +1,21 @@
+/* RoueGameBoard — TV STATIQUE : overflow hidden, unités viewport (contrat CLAUDE.md « Contrainte Affichage TV »). */
+.rgb-board { display: grid; grid-template-columns: repeat(var(--rgb-cols, 14), var(--rgb-cs)); grid-auto-rows: var(--rgb-cs); gap: 0.5vh; justify-content: center; perspective: 800px; overflow: hidden; }
+.rgb-tv { --rgb-cs: 6vw; }
+.rgb-tv.rgb-arc { --rgb-cs: 4.9vw; }
+.rgb-tablet { --rgb-cs: calc((100vw - 28px) / 14 - 3px); gap: 3px; }
+.rgb-admin { --rgb-cs: 2.1rem; gap: 3px; }
+.rgb-cell { display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: calc(var(--rgb-cs) * 0.62); border-radius: 0.5vh; background: rgba(255, 255, 255, 0.04); color: #111827; }
+.rgb-cell.tile { background: #1d4ed8; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25); }
+.rgb-cell.shown { background: #f8fafc; }
+.rgb-cell.shown.mine { background: var(--rgb-c); color: #fff; }
+.rgb-cell.lit { background: #fde047; box-shadow: 0 0 2.5vh #fde047, inset 0 0 0 2px #fff; animation: rgb-pulse 0.9s ease-in-out infinite alternate; }
+.rgb-cell.flip { animation: rgb-flip 0.6s ease-out both; animation-delay: calc(var(--rgb-i, 0) * var(--rgb-flip, 600ms)); }
+.rgb-ghost { color: #93c5fd; opacity: 0.8; }
+@keyframes rgb-pulse { from { filter: brightness(0.9); } to { filter: brightness(1.25); } }
+@keyframes rgb-flip {
+  0% { transform: rotateY(180deg); background: #fde047; color: transparent; }
+  49% { color: transparent; background: #fde047; }
+  50% { color: #111827; background: #f8fafc; }
+  100% { transform: rotateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .rgb-cell.lit, .rgb-cell.flip { animation: none; } }
