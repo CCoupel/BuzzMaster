@@ -3,6 +3,7 @@ import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import USBConfigModal from '../components/USBConfigModal'
+import WheelConfigCard from '../components/roue/WheelConfigCard'
 import ApiKeyHelpModal from '../components/ApiKeyHelpModal'
 import ApiKeyValidationDialog from '../components/ApiKeyValidationDialog'
 import { OtaAllModal } from '../components/TeamCard'
@@ -39,6 +40,9 @@ export default function ConfigPage() {
     arc_blur: 100
   })
   const [savingNeon, setSavingNeon] = useState(false)
+  // Roue de la Fortune (#144) — section `wheel` et `wheel_default` de GET /game-config.json (contrat roue.md §10)
+  const [wheelConfig, setWheelConfig] = useState(null)
+  const [wheelDefault, setWheelDefault] = useState(null)
 
   const [loadingDemo, setLoadingDemo] = useState(false)
   const [showUSBModal, setShowUSBModal] = useState(false)
@@ -247,6 +251,10 @@ export default function ConfigPage() {
           if (cancelled) return
           if (data.neon_effect) {
             setNeonConfig(data.neon_effect)
+          }
+          if (data.wheel) {
+            setWheelConfig(data.wheel)
+            setWheelDefault(data.wheel_default || null)
           }
           // ENTRACTE (#119, C1) — la section `entracte` a quitté
           // game-config.json (propriété de la partie désormais, voir
@@ -1551,6 +1559,11 @@ export default function ConfigPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Roue de la Fortune (#144, maquette M4) — rendue quand le serveur renvoie la section `wheel` */}
+            {wheelConfig && (
+              <WheelConfigCard wheel={wheelConfig} wheelDefault={wheelDefault} onSaved={setWheelConfig} />
+            )}
 
           </Card>
         </section>
