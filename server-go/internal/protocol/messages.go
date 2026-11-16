@@ -158,6 +158,19 @@ const (
 	ActionRafaleValidate   = "RAFALE_VALIDATE"   // Admin/Anim → Server: current answer judged correct
 	ActionRafaleInvalidate = "RAFALE_INVALIDATE" // Admin/Anim → Server: current answer judged incorrect
 	ActionRafaleSetTeams   = "RAFALE_SET_TEAMS"  // Admin → Server: participating teams + play order
+	// ROUE actions (v12.0.0, #144 — contracts/roue.md §8). Client → server:
+	// admin for all, animateur for the 7 step buttons (never SET_TEAMS, PASS,
+	// REVEAL). ROUE_ERROR is Server → emitter only.
+	ActionRoueSetTeams = "ROUE_SET_TEAMS" // Admin → Server: participating teams + rotation order
+	ActionRoueSpin     = "ROUE_SPIN"      // Admin/Anim → Server: step 1, spin the wheel
+	ActionRoueStop     = "ROUE_STOP"      // Admin/Anim → Server: step 2, « Forcer l'arrêt »
+	ActionRoueLetter   = "ROUE_LETTER"    // Admin/Anim → Server: step 4, the team's consonant
+	ActionRoueFlip     = "ROUE_FLIP"      // Admin/Anim → Server: step 5, « Retourner les cases »
+	ActionRoueAnswer   = "ROUE_ANSWER"    // Admin/Anim → Server: step 6, « Réponse validée »
+	ActionRoueNext     = "ROUE_NEXT"      // Admin/Anim → Server: step 7, « Tour suivant » / « Équipe suivante »
+	ActionRouePass     = "ROUE_PASS"      // Admin → Server: pass the hand at once
+	ActionRoueReveal   = "ROUE_REVEAL"    // Admin → Server: « Dévoiler » the phrase, no winner
+	ActionRoueError    = "ROUE_ERROR"     // Server → emitter: refused action, state unchanged
 	// RAFALE_ANSWER/RAFALE_TICK are SERVER → CLIENT only (contract §5.2) —
 	// deliberately absent from internal/server/inbound_allowlist.go (see
 	// inbound_allowlist_rafale_test.go's regression guard). RAFALE_ANSWER
@@ -588,6 +601,25 @@ type QCMHintPayload struct {
 // SetVirtualPlayerLimitPayload for SET_VIRTUAL_PLAYER_LIMIT action
 type SetVirtualPlayerLimitPayload struct {
 	Limit int `json:"LIMIT"` // Maximum number of virtual players
+}
+
+// RoueSetTeamsPayload is an alias for MemorySetTeamsPayload ({TEAMS: [...]}).
+type RoueSetTeamsPayload = MemorySetTeamsPayload
+
+// RoueLetterPayload for ROUE_LETTER.
+type RoueLetterPayload struct {
+	Letter string `json:"LETTER"`
+}
+
+// RoueNextPayload for ROUE_NEXT: HAND is SAME (« Tour suivant ») or NEXT (« Équipe suivante »).
+type RoueNextPayload struct {
+	Hand string `json:"HAND"`
+}
+
+// RoueErrorPayload for ROUE_ERROR (to the emitter only).
+type RoueErrorPayload struct {
+	Code    string `json:"CODE"`
+	Message string `json:"MESSAGE"`
 }
 
 // RafaleSetTeamsPayload is an alias for MemorySetTeamsPayload — same

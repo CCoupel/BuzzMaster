@@ -85,6 +85,8 @@ var soundSiteRegistry = map[soundSite]soundDecision{
 		"invalidate/timeout only), OnRafaleCorrect (CueRafaleBonne) / OnRafaleCardInvalid (CueRafaleMauvaise, card-scoped), " +
 		"OnRafaleLotEnd (CueRafaleFinLot — fired AFTER the verdict cue, review m1) and " +
 		"OnTimeUp (CueTempsEcoule) callbacks wired here"},
+	{Func: "setupRoueCallbacks"}: {"OnRoueNotice (v12.0.0 #144): CueRafaleMauvaise on an absent/repeated letter or " +
+		"BANQUEROUTE, CueGagne on the credit — existing cues only"},
 }
 
 // ---------------------------------------------------------------------------

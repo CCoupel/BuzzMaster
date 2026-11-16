@@ -84,6 +84,17 @@ var entracteExpectedAllowed = map[string]bool{
 	protocol.ActionRafaleValidate:   false,
 	protocol.ActionRafaleInvalidate: false,
 	protocol.ActionRafaleSetTeams:   false,
+	// ROUE (v12.0.0, #144, contract roue.md §8.1): refused during an entracte,
+	// the default of the entracte allowlist.
+	protocol.ActionRoueSetTeams: false,
+	protocol.ActionRoueSpin:     false,
+	protocol.ActionRoueStop:     false,
+	protocol.ActionRoueLetter:   false,
+	protocol.ActionRoueFlip:     false,
+	protocol.ActionRoueAnswer:   false,
+	protocol.ActionRoueNext:     false,
+	protocol.ActionRouePass:     false,
+	protocol.ActionRoueReveal:   false,
 	// QUESTION_SOUND (v11.1, #219, contracts/sound.md §10.2) — same
 	// "conduite en direct" bucket as REVEAL/BUMPER_POINTS/RAFALE_VALIDATE
 	// above: a question's attached sound is part of an active round, and

@@ -659,6 +659,8 @@ func (a *App) setupCallbacks() {
 		a.ambiance().NotifyState()
 	}
 
+	a.setupRoueCallbacks() // ROUE (v12.0.0, #144) — cmd/server/roue.go
+
 	// RAFALE invalid answer / timeout, classic round only (v11.0/#227,
 	// contracts/sound.md §2.1's CuePerdu) — sound-only, no lighting
 	// counterpart exists at this site today.
@@ -1708,6 +1710,11 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionRafaleSetTeams:
 		a.handleRafaleSetTeams(msg)
+
+	case protocol.ActionRoueSetTeams, protocol.ActionRoueSpin, protocol.ActionRoueStop, protocol.ActionRoueLetter,
+		protocol.ActionRoueFlip, protocol.ActionRoueAnswer, protocol.ActionRoueNext, protocol.ActionRouePass,
+		protocol.ActionRoueReveal:
+		a.handleRoueAction(incoming.ClientID, msg)
 
 	case protocol.ActionQuestionSound:
 		a.handleQuestionSound(msg)
@@ -4536,6 +4543,9 @@ var suspendedDuringLaunch = map[string]bool{
 	protocol.ActionMotionSelect: true, protocol.ActionMotionFlip: true, protocol.ActionMotionStopTimer: true,
 	protocol.ActionMotionReveal: true, protocol.ActionMotionDone: true, protocol.ActionRafaleValidate: true,
 	protocol.ActionRafaleInvalidate: true, protocol.ActionRafaleSetTeams: true, protocol.ActionFlipMemoryCard: true,
+	protocol.ActionRoueSetTeams: true, protocol.ActionRoueSpin: true, protocol.ActionRoueStop: true,
+	protocol.ActionRoueLetter: true, protocol.ActionRoueFlip: true, protocol.ActionRoueAnswer: true,
+	protocol.ActionRoueNext: true, protocol.ActionRouePass: true, protocol.ActionRoueReveal: true,
 	// points
 	protocol.ActionTeamPoints: true, protocol.ActionBumperPoints: true, protocol.ActionTeamPointsBatch: true,
 	protocol.ActionBumperPointsBatch: true, protocol.ActionSetCreditPoints: true,
