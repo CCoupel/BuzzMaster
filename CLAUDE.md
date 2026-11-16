@@ -321,7 +321,7 @@ PRIVATE/
 | Élément privé lié à un environnement | `PRIVATE/<ENV>/` (ex. `PRIVATE/PROD/kubeconfig`, `PRIVATE/QUALIF/deploy_key`) |
 | Élément privé commun au projet | `PRIVATE/GLOBAL/` (ex. `PRIVATE/GLOBAL/ACCES.md`, `PRIVATE/GLOBAL/dumps/`) |
 | Variables lues par `/deploy` (globales, par environnement) | `.env`, `.claude/agents/environments/<env>.env` — emplacements fixes liés à la structure du projet, **pas** dans `PRIVATE/` ; une variable qui désigne un fichier d'accès pointe dans `PRIVATE/<ENV>/` (ex. `KUBECONFIG=PRIVATE/PROD/kubeconfig`) |
-| Fichier temporaire de travail | `_work/tmp/` (purgé, pas un stockage durable) |
+| Fichier temporaire de travail | `_work/tmp/` (purgé, pas un stockage durable) — jamais `/tmp` pour un contenu privé |
 
 - **`PRIVATE/` est partagé** : un seul exemplaire, à la racine du checkout principal, utilisé par tous les
   teammates — jamais copié (copier un secret le multiplie). Depuis un worktree :
