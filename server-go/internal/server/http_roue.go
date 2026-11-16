@@ -48,6 +48,11 @@ func applyRoueFields(r *http.Request, question map[string]interface{}) (int, str
 	if _, err := game.RoueBuildBoard(phrase); err != nil {
 		return http.StatusBadRequest, err.Error()
 	}
+	// The presentation is PUBLIC (TV, tablets): it must not carry the phrase either.
+	// Refused (not silently altered): the author must reword their hint.
+	if roueFieldLeaksPhrase(presentation, phrase) {
+		return http.StatusBadRequest, game.RoueErrPresentationLeaksPhrase + ": la présentation ne doit pas contenir la phrase à deviner"
+	}
 	if err := game.ValidateRoueFields(presentation, mode, gainsRule, layout); err != nil {
 		return http.StatusBadRequest, err.Error()
 	}

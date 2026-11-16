@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -39,5 +40,17 @@ func TestRoueUpload145_QuestionFieldNeverCarriesThePhrase(t *testing.T) {
 	_, saved := postRoue145(t, s, map[string]string{"question": roueSamplePhrase})
 	if saved["QUESTION"] != "Roue de la Fortune" {
 		t.Errorf("sans présentation : QUESTION = %v, attendu le titre par défaut", saved["QUESTION"])
+	}
+}
+
+// Revue LOT-1.2 : la présentation (publique) ne peut pas contenir la phrase — refus 400, rien d'écrit.
+func TestRoueUpload145_PresentationContainingPhraseRefused(t *testing.T) {
+	s, _ := setupTestHTTPServer(t)
+	w, saved := postRoue145(t, s, map[string]string{"roue_presentation": "Indice : combien pour ce chien dans la vitrine"})
+	if w.Code != http.StatusBadRequest || !strings.HasPrefix(w.Body.String(), "ROUE_PRESENTATION_CONTAINS_PHRASE") {
+		t.Fatalf("attendu 400 ROUE_PRESENTATION_CONTAINS_PHRASE, got %d %q", w.Code, w.Body.String())
+	}
+	if saved != nil {
+		t.Errorf("rien ne doit être écrit : %v", saved)
 	}
 }

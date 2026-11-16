@@ -224,3 +224,36 @@ func TestRoueEngine144_VPlayerBuzzStopsTheWheel(t *testing.T) {
 		t.Fatal("no PAUSE")
 	}
 }
+
+// Revue LOT-1.2 : max_points énorme refusé vite (plus de boucle non bornée) ; correction du pas inchangée.
+func TestRoueWheel144_HugeMaxPointsRefusedFast(t *testing.T) {
+	for _, mp := range []int{RoueMaxPointsLimit + 1, 1 << 40, int(^uint(0) >> 1)} {
+		if _, _, err := NormalizeRoueWheelParams(RoueWheelParams{MaxPoints: mp, Step: 7}); err == nil {
+			t.Errorf("max_points=%d doit être refusé", mp)
+		}
+	}
+	if p, adj, err := NormalizeRoueWheelParams(RoueWheelParams{MaxPoints: RoueMaxPointsLimit, Step: 15625*2 + 1}); err != nil || adj == 0 || RoueMaxPointsLimit%p.Step != 0 {
+		t.Errorf("correction du pas à la limite : %+v %d %v", p, adj, err)
+	}
+}
+
+// Revue LOT-1.2 : une génération de minuterie n'est jamais réutilisée d'une manche à l'autre.
+func TestRoueEngine144_TimerGenerationNeverReusedAcrossRounds(t *testing.T) {
+	e := roueEngine144(t, RoueModeTantQueJeGagne, "red", "blue")
+	_ = e.RoueSpin()
+	e.mu.Lock()
+	oldGen, oldKind := e.roue.gen, e.roue.timerKind
+	e.mu.Unlock()
+	e.Stop()
+	q := &Question{ID: "roue2", Question: "Roue de la Fortune", Type: QuestionTypeRoue, TypedContent: TypedContent{RouePhrase: "Toto tata"}}
+	e.Ready("roue2", q)
+	if err := e.RoueSetTeams([]string{"red", "blue"}); err != nil {
+		t.Fatal(err)
+	}
+	e.StartImmediate(0)
+	_ = e.RoueSpin()
+	e.roueTimerFired(oldGen, oldKind) // stale callback of the previous round
+	if e.GetState().RoueSubPhase != RoueSubSpinning {
+		t.Fatal("a stale timer callback must not act on the new round")
+	}
+}

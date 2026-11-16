@@ -4,6 +4,7 @@ import (
 	"log"
 	"math/rand"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -105,12 +106,19 @@ const (
 	roueTimerFlip = "flip"
 )
 
+// roueGenSeq is the engine-wide generation counter of the ROUE timers: a
+// generation is never reused, even by the runtime of a later round, so a
+// callback still in flight from a previous round can never match a new one.
+var roueGenSeq int64
+
+func nextRoueGen() int { return int(atomic.AddInt64(&roueGenSeq, 1)) }
+
 func (rt *roueRuntime) cancelTimer() {
 	if rt.timer != nil {
 		rt.timer.Stop()
 		rt.timer = nil
 	}
-	rt.gen++
+	rt.gen = nextRoueGen()
 	rt.timerKind = ""
 	rt.running = false
 	rt.remaining = 0
@@ -446,7 +454,7 @@ func (e *Engine) rouePauseTimersUnsafe() {
 		rt.timer.Stop()
 		rt.timer = nil
 	}
-	rt.gen++ // a callback already in flight is invalidated
+	rt.gen = nextRoueGen() // a callback already in flight is invalidated
 	rt.running = false
 	rt.remaining = rem
 }

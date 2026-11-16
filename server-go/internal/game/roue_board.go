@@ -18,14 +18,15 @@ const (
 // Error codes of the phrase validation (contracts/roue.md §11.1). They are
 // also the prefix of the 400 text answered by POST /questions.
 const (
-	RoueErrPhraseEmpty         = "ROUE_PHRASE_EMPTY"
-	RoueErrPhraseInvalidChar   = "ROUE_PHRASE_INVALID_CHAR"
-	RoueErrPhraseWordTooLong   = "ROUE_PHRASE_WORD_TOO_LONG"
-	RoueErrPhraseTooLong       = "ROUE_PHRASE_TOO_LONG"
-	RoueErrPresentationTooLong = "ROUE_PRESENTATION_TOO_LONG"
-	RoueErrModeInvalid         = "ROUE_MODE_INVALID"
-	RoueErrGainsRuleInvalid    = "ROUE_GAINS_RULE_INVALID"
-	RoueErrWheelLayoutInvalid  = "ROUE_WHEEL_LAYOUT_INVALID"
+	RoueErrPhraseEmpty             = "ROUE_PHRASE_EMPTY"
+	RoueErrPhraseInvalidChar       = "ROUE_PHRASE_INVALID_CHAR"
+	RoueErrPhraseWordTooLong       = "ROUE_PHRASE_WORD_TOO_LONG"
+	RoueErrPhraseTooLong           = "ROUE_PHRASE_TOO_LONG"
+	RoueErrPresentationLeaksPhrase = "ROUE_PRESENTATION_CONTAINS_PHRASE"
+	RoueErrPresentationTooLong     = "ROUE_PRESENTATION_TOO_LONG"
+	RoueErrModeInvalid             = "ROUE_MODE_INVALID"
+	RoueErrGainsRuleInvalid        = "ROUE_GAINS_RULE_INVALID"
+	RoueErrWheelLayoutInvalid      = "ROUE_WHEEL_LAYOUT_INVALID"
 )
 
 // Valid values of the ROUE_* enumerations (contracts/roue.md §3).

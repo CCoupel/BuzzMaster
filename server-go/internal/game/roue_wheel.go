@@ -20,6 +20,10 @@ const (
 // RoueMaxSegments is the limit of the Wheel component.
 const RoueMaxSegments = 64
 
+// RoueMaxPointsLimit bounds max_points (a refusal above): the wheel is limited to
+// 64 cases anyway, a larger maximum has no use and would make the step search costly.
+const RoueMaxPointsLimit = 1_000_000
+
 // RoueSegment is one case of the wheel.
 type RoueSegment struct {
 	ID    string `json:"ID"`
@@ -84,6 +88,9 @@ func NormalizeRoueWheelParams(p RoueWheelParams) (out RoueWheelParams, adjustedF
 	if p.MaxPoints < 2 {
 		return p, 0, fmt.Errorf("max_points doit être un entier supérieur ou égal à 2")
 	}
+	if p.MaxPoints > RoueMaxPointsLimit {
+		return p, 0, fmt.Errorf("max_points ne peut pas dépasser %d", RoueMaxPointsLimit)
+	}
 	if p.Step < 1 {
 		return p, 0, fmt.Errorf("step doit être un entier supérieur ou égal à 1")
 	}
@@ -96,16 +103,22 @@ func NormalizeRoueWheelParams(p RoueWheelParams) (out RoueWheelParams, adjustedF
 	if p.MaxPoints%p.Step != 0 {
 		entered := p.Step
 		best, bestDist := 1, p.MaxPoints
-		for d := 1; d < p.MaxPoints; d++ {
-			if p.MaxPoints%d != 0 {
-				continue
-			}
+		consider := func(d int) { // d divides max, d < max
 			dist := d - entered
 			if dist < 0 {
 				dist = -dist
 			}
-			if dist < bestDist { // ascending d: a tie keeps the smaller divisor
+			if dist < bestDist || (dist == bestDist && d < best) { // a tie keeps the smaller divisor
 				best, bestDist = d, dist
+			}
+		}
+		for d := 1; d*d <= p.MaxPoints; d++ { // divisors enumerated up to √max
+			if p.MaxPoints%d != 0 {
+				continue
+			}
+			consider(d)
+			if q := p.MaxPoints / d; q != d && q < p.MaxPoints {
+				consider(q)
 			}
 		}
 		p.Step = best
