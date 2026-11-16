@@ -403,6 +403,10 @@ type Engine struct {
 	OnRoueChange     func()
 	OnRoueNotice     func(RoueNotice)
 	RoueCategoryMeta func(category string) CategoryMeta
+	// RoueWheelParamsFn supplies the wheel configuration (game-config.json)
+	// read at each START; called under the engine lock, it must not call back
+	// into the Engine.
+	RoueWheelParamsFn func() RoueWheelParams
 	// OnRafaleInvalid (v11.0/#227, contracts/sound.md §2.1's CuePerdu) fires
 	// on a classic RAFALE round's RAFALE_INVALIDATE (RafaleInvalidate,
 	// below) or its question-timer expiry — "identique à réponse invalide"

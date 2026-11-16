@@ -318,14 +318,21 @@ func (e *Engine) roueEnterTurnUnsafe() {
 
 // roueEnterTurnEndUnsafe ends the turn (step 7): the turn gain joins the
 // team's pot, the advised button is computed.
-func (e *Engine) roueEnterTurnEndUnsafe(found bool) {
+//
+// emit: the TURN_END event is only the "last event" when the turn ends by the
+// gesture itself (ANSWER → ROUE_NEXT); when the turn ends on a BANQUEROUTE, a
+// TOUR PERDU or a missed letter, that more informative event stays the last one
+// (the sub-phase TURN_END carries the step).
+func (e *Engine) roueEnterTurnEndUnsafe(found, emit bool) {
 	team := e.state.RoueCurrentTeam
 	gain := e.state.RoueTurnGain
 	e.roueBankUnsafe(team, gain)
 	e.state.RoueTurnGain = 0
 	e.roueSetSubUnsafe(RoueSubTurnEnd)
 	e.roueAdviceUnsafe(found)
-	e.roueEventUnsafe(RoueEvTurnEnd, team, "", 0, 0, gain)
+	if emit {
+		e.roueEventUnsafe(RoueEvTurnEnd, team, "", 0, 0, gain)
+	}
 }
 
 // roueApplyHandUnsafe gives the hand per the admin's choice (SAME keeps it,
@@ -351,6 +358,9 @@ func (e *Engine) startRoueRoundUnsafe() {
 		return
 	}
 	params := e.roueParams
+	if e.RoueWheelParamsFn != nil {
+		params = e.RoueWheelParamsFn()
+	}
 	if params.MaxPoints == 0 {
 		params = DefaultRoueWheelParams()
 	}
@@ -516,10 +526,10 @@ func (e *Engine) roueFinishStoppingUnsafe(fx *roueFx) {
 		e.state.RoueTurnGain = 0
 		e.roueEventUnsafe(RoueEvBankrupt, team, "", 0, 0, 0)
 		fx.notices = append(fx.notices, RoueNotice{Kind: RoueNoticeBad, Team: team})
-		e.roueEnterTurnEndUnsafe(false)
+		e.roueEnterTurnEndUnsafe(false, false)
 	case RoueKindLoseTurn:
 		e.roueEventUnsafe(RoueEvLoseTurn, team, "", 0, 0, 0)
-		e.roueEnterTurnEndUnsafe(false)
+		e.roueEnterTurnEndUnsafe(false, false)
 	default:
 		e.roueEventUnsafe(RoueEvLandValue, team, "", 0, seg.Value, 0)
 		e.roueSetSubUnsafe(RoueSubLetter)
@@ -627,7 +637,7 @@ func (e *Engine) RoueLetter(letter string) error {
 			if p.Letter == ls {
 				e.roueEventUnsafe(RoueEvLetterRepeat, team, ls, 0, 0, 0)
 				fx.notices = append(fx.notices, RoueNotice{Kind: RoueNoticeBad, Team: team})
-				e.roueEnterTurnEndUnsafe(false)
+				e.roueEnterTurnEndUnsafe(false, false)
 				return nil
 			}
 		}
@@ -645,7 +655,7 @@ func (e *Engine) RoueLetter(letter string) error {
 		if !hit {
 			e.roueEventUnsafe(RoueEvLetterMiss, team, ls, 0, 0, 0)
 			fx.notices = append(fx.notices, RoueNotice{Kind: RoueNoticeBad, Team: team})
-			e.roueEnterTurnEndUnsafe(false)
+			e.roueEnterTurnEndUnsafe(false, false)
 			return nil
 		}
 		value := 0
@@ -787,7 +797,7 @@ func (e *Engine) RoueNext(hand string) error {
 			return roueErr(RoueErrNotAllowed, "« Équipe suivante » est refusé en SOLO")
 		}
 		if sub == RoueSubAnswer { // no validated answer: the turn ends with this very gesture
-			e.roueEnterTurnEndUnsafe(true)
+			e.roueEnterTurnEndUnsafe(true, true)
 		}
 		e.roueApplyHandUnsafe(hand)
 		return nil

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"buzzcontrol/internal/audio"
+	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
 	"buzzcontrol/internal/protocol"
@@ -20,6 +21,13 @@ import (
 // ambiance follow the team that has the hand; notices carry the existing
 // sounds and effects only.
 func (a *App) setupRoueCallbacks() {
+	a.engine.RoueWheelParamsFn = func() game.RoueWheelParams { // game-config.json `wheel`, read at each START
+		w := config.GetGameSettings().Wheel
+		return game.RoueWheelParams{
+			MaxPoints: w.MaxPoints, Step: w.Step, BankruptCount: w.BankruptCount, LoseTurnCount: w.LoseTurnCount,
+			SpinPeriodMs: w.SpinPeriodMs, SpinMaxMs: w.SpinMaxMs, StopDurationMs: w.StopDurationMs, FlipIntervalMs: w.FlipIntervalMs,
+		}
+	}
 	a.engine.OnRoueChange = func() {
 		a.broadcastUpdate()
 		a.ledCtl().RoueTeams()
