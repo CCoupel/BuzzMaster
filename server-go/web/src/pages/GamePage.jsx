@@ -860,6 +860,8 @@ export default function GamePage() {
       <div className="admin-col-center">
       {/* Timer + Display Section (stacked vertically) */}
       <div className="timer-display-section">
+        {/* ROUE (#144, décision GATE 2) : aucun chronomètre en mode ROUE */}
+        {gameState.question?.TYPE !== 'ROUE' && (
         <Card variant="elevated" padding="md" className="timer-card">
           <Timer
             currentTime={gameState.timer}
@@ -876,6 +878,7 @@ export default function GamePage() {
             <div className="sound-wait-badge-inline">⏳ le chrono démarre à la fin du son</div>
           )}
         </Card>
+        )}
         <Card variant="elevated" padding="sm" className="display-card">
           <span className="toggle-label-vertical">TV</span>
           <div className="toggle-buttons">
@@ -1382,6 +1385,7 @@ export default function GamePage() {
       <div className="control-panel">
         <Card variant="elevated" padding="lg" className="controls-card">
           <div className="control-inputs">
+            {gameState.question?.TYPE !== 'ROUE' && (
             <div className="input-group">
               <label htmlFor="time-input">Temps (sec)</label>
               <input
@@ -1394,6 +1398,7 @@ export default function GamePage() {
                 disabled={isPlaying}
               />
             </div>
+            )}
           </div>
 
           {/* RAFALE — panneau de configuration de manche + alerte de pool

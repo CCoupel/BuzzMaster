@@ -118,7 +118,7 @@ function Action({ gs, gates, actions, selected, setSelected }) {
       </>)
     case 'LIT':
       return (<>
-        <h5>4 — Consonne {ev.LETTER} : {ev.COUNT} case{ev.COUNT > 1 ? 's' : ''} éclairée{ev.COUNT > 1 ? 's' : ''} sur le plateau</h5>
+        <h5>5 — Consonne {ev.LETTER} : {ev.COUNT} case{ev.COUNT > 1 ? 's' : ''} éclairée{ev.COUNT > 1 ? 's' : ''} sur le plateau</h5>
         <div className="roue-row"><span>Les cases du <b>{ev.LETTER}</b> sont éclairées sur la TV.</span></div>
         <div className="roue-row roue-gap"><button type="button" className="roue-btn primary big" onClick={actions.flip}>🔄 Retourner les cases</button></div>
       </>)
