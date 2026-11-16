@@ -40,6 +40,14 @@ Précision après les tests du moteur (commit `38627055`) — `roue.md` §4, §5
   de cause, sans événement `TURN_END` ; `TURN_END` n'est émis que par `ROUE_NEXT` reçu en `ANSWER` (ou en `TURN` sans
   consonne restante) ; `ROUE_NEXT` reçu en `TURN_END` n'émet rien.
 
+Précisions après la revue du LOT-1.2 (dev-backend `ce4552b4`) — `roue.md` §9, §10, §11.1, §11.3. **Aucun BREAKING**
+(mode nouveau) :
+
+- **[NEW]** `POST /questions`, `type=ROUE` — refus `400` `ROUE_PRESENTATION_CONTAINS_PHRASE` quand la présentation
+  contient la phrase à deviner (comparaison repliée) ; un champ `question` qui la contient est remplacé par la
+  présentation ou par « Roue de la Fortune ».
+- **[CHANGED]** Section `wheel` et `POST /api/roue/wheel-preview` — `max_points` limité à 1 000 000 ; au-delà, refus `400`.
+
 ---
 ## [20261112] — v11.8.0 — éditeur d'effets, import et export (#210, #305)
 

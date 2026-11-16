@@ -306,6 +306,7 @@ sous-phase courante et refuse la suivante (`WRONG_SUBPHASE`), sans effet ni doub
 - `QUESTION.ROUE_PHRASE` est **retiré** de tout message envoyé à `/ws/tv` et `/ws/player`, dans toutes les phases
   (le plateau entièrement visible suffit après résolution). Il reste présent pour `/ws/admin` et `/ws/anim`.
 - `ROUE_BOARD` ne contient jamais une lettre non révélée (`_` ou `*` seulement).
+- La présentation et le champ `question`, publics, ne peuvent pas contenir la phrase (§11.1).
 - La phrase n'est jamais écrite dans `ANSWER`, dans un journal diffusé (`/ws/logs`) ni dans un message aux buzzers.
 - **Tests exigés** (modèle `internal/protocol/rafale_leak_test.go`) : pour chaque sous-phase avant `SOLVED`, la
   phrase et chacune de ses lettres non révélées sont absentes des messages sérialisés TV et tablette.
@@ -329,11 +330,11 @@ La roue n'est pas une liste de cases saisie : elle est **générée par le serve
 
 | Champ | Règle |
 |---|---|
-| `max_points` | Points de la meilleure case. Entier ; défaut 1000 |
+| `max_points` | Points de la meilleure case. Entier, **1 000 000 au plus** (au-delà : refus `400`, à l'enregistrement comme à l'aperçu §11.3 — une valeur plus grande n'a pas d'usage, la roue étant limitée à 64 cases) ; défaut 1000 |
 | `step` | Pas : écart entre deux valeurs, et plus petite valeur. Entier ≥ 1 ; **strictement inférieur à `max_points`** (sinon une seule valeur : refus) ; doit diviser `max_points` — **s'il ne le divise pas, il est corrigé** au diviseur de `max_points` le plus proche (inférieur à `max_points` ; à égalité de distance, le plus petit), sans refus ; défaut 50 |
 | `bankrupt_count` | Nombre de cases BANQUEROUTE. 0 ou plus, défaut 2 |
 | `lose_turn_count` | Nombre de cases TOUR PERDU. 0 ou plus, défaut 1 |
-| — | Nombre total de cases de la roue générée : **64 au plus** (limite du composant `Wheel`). Pas ≥ maximum, valeur non entière ou négative, ou plus de 64 cases : `400` avec message, **rien n'est enregistré** |
+| — | Nombre total de cases de la roue générée : **64 au plus** (limite du composant `Wheel`). Pas ≥ maximum, maximum supérieur à 1 000 000, valeur non entière ou négative, ou plus de 64 cases : `400` avec message, **rien n'est enregistré** |
 | — | **Pas corrigé** : la réponse de `POST /game-config.json` et de `POST /api/roue/wheel-preview` porte le pas retenu et `"step_adjusted_from": <pas saisi>` (absent sans correction) ; l'interface affiche « Pas ajusté à … » et remplace la valeur du champ |
 | `spin_period_ms` | Durée d'un tour de roue. 1000–6000, défaut 2500 ; hors bornes : ramené à la borne |
 | `spin_max_ms` | **Durée maximale de rotation** : sans arrêt demandé, la roue s'arrête d'elle-même. 3000–30000, défaut 10000 ; hors bornes : ramené à la borne |
@@ -412,7 +413,16 @@ Ces exemples sont des **cas de test exigés** (résultat identique, case pour ca
 
 Refus `400` (texte, préfixé par le code ; rien n'est écrit ; dossier d'une création refusée supprimé, règle #278) :
 `ROUE_PHRASE_EMPTY`, `ROUE_PHRASE_INVALID_CHAR`, `ROUE_PHRASE_WORD_TOO_LONG`, `ROUE_PHRASE_TOO_LONG`,
-`ROUE_PRESENTATION_TOO_LONG`, `ROUE_MODE_INVALID`, `ROUE_GAINS_RULE_INVALID`, `ROUE_WHEEL_LAYOUT_INVALID`.
+`ROUE_PRESENTATION_TOO_LONG`, `ROUE_PRESENTATION_CONTAINS_PHRASE`, `ROUE_MODE_INVALID`, `ROUE_GAINS_RULE_INVALID`,
+`ROUE_WHEEL_LAYOUT_INVALID`.
+
+**La phrase ne doit pas se retrouver dans un champ public** (revue LOT-1.2, 2026-11-16) — la présentation et le
+champ `question` sont diffusés à la TV et aux tablettes (§9). Comparaison **repliée** : majuscules, accents retirés,
+seuls les lettres et les chiffres sont gardés (espaces et ponctuation ignorés) ; il y a fuite quand le champ replié
+**contient** la phrase repliée entière.
+- `roue_presentation` qui contient la phrase : refus `400` `ROUE_PRESENTATION_CONTAINS_PHRASE`, rien n'est écrit.
+- `question` qui contient la phrase : pas de refus (le champ n'est pas saisi dans l'éditeur ROUE) ; il est
+  **remplacé** par la présentation, ou par « Roue de la Fortune » si elle est vide.
 Tous les champs `ROUE_*` sont relus à chaque enregistrement (un champ non lu serait perdu, leçon #107).
 
 ### 11.2 `POST /api/roue/preview`
@@ -446,7 +456,8 @@ Tous les champs `ROUE_*` sont relus à chaque enregistrement (un champ non lu se
   "SEGMENTS": [ { "ID": "s0", "KIND": "value", "VALUE": 100 }, { "ID": "s1", "KIND": "bankrupt", "VALUE": 0 },
                 { "ID": "s2", "KIND": "value", "VALUE": 90 } ] }
 ```
-**Errors** : `400` `{ "CODE": "ROUE_WHEEL_INVALID", "MESSAGE": "…" }` (paramètre ou total hors limites, §10).
+**Errors** : `400` `{ "CODE": "ROUE_WHEEL_INVALID", "MESSAGE": "…" }` (pas ≥ maximum, maximum supérieur à 1 000 000, valeur invalide ou plus de 64 cases, §10). Un pas qui ne divise pas le
+maximum n'est **pas** une erreur : il est corrigé (`step_adjusted_from`).
 
 ## 12. Périphériques et ambiance
 
