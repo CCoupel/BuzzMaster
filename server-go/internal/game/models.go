@@ -988,6 +988,28 @@ type GameState struct {
 	RafaleCurrentLetter string   `json:"RAFALE_CURRENT_LETTER"`
 	RafaleLetters       []string `json:"RAFALE_LETTERS"`
 
+	// ROUE (v12.0.0, #144, contracts/roue.md §4) — NO omitempty, maps and
+	// slices never nil, never persisted (state_persistence.go), reset in
+	// Ready / stopUnsafe / InitGameWith. The phrase itself is NEVER here:
+	// ROUE_BOARD only carries "_" / "*" for any letter not yet revealed.
+	RoueSubPhase         string         `json:"ROUE_SUBPHASE"`
+	RoueStep             int            `json:"ROUE_STEP"`
+	RoueTeams            []string       `json:"ROUE_TEAMS"`
+	RoueCurrentTeam      string         `json:"ROUE_CURRENT_TEAM"`
+	RoueCurrentTeamColor []int          `json:"ROUE_CURRENT_TEAM_COLOR"`
+	RoueNextTeam         string         `json:"ROUE_NEXT_TEAM"`
+	RoueNextDefault      string         `json:"ROUE_NEXT_DEFAULT"`
+	RoueTeamBank         map[string]int `json:"ROUE_TEAM_BANK"`
+	RoueTurnGain         int            `json:"ROUE_TURN_GAIN"`
+	RoueBoard            RoueBoard      `json:"ROUE_BOARD"`
+	RoueLetters          []RoueLetter   `json:"ROUE_LETTERS"`
+	RoueShowLetters      bool           `json:"ROUE_SHOW_LETTERS"`
+	RoueConsonantsLeft   bool           `json:"ROUE_CONSONANTS_LEFT"`
+	RoueWheel            RoueWheel      `json:"ROUE_WHEEL"`
+	RoueLastEvent        RoueEvent      `json:"ROUE_LAST_EVENT"`
+	RoueWinner           string         `json:"ROUE_WINNER"`
+	RoueAwards           map[string]int `json:"ROUE_AWARDS"`
+
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero
 	// values (IDLE/false), so a client resets cleanly between questions
@@ -1302,4 +1324,48 @@ func (n NetworkState) Clone() NetworkState {
 	out.IPs = append([]string{}, n.IPs...)
 	out.IgnoredInterfaces = append([]IgnoredInterface{}, n.IgnoredInterfaces...)
 	return out
+}
+
+// ROUE wire types (contracts/roue.md §4).
+
+// RoueBoard is the 4 × 14 board: one string per line, space = no case,
+// "_" = hidden letter, "*" = hidden letter lit (step 4), anything else visible.
+type RoueBoard struct {
+	Cols int      `json:"COLS"`
+	Rows []string `json:"ROWS"`
+}
+
+// RoueLetter is a consonant already proposed.
+type RoueLetter struct {
+	Letter string `json:"LETTER"`
+	Team   string `json:"TEAM"`
+	Hit    bool   `json:"HIT"`
+}
+
+// RoueStop is the braking of the wheel during STOPPING.
+type RoueStop struct {
+	To         int `json:"TO"`
+	DurationMs int `json:"DURATION_MS"`
+}
+
+// RoueWheel is ROUE_WHEEL: copy of the configuration taken at START.
+type RoueWheel struct {
+	Layout         string        `json:"LAYOUT"`
+	SpinPeriodMs   int           `json:"SPIN_PERIOD_MS"`
+	SpinMaxMs      int           `json:"SPIN_MAX_MS"`
+	FlipIntervalMs int           `json:"FLIP_INTERVAL_MS"`
+	Segments       []RoueSegment `json:"SEGMENTS"`
+	Current        int           `json:"CURRENT"`
+	Stop           *RoueStop     `json:"STOP"`
+}
+
+// RoueEvent is the last event, for the animations; Seq grows at each event.
+type RoueEvent struct {
+	Seq    int    `json:"SEQ"`
+	Kind   string `json:"KIND"`
+	Team   string `json:"TEAM"`
+	Letter string `json:"LETTER"`
+	Count  int    `json:"COUNT"`
+	Value  int    `json:"VALUE"`
+	Gain   int    `json:"GAIN"`
 }

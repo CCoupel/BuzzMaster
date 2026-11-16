@@ -176,6 +176,13 @@ type Engine struct {
 	// drawNextRafaleUnsafe's own doc comment).
 	rafaleDraw rafaleDrawState
 
+	// ROUE (v12.0.0, #144, contracts/roue.md): ephemeral runtime of the round
+	// (timers, full board — never serialised), injectable draw, wheel config.
+	roue       *roueRuntime
+	roueRand   func(n int) int
+	roueParams RoueWheelParams
+	roueSeq    int
+
 	// rafaleAlpha (#282, contracts/rafale.md §15.4) is the alphabetical draw
 	// queue of the current classic round; nil ⇔ option off. Ephemeral like
 	// rafaleDraw, but explicitly released by stopUnsafe/Ready/InitGame.
@@ -388,6 +395,14 @@ type Engine struct {
 	// re-reads live GetState()/GetTeamsAndBumpers() itself, same pattern as
 	// OnStateChange.
 	OnRafaleTeamsChanged func()
+	// OnRoueChange (v12.0.0, #144) fires, outside the engine lock, after every
+	// ROUE transition (action, buzz, timer): the application layer broadcasts
+	// the UPDATE and refreshes the LED / ambiance. OnRoueNotice carries the
+	// side effects (bad-answer sound, credit: gain sound + comet + flash);
+	// RoueCategoryMeta resolves the display meta of a category for the history.
+	OnRoueChange     func()
+	OnRoueNotice     func(RoueNotice)
+	RoueCategoryMeta func(category string) CategoryMeta
 	// OnRafaleInvalid (v11.0/#227, contracts/sound.md §2.1's CuePerdu) fires
 	// on a classic RAFALE round's RAFALE_INVALIDATE (RafaleInvalidate,
 	// below) or its question-timer expiry — "identique à réponse invalide"
@@ -472,6 +487,10 @@ func NewEngine() *Engine {
 			RafaleParticipatingTeams:   []string{},
 			RafaleCurrentTeamColor:     []int{},
 			RafaleLetters:              []string{}, // #282 — never nil (JSON [])
+			// ROUE (v12.0.0, #144): never nil, same discipline.
+			RoueTeams: []string{}, RoueCurrentTeamColor: []int{}, RoueTeamBank: map[string]int{},
+			RoueBoard: RoueBoard{Cols: RoueBoardCols, Rows: []string{}}, RoueLetters: []RoueLetter{},
+			RoueWheel: RoueWheel{Segments: []RoueSegment{}, Current: -1}, RoueAwards: map[string]int{},
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
 			// empty (not nil) so JSON serializes [] (not null) before the
 			// first UPDATE_QUIZ_META (contract game-state.md §"Aucun omitempty").
@@ -1317,6 +1336,8 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// the OUTGOING question's state).
 	rafaleRoundAlreadyPlayed := e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale &&
 		e.state.RafaleSubPhase != RafaleSubPhaseNone
+	// ROUE (#144): a round left without passing through stopUnsafe (REVEAL from PAUSED).
+	roueRoundLeft := e.isRoueQuestionUnsafe() && e.state.RoueSubPhase != ""
 
 	// MEMORY/MEMOTION generalization of the RAFALE bugfix above (#200).
 	// MemoryParticipatingTeams/MemoryCurrentTeam/MemoryCurrentTeamColor/
@@ -1481,6 +1502,9 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// one path that matters for the "PREPARE/READY but never actually
 	// started" edge case (rafaleNext is never set before an actual START,
 	// so this is trivially a no-op there too, but costs nothing to call).
+	if isNewQuestion || roueRoundLeft {
+		e.resetRoueStateUnsafe() // ROUE (#144, contract §4)
+	}
 	rafaleNextReleased := false
 	if isNewQuestion || rafaleRoundAlreadyPlayed {
 		rafaleNextReleased = e.releaseRafaleNextUnsafe()
@@ -1610,6 +1634,13 @@ func (e *Engine) purgeInactiveParticipantUnsafe(teamID string) {
 		if e.state.MotionCurrentTeam == teamID {
 			e.state.MotionCurrentTeam = ""
 			e.state.MotionCurrentTeamColor = []int{}
+		}
+	}
+	if removeStringUnsafe(&e.state.RoueTeams, teamID) {
+		removed = true
+		if e.state.RoueCurrentTeam == teamID {
+			e.state.RoueCurrentTeam = ""
+			e.state.RoueCurrentTeamColor = []int{}
 		}
 	}
 	if removeStringUnsafe(&e.state.RafaleParticipatingTeams, teamID) {
@@ -1836,12 +1867,12 @@ func participantsConform(question *Question, state *GameState) bool {
 		// selection, same UX as MEMORY SOLO, before START).
 		return participantsCountConform(question.RafaleMode, len(state.RafaleParticipatingTeams))
 	case QuestionTypeRoue:
-		// PROVISIONAL GUARD (v12.0.0, LOT-1.1, #145): the ROUE engine arrives
-		// with LOT-1.2 (#144). Until then a ROUE question must never reach
-		// READY, hence never START (contracts/roue.md §13 item 4). LOT-1.2
-		// replaces this line by the real rule: ROUE_TEAMS conform to
+		// v12.0.0 (#144, contracts/roue.md §13 item 4): ROUE_TEAMS conform to
 		// ROUE_MODE (SOLO = 1 team, otherwise >= 2) and a non-empty phrase.
-		return false
+		if strings.TrimSpace(question.RouePhrase) == "" {
+			return false
+		}
+		return roueTeamsConform(question, len(state.RoueTeams))
 	default:
 		return true
 	}
@@ -2331,6 +2362,7 @@ func (e *Engine) actualStart() {
 	// same global timer for its round countdown (contract §2.2), it does
 	// not skip it the way MEMOTION does.
 	rafaleStart := e.startRafaleRoundUnsafe()
+	e.startRoueRoundUnsafe() // ROUE (#144): board, wheel, pots, first team — no-op for any other type
 
 	// ENTRACTE (#214, v9.0.0): raise the pause flag from this question's own
 	// config — see startEntracteQuestionUnsafe's own doc comment. A no-op
@@ -2343,7 +2375,7 @@ func (e *Engine) actualStart() {
 	// is simply never read for this type, and letting the global timer run
 	// anyway would auto-Stop() the pause the moment CURRENT_TIME first
 	// reaches 0 (processTimerTick's own <=0 branch), silently ending it.
-	if e.state.Question == nil || (e.state.Question.Type != QuestionTypeMemotion && e.state.Question.Type != QuestionTypeEntracte) {
+	if e.state.Question == nil || (e.state.Question.Type != QuestionTypeMemotion && e.state.Question.Type != QuestionTypeEntracte && e.state.Question.Type != QuestionTypeRoue) {
 		e.maybeStartDeferredTimerUnsafe() // v11.1/#219, contract §10.7 — see its own doc comment
 	}
 
@@ -2413,6 +2445,7 @@ func (e *Engine) StartImmediate(delay int) {
 	// RAFALE (v8.0.0, #107) — mirrors actualStart(); StartImmediate bypasses
 	// actualStart entirely (used by tests), so it needs the same init call.
 	rafaleStart := e.startRafaleRoundUnsafe()
+	e.startRoueRoundUnsafe() // ROUE (#144) — mirrors actualStart()
 
 	// ENTRACTE (#214, v9.0.0) — mirrors actualStart(), same reasoning.
 	e.startEntracteQuestionUnsafe()
@@ -2426,7 +2459,7 @@ func (e *Engine) StartImmediate(delay int) {
 	// sound gets the same deferred behavior as the real Start() path,
 	// instead of silently falling back to "simultané" (test-writer finding,
 	// Batch 1 review).
-	if e.state.Question == nil || e.state.Question.Type != QuestionTypeEntracte {
+	if e.state.Question == nil || (e.state.Question.Type != QuestionTypeEntracte && e.state.Question.Type != QuestionTypeRoue) {
 		e.maybeStartDeferredTimerUnsafe()
 	}
 
@@ -2876,6 +2909,11 @@ func (e *Engine) stopUnsafe() bool {
 			e.stopRafaleQuestionTimerUnsafe()
 			e.state.RafaleSubPhase = RafaleSubPhaseRoundEnd
 		}
+	}
+
+	// ROUE (#144, contracts/roue.md §4): timers cancelled, state back to empty.
+	if e.isRoueQuestionUnsafe() {
+		e.resetRoueStateUnsafe()
 	}
 
 	log.Printf("[Engine] Game stopped")
@@ -3565,6 +3603,7 @@ func (e *Engine) Pause() {
 	}
 
 	e.state.Phase = PhasePaused
+	e.rouePauseTimersUnsafe() // ROUE (#144): max spin / braking / flip timers suspended
 
 	e.setQuestionStatus(StatusPaused)
 
@@ -3605,6 +3644,7 @@ func (e *Engine) Continue() {
 	}
 
 	e.state.Phase = PhaseStarted
+	e.roueResumeTimersUnsafe() // ROUE (#144): suspended timers resume
 	e.forceGamePageUnsafe() // #240 — CONTINUE after PAUSE (user Q4)
 	// #246: every team must send a fresh final text after the next STOP/PAUSE.
 	for team, a := range e.state.ArdoiseAnswers {
@@ -3744,6 +3784,20 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale {
 		log.Printf("[Engine] Ignoring buzz for RAFALE question from %s", bumperID)
 		e.mu.Unlock()
+		return false
+	}
+
+	// ROUE (v12.0.0, #144, contract §5.1): only the buzz of the team that has the
+	// hand, during SPINNING, stops the wheel. Never recorded as a buzz (no
+	// PAUSE status, no PAUSE broadcast): accepted=false, state change fired here.
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRoue {
+		before := e.state.RoueSubPhase
+		e.roueButtonUnsafe(bumperID)
+		changed := e.state.RoueSubPhase != before
+		e.mu.Unlock()
+		if changed {
+			e.fireRoueChange()
+		}
 		return false
 	}
 
@@ -4213,6 +4267,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	e.state.RafalePoolRemaining = 0
 	e.state.RafaleExhausted = false
 	e.resetRafaleAlphaUnsafe() // #282
+	e.resetRoueStateUnsafe()   // ROUE (#144, contract §4)
 
 	log.Printf("[Engine] Game initialized (scores=%v players=%v teams=%v questions=%v)",
 		opts.PurgeScores, opts.PurgePlayers, opts.PurgeTeams, opts.ResetQuestions)
@@ -8494,6 +8549,21 @@ func (e *Engine) RenameTeamState(oldName, newName string) []string {
 	note(replaceInList(st.MemoryParticipatingTeams, oldName, newName), "MEMORY_PARTICIPATING_TEAMS")
 	note(replaceInList(st.MotionParticipatingTeams, oldName, newName), "MEMOTION_PARTICIPATING_TEAMS")
 	note(replaceInList(st.RafaleParticipatingTeams, oldName, newName), "RAFALE_PARTICIPATING_TEAMS")
+	note(moveKey(st.RoueTeamBank, oldName, newName), "ROUE_TEAM_BANK")
+	note(moveKey(st.RoueAwards, oldName, newName), "ROUE_AWARDS")
+	note(replaceInList(st.RoueTeams, oldName, newName), "ROUE_TEAMS")
+	for i := range st.RoueLetters {
+		if st.RoueLetters[i].Team == oldName {
+			st.RoueLetters[i].Team = newName
+			migrated = append(migrated, "ROUE_LETTERS")
+		}
+	}
+	for _, f := range []*string{&st.RoueCurrentTeam, &st.RoueNextTeam, &st.RoueWinner, &st.RoueLastEvent.Team} {
+		if *f == oldName {
+			*f = newName
+			migrated = append(migrated, "ROUE_TEAM_FIELD")
+		}
+	}
 	if st.MemoryCurrentTeam == oldName {
 		st.MemoryCurrentTeam = newName
 		migrated = append(migrated, "MEMORY_CURRENT_TEAM")
@@ -8575,6 +8645,14 @@ func (e *Engine) purgeTeamStateUnsafe(name string) {
 	st.MemoryParticipatingTeams = drop(st.MemoryParticipatingTeams)
 	st.MotionParticipatingTeams = drop(st.MotionParticipatingTeams)
 	st.RafaleParticipatingTeams = drop(st.RafaleParticipatingTeams)
+	st.RoueTeams = drop(st.RoueTeams)
+	delete(st.RoueTeamBank, name)
+	delete(st.RoueAwards, name)
+	for _, f := range []*string{&st.RoueCurrentTeam, &st.RoueNextTeam, &st.RoueWinner} {
+		if *f == name {
+			*f = ""
+		}
+	}
 	if st.MemoryCurrentTeam == name {
 		st.MemoryCurrentTeam = ""
 	}
