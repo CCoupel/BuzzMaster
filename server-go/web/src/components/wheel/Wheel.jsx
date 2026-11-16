@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { REP, angleFor, forwardDistance, offsetToIndex } from './geometry'
+import { REP, angleFor, forwardDistance, landPosition, landTotal, offsetToIndex, spinPosition } from './geometry'
 import './Wheel.css'
 
 /**
@@ -9,12 +9,14 @@ import './Wheel.css'
  * après 100 mouvements.
  *
  * @param {Object} props
- * @param {Array<{id:string,label:string,color?:string,kind?:'letter'|'value'|'special',state?:''|'disabled'|'played'}>} props.segments
+ * Un `label` peut contenir `\n` (libellé sur plusieurs lignes) ; `icon` (optionnel) s'affiche au-dessus.
+ * @param {Array<{id:string,label:string,icon?:string,color?:string,kind?:'letter'|'value'|'special',state?:''|'disabled'|'played'}>} props.segments
  * @param {number|null} props.current - index du segment sous le pointeur, ou null
  * @param {'strip'|'arc'} [props.layout='strip']
  * @param {'tv'|'compact'} [props.size='tv']
  * @param {string} [props.accent] - couleur du pointeur / du halo
- * @param {Object|null} [props.motion] - réservé v12.0 : accepté et IGNORÉ en v11.4.0 (bascule courte)
+ * @param {Object|null} [props.motion] - null = bascule courte vers `current` ; `{mode:'spin', periodMs}` défilement continu ;
+ *   `{mode:'land', to, durationMs, minTurns}` freinage jusqu'à l'index `to` (v12.0.0, §5). Sans horloge serveur.
  * @param {number} [props.stepMs=600] - durée de la bascule courte
  */
 const PALETTE = ['#e5e7eb', '#dbeafe', '#fef3c7', '#dcfce7', '#fce7f3', '#ede9fe']
@@ -26,8 +28,14 @@ const reducedMotion = () => {
 function ariaLabelFor(segments, current) {
   const seg = current != null ? segments[current] : null
   if (!seg) return 'Roue'
-  return seg.kind === 'letter' || !seg.kind ? `Lettre courante : ${seg.label}` : `Segment : ${seg.label}`
+  const label = String(seg.label).replace(/\n/g, ' ')
+  return seg.kind === 'letter' || !seg.kind ? `Lettre courante : ${label}` : `Segment : ${label}`
 }
+
+const labelLines = (seg) => String(seg.label ?? '').split('\n')
+const frameNow = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
+const requestFrame = (f) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(f) : setTimeout(() => f(frameNow()), 16))
+const cancelFrame = (id) => (typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame(id) : clearTimeout(id))
 
 function wedgePath(i, n, R, r) {
   const half = Math.PI / n
@@ -45,7 +53,6 @@ export default function Wheel({
   layout = 'strip',
   size = 'tv',
   accent = '#3b82f6',
-  // eslint-disable-next-line no-unused-vars
   motion = null,
   stepMs = 600,
 }) {
@@ -61,6 +68,33 @@ export default function Wheel({
   const mountedRef = useRef(true)
   const latest = useRef({ n, stepMs })
   latest.current = { n, stepMs }
+  const rootRef = useRef(null)
+  const moverRef = useRef(null) // élément qui porte le transform (ruban ou rotor)
+  const posRef = useRef(safeCurrent ?? 0) // position continue affichée, normalisée [0, n) — mise à jour à chaque image
+  const firstRenderRef = useRef(true)
+  const [landed, setLanded] = useState(null) // index mis en évidence à la fin d'un `land`
+  const motionMode = motion?.mode === 'spin' || motion?.mode === 'land' ? motion.mode : null
+  const motionTo = motion?.to
+  const motionPeriod = motion?.periodMs
+  const motionDuration = motion?.durationMs
+  const motionTurns = motion?.minTurns
+  const hasMotion = motionMode !== null
+  const layoutKey = layout === 'arc' ? 'arc' : 'strip'
+
+  // Applique une position continue directement sur le DOM (une seule propriété `transform`, aucune ré-allocation).
+  const apply = useRef(null)
+  apply.current = (pos) => {
+    posRef.current = pos
+    const el = moverRef.current
+    const count = latest.current.n
+    if (el) {
+      if (layoutKey === 'arc') el.style.transform = `rotate(${-(pos / Math.max(count, 1)) * 360}deg)`
+      else el.style.transform = `translateX(-${count > 0 ? ((2 * count + pos + 0.5) / (count * REP)) * 100 : 0}%)`
+      el.style.transition = 'none'
+    }
+    rootRef.current?.setAttribute('data-pos', String(pos))
+    rootRef.current?.setAttribute('data-animate', 'false')
+  }
 
   // Une bascule à la fois : si `current` change pendant une bascule, la cible est mise en file et
   // enchaînée à la fin (aucune interruption ⇒ aucun saut visuel). La position est ramenée modulo n
@@ -72,6 +106,7 @@ export default function Wheel({
     const delta = forwardDistance(from, target, count) // [0, n) : plus court chemin vers l'avant
     if (delta === 0 || reducedMotion()) {
       settledRef.current = target
+      posRef.current = target
       setView({ pos: target, animate: false })
       return
     }
@@ -82,6 +117,7 @@ export default function Wheel({
     timerRef.current = setTimeout(() => {
       if (!mountedRef.current) return
       settledRef.current = offsetToIndex(target, count)
+      posRef.current = settledRef.current
       animatingRef.current = false
       setView({ pos: settledRef.current, animate: false })
       const next = pendingRef.current
@@ -91,24 +127,80 @@ export default function Wheel({
   }
 
   useEffect(() => {
-    if (safeCurrent == null || n === 0) return
+    if (hasMotion || safeCurrent == null || n === 0) return
     if (animatingRef.current) pendingRef.current = safeCurrent
     else start.current(safeCurrent)
-  }, [safeCurrent, n])
+  }, [safeCurrent, n, hasMotion])
+
+  // Mouvement long (v12.0.0) : boucle d'images, position ramenée modulo n à chaque image et à l'arrêt (§4).
+  useEffect(() => {
+    if (!hasMotion || n === 0) return undefined
+    // La bascule courte éventuelle est abandonnée : on repart de la position réellement affichée.
+    if (timerRef.current) clearTimeout(timerRef.current)
+    animatingRef.current = false
+    pendingRef.current = null
+    const first = firstRenderRef.current
+    const from = offsetToIndex(posRef.current, n)
+    let raf = null
+    let cancelled = false
+    const finish = (to) => {
+      const end = offsetToIndex(to, n)
+      settledRef.current = end
+      apply.current(end)
+      setView({ pos: end, animate: false })
+      setLanded(end)
+    }
+    setLanded(null)
+    if (motionMode === 'land') {
+      const to = Number.isInteger(motionTo) ? motionTo : 0
+      if (reducedMotion() || first || !(motionDuration > 0)) {
+        finish(to)
+        return undefined
+      }
+      const total = landTotal(from, to, n, motionTurns ?? 1)
+      const t0 = frameNow()
+      const tick = () => {
+        if (cancelled) return
+        const p = (frameNow() - t0) / motionDuration
+        if (p >= 1) { finish(to); return }
+        apply.current(landPosition(from, to, total, p, n))
+        raf = requestFrame(tick)
+      }
+      raf = requestFrame(tick)
+    } else {
+      if (reducedMotion()) return undefined // pas de défilement : la roue reste en place
+      const t0 = frameNow()
+      const tick = () => {
+        if (cancelled) return
+        apply.current(spinPosition(from, frameNow() - t0, motionPeriod, n))
+        raf = requestFrame(tick)
+      }
+      raf = requestFrame(tick)
+    }
+    return () => {
+      cancelled = true
+      if (raf != null) cancelFrame(raf)
+      settledRef.current = posRef.current // reprise sans saut (spin → land, ou retour à la bascule courte)
+    }
+  }, [hasMotion, motionMode, motionTo, motionPeriod, motionDuration, motionTurns, n, layoutKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { firstRenderRef.current = false }, [])
 
   useEffect(() => {
     mountedRef.current = true
     return () => { mountedRef.current = false; if (timerRef.current) clearTimeout(timerRef.current) }
   }, [])
 
+  // Segment mis en évidence : `spin` aucun, `land` le segment d'arrêt une fois arrivé, sinon `current`.
+  const hl = motionMode === 'spin' ? null : motionMode === 'land' ? landed : safeCurrent
   const transition = view.animate ? `transform ${stepMs}ms cubic-bezier(.215,.61,.355,1)` : 'none'
   const cls = `wheel wheel-${layout === 'arc' ? 'arc' : 'strip'} wheel-size-${size}`
   const colorOf = (seg, i) => seg.color || PALETTE[i % PALETTE.length]
   const stateCls = (seg, i) =>
     [seg.state === 'disabled' ? 'disabled' : '', seg.state === 'played' ? 'played' : '',
-      seg.kind === 'special' ? 'special' : '', i === safeCurrent ? 'is-current' : ''].filter(Boolean).join(' ')
+      seg.kind === 'special' ? 'special' : '', i === hl ? 'is-current' : ''].filter(Boolean).join(' ')
 
-  const common = { 'data-pos': view.pos, 'data-animate': view.animate ? 'true' : 'false', role: 'img', 'aria-label': ariaLabelFor(segments, safeCurrent), style: { '--wheel-accent': accent } }
+  const common = { 'data-pos': view.pos, 'data-animate': view.animate ? 'true' : 'false', role: 'img', ref: rootRef, 'aria-label': ariaLabelFor(segments, hl), style: { '--wheel-accent': accent } }
 
   if (layout === 'arc') {
     const deg = -(view.pos / Math.max(n, 1)) * 360
@@ -116,6 +208,7 @@ export default function Wheel({
       <div className={cls} {...common}>
         <svg className="wheel-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
           <g
+            ref={moverRef}
             className="rotor wheel-rotor"
             style={{ transform: `rotate(${deg}deg)`, transformOrigin: '500px 500px', transition, willChange: 'transform' }}
           >
@@ -130,11 +223,18 @@ export default function Wheel({
                   className={`wheel-sector ${stateCls(seg, i)}`}
                   data-state={seg.state || undefined}
                   data-kind={seg.kind || undefined}
-                  data-current={i === safeCurrent ? 'true' : undefined}
+                  data-current={i === hl ? 'true' : undefined}
                 >
                   <path d={wedgePath(i, n, 480, 330)} fill={colorOf(seg, i)} />
-                  <text x={tx} y={ty} transform={`rotate(${a + 90} ${tx} ${ty})`} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(90, 1800 / Math.max(n, 1))}>
-                    {seg.label}
+                  {seg.icon && (
+                    <text className="wheel-icon" x={tx} y={ty} transform={`rotate(${a + 90} ${tx} ${ty}) translate(0 -38)`} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(60, 1200 / Math.max(n, 1))}>
+                      {seg.icon}
+                    </text>
+                  )}
+                  <text x={tx} y={ty} transform={`rotate(${a + 90} ${tx} ${ty})`} textAnchor="middle" dominantBaseline="central" fontSize={labelLines(seg).length > 1 || seg.icon ? Math.min(40, 800 / Math.max(n, 1)) : Math.min(90, 1800 / Math.max(n, 1))}>
+                    {labelLines(seg).length > 1
+                      ? labelLines(seg).map((l, k) => <tspan key={k} x={tx} dy={k === 0 ? '-0.55em' : '1.1em'}>{l}</tspan>)
+                      : seg.label}
                   </text>
                 </g>
               )
@@ -153,6 +253,7 @@ export default function Wheel({
   return (
     <div className={cls} {...common}>
       <div
+        ref={moverRef}
         className="wheel-track"
         style={{ '--wheel-cells': total, transform: `translateX(-${x}%)`, transition, willChange: 'transform' }}
       >
@@ -163,10 +264,13 @@ export default function Wheel({
               className={`wheel-cell ${stateCls(seg, i)}`}
               data-state={seg.state || undefined}
               data-kind={seg.kind || undefined}
-              data-current={i === safeCurrent ? 'true' : undefined}
+              data-current={i === hl ? 'true' : undefined}
               style={{ background: colorOf(seg, i) }}
             >
-              <span>{seg.label}</span>
+              {seg.icon && <span className="wheel-icon">{seg.icon}</span>}
+              <span className={`wheel-lab${labelLines(seg).length > 1 || seg.icon ? ' multi' : ''}`}>
+                {labelLines(seg).map((l, k) => (k === 0 ? l : <span key={k}><br />{l}</span>))}
+              </span>
             </div>
           )),
         )}

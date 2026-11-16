@@ -45,3 +45,35 @@ export function positionAt(t, motion, n = 0) {
   const total = (to - from) + turns * n
   return from + total * easeOutCubic(p)
 }
+
+// ---------------------------------------------------------------------------
+// Mouvement long v12.0.0 (contracts/wheel-component.md §5, révisé) — sans horloge serveur.
+// Fonctions pures : la position est TOUJOURS renvoyée normalisée dans [0, n).
+// ---------------------------------------------------------------------------
+
+/** Nombre maximal de tours complets ajoutés à un freinage : amplitude totale ≤ MAX_AMPLITUDE_N × n (§4). */
+export const MAX_LAND_TURNS = MAX_AMPLITUDE_N - 1
+
+/** `spin` : position après `elapsedMs` de défilement continu (un tour en `periodMs`), depuis `from`. */
+export function spinPosition(from, elapsedMs, periodMs, n) {
+  if (!(n > 0)) return 0
+  if (!(periodMs > 0)) return offsetToIndex(from, n)
+  return offsetToIndex(from + (Math.max(0, elapsedMs) / periodMs) * n, n)
+}
+
+/**
+ * `land` : amplitude totale (en segments) d'un freinage de `from` jusqu'à l'index `to` — distance vers l'avant
+ * + `minTurns` tours complets (plafonné pour rester ≤ 4n). Toujours dans [0, 4n].
+ */
+export function landTotal(from, to, n, minTurns = 1) {
+  if (!(n > 0)) return 0
+  const turns = Math.min(MAX_LAND_TURNS, Math.max(0, Math.floor(Number.isFinite(minTurns) ? minTurns : 0)))
+  return forwardDistance(from, to, n) + turns * n
+}
+
+/** `land` : position normalisée à l'avancement `p` ∈ [0, 1] (ease-out cubique) ; `p ≥ 1` ⇒ exactement `to`. */
+export function landPosition(from, to, total, p, n) {
+  if (!(n > 0)) return 0
+  if (p >= 1) return offsetToIndex(to, n)
+  return offsetToIndex(from + total * easeOutCubic(p), n)
+}
