@@ -113,7 +113,7 @@ buzzers.
 | `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question : afficher ou non les lettres proposées sur TV et tablettes (admin et anim les affichent toujours) |
 | `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |
 | `ROUE_WHEEL` | objet | Voir ci-dessous |
-| `ROUE_LAST_EVENT` | objet | `{ "SEQ": int, "KIND": string, "TEAM": string, "LETTER": string, "COUNT": int, "VALUE": int, "GAIN": int }` — dernier événement, pour les animations ; `SEQ` croît à chaque événement |
+| `ROUE_LAST_EVENT` | objet | `{ "SEQ": int, "KIND": string, "TEAM": string, "LETTER": string, "COUNT": int, "VALUE": int, "GAIN": int }` — dernier événement, pour les animations et les sons ; **une action (ou une échéance de minuterie) émet au plus un événement** : `SEQ` augmente d'exactement 1 (règle « un événement par action », ci-dessous) |
 | `ROUE_WINNER` | string | Équipe qui a résolu (`""` sinon, y compris phrase dévoilée sans gagnant) |
 | `ROUE_AWARDS` | map équipe → int | Points crédités à la résolution |
 
@@ -137,6 +137,18 @@ buzzers.
 
 `ROUE_LAST_EVENT.KIND` ∈ `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | LETTER_REPEAT |
 FLIP | ANSWER_OK | TURN_END | PASS | REVEAL`.
+
+**Règle « un événement par action »** (arbitrage du 2026-11-16, défaut relevé par les tests du moteur, commit
+`38627055`) : `ROUE_LAST_EVENT` ne porte qu'un événement ; deux événements émis dans la même action rendraient le
+premier invisible. Donc :
+- l'entrée en `TURN_END` provoquée par une **cause** — `LETTER_MISS`, `LETTER_REPEAT`, `BANKRUPT`, `LOSE_TURN` —
+  n'émet **que l'événement de cause** (`SEQ` + 1) ; **aucun événement `TURN_END` n'est émis** dans ce cas. La fin de
+  tour se lit dans `ROUE_SUBPHASE = TURN_END` (et `ROUE_STEP = 7`), pas dans l'événement ;
+- l'événement `TURN_END` n'est émis que lorsqu'aucune cause n'est posée dans la même action : `ROUE_NEXT` reçu en
+  `ANSWER` (ou en `TURN` sans consonne restante), avec `GAIN` = gain du tour ajouté à la cagnotte ;
+- `ROUE_NEXT` reçu en `TURN_END` n'émet aucun événement (`SEQ` inchangé) : le changement de sous-phase suffit.
+Champs de l'événement de cause : `TEAM` = équipe qui avait la main ; `LETTER` pour `LETTER_MISS` / `LETTER_REPEAT` ;
+`VALUE` = cagnotte perdue pour `BANKRUPT` ; `GAIN` = 0.
 
 Exemples `ROUE_BOARD` sur la phrase du §3.1, après `T`, `R`, `N`, quand l'équipe propose `C` :
 ```json
@@ -184,7 +196,7 @@ START ─► 1 TURN ─ROUE_SPIN─► 2 SPINNING ─buzz / ROUE_STOP / durée m
 | `REVEALING` | Fin de `COUNT × FLIP_INTERVAL_MS` (minuterie serveur) | `ANSWER` |
 | `ANSWER` | `ROUE_ANSWER` | Réponse validée : gain du tour ajouté à la cagnotte, `SOLVED` + crédit (§7) |
 | `ANSWER` | `ROUE_NEXT {HAND}` | Pas de réponse validée (aucune proposition, ou proposition fausse — le serveur ne les distingue pas) : gain du tour ajouté à la cagnotte, événement `TURN_END`, main selon `HAND`, `TURN`. L'étape 7 est franchie par ce même geste |
-| `TURN_END` | (à l'entrée) | `ROUE_TEAM_BANK[équipe] += ROUE_TURN_GAIN`, `ROUE_TURN_GAIN = 0`, `ROUE_NEXT_TEAM` et `ROUE_NEXT_DEFAULT` calculées (§5.2), événement `TURN_END` |
+| `TURN_END` | (à l'entrée) | `ROUE_TEAM_BANK[équipe] += ROUE_TURN_GAIN`, `ROUE_TURN_GAIN = 0`, `ROUE_NEXT_TEAM` et `ROUE_NEXT_DEFAULT` calculées (§5.2). **Aucun événement propre** : `ROUE_LAST_EVENT` reste l'événement de cause (`LETTER_MISS`, `LETTER_REPEAT`, `BANKRUPT`, `LOSE_TURN`) — règle « un événement par action », §4 |
 | `TURN_END` | `ROUE_NEXT {HAND}` | `SAME` : la même équipe garde la main ; `NEXT` : main à `ROUE_NEXT_TEAM` (refusé en `SOLO`) ; puis `TURN` |
 | toute sous-phase non vide sauf `SOLVED` | `ROUE_REVEAL` | `SOLVED` sans gagnant, aucun crédit, plateau entièrement visible |
 | `SOLVED` | `STOP` existant | Fin de manche, nettoyage (`stopUnsafe`) |

@@ -33,6 +33,13 @@ inchangés ; aucun changement de protocole BuzzClick ; un `game-config.json` san
   serveur ; la forme réservée en v11.4.0 (`from, to, turns, durationMs, startedAt`), jamais implémentée ni
   utilisée, est abandonnée ; `motion = null` inchangé (`wheel-component.md` §5, §8).
 
+Précision après les tests du moteur (commit `38627055`) — `roue.md` §4, §5.1. **Aucun BREAKING** (mode nouveau) :
+
+- **[CHANGED]** `ROUE_LAST_EVENT` — règle « un événement par action » : `SEQ` augmente d'exactement 1 par action ;
+  l'entrée en `TURN_END` causée par `LETTER_MISS`, `LETTER_REPEAT`, `BANKRUPT` ou `LOSE_TURN` n'émet que l'événement
+  de cause, sans événement `TURN_END` ; `TURN_END` n'est émis que par `ROUE_NEXT` reçu en `ANSWER` (ou en `TURN` sans
+  consonne restante) ; `ROUE_NEXT` reçu en `TURN_END` n'émet rien.
+
 ---
 ## [20261112] — v11.8.0 — éditeur d'effets, import et export (#210, #305)
 
