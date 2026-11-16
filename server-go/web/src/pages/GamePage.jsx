@@ -1771,7 +1771,7 @@ export default function GamePage() {
                 lui-même inchangé — son `disabled` reste piloté par `canStart`
                 (phase serveur), jamais par ce texte. */}
             {!isPlaying && gameState.phase === 'PREPARE'
-              && !['MEMORY', 'MEMOTION', 'RAFALE'].includes(gameState.question?.TYPE)
+              && !['MEMORY', 'MEMOTION', 'RAFALE', 'ROUE'].includes(gameState.question?.TYPE)
               && (() => {
                 const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
                 // Évolution UX (retour QUALIF v11.1.0.5 puis v11.1.0.6,
