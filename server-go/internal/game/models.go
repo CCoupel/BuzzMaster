@@ -172,6 +172,10 @@ const (
 	// mechanism, not a new one. See TypedContent.EntracteConfig and
 	// contracts/game-state.md §"Second déclencheur — entracte programmée".
 	QuestionTypeEntracte QuestionType = "ENTRACTE"
+	// QuestionTypeRoue (v12.0.0, #144/#145): "Roue de la Fortune" — a phrase to
+	// guess letter by letter, a wheel drawing the value of each consonant —
+	// contracts/roue.md.
+	QuestionTypeRoue QuestionType = "ROUE"
 )
 
 // KeyboardType represents the virtual keyboard layout for ARDOISE questions
@@ -387,6 +391,22 @@ type TypedContent struct {
 	// contracts/game-state.md §"Second déclencheur — entracte programmée"
 	// for the full mechanism and the automatic-restoration rule on exit.
 	EntracteConfig *EntracteConfig `json:"ENTRACTE_CONFIG,omitempty"`
+
+	// ROUE (v12.0.0, #145, contracts/roue.md §3) — question host only, never
+	// nestable. RoueShowLetters is written ONLY when false: absent means true
+	// (see EffectiveRoueShowLetters). The phrase is never copied into ANSWER.
+	RouePhrase        string `json:"ROUE_PHRASE,omitempty"`
+	RoueMode          string `json:"ROUE_MODE,omitempty"`         // SOLO | CHACUN_SON_TOUR | TANT_QUE_JE_GAGNE (default)
+	RoueGainsRule     string `json:"ROUE_GAINS_RULE,omitempty"`   // WINNER_ONLY (default) | ALL_TEAMS
+	RoueWheelLayout   string `json:"ROUE_WHEEL_LAYOUT,omitempty"` // strip (default) | arc
+	RoueShowLetters   *bool  `json:"ROUE_SHOW_LETTERS,omitempty"` // nil/true = shown, false = hidden
+	RoucePresentation string `json:"ROUE_PRESENTATION,omitempty"` // public hint, 80 chars max
+}
+
+// EffectiveRoueShowLetters reports whether the letters already proposed are
+// shown on the TV/tablets for this question (absent = true, contract §3).
+func (tc TypedContent) EffectiveRoueShowLetters() bool {
+	return tc.RoueShowLetters == nil || *tc.RoueShowLetters
 }
 
 // EffectiveRafaleCategories returns q's RAFALE round categories, converting
@@ -577,6 +597,7 @@ func AllQuestionTypes() []QuestionType {
 		QuestionTypeArdoise,
 		QuestionTypeRafale,
 		QuestionTypeEntracte,
+		QuestionTypeRoue,
 	}
 }
 

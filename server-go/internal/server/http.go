@@ -462,6 +462,8 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/categories", h.handleAPICategories)
 	h.mux.HandleFunc("/api/categories/", h.handleAPICategoryByKey) // v11.4.0, #285: PUT/DELETE {key}, POST {key}/icon
 
+	// ROUE phrase preview (v12.0.0, #145, contracts/roue.md §11.2)
+	h.mux.HandleFunc("/api/roue/preview", h.handleRouePreview)
 	// RAFALE reservoir API (v8.0.0 — #197, contracts/rafale.md §9)
 	h.mux.HandleFunc("/api/rafale/questions", h.handleRafaleQuestions)
 	// Exact-path registration BEFORE the "/api/rafale/questions/" prefix
@@ -1510,6 +1512,16 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		// If not provided or invalid, omit the field (frontend defaults to AZERTY)
 	}
 
+	// ROUE (v12.0.0, #145, contracts/roue.md §11.1): every ROUE_* field is read
+	// at each save (a field not read here would be lost, lesson #107); a
+	// refusal answers 400 prefixed by its code and writes nothing (#278).
+	if questionType == string(game.QuestionTypeRoue) {
+		if status, msg := applyRoueFields(r, question); status != 0 {
+			http.Error(w, msg, status)
+			return
+		}
+	}
+
 	// Handle RAFALE specific fields (v8.0.0, #107, contract §3.3) — round
 	// configuration: difficulty/mode/seconds-per-question/max-questions.
 	// CATEGORY is already handled generically above (shared field, contract
@@ -1628,7 +1640,8 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// existingQuestion.
 	// #235 : MEMOTION (hôte) et ENTRACTE n'ont pas de chrono global — le différé est
 	// ignoré (écrit false), contracts/sound.md §14.3/§14.4.
-	noGlobalTimer := questionType == string(game.QuestionTypeMemotion) || questionType == string(game.QuestionTypeEntracte)
+	noGlobalTimer := questionType == string(game.QuestionTypeMemotion) || questionType == string(game.QuestionTypeEntracte) ||
+		questionType == string(game.QuestionTypeRoue)
 	soundTimerDelayed := r.FormValue("sound_timer_delayed") == "true" && !noGlobalTimer
 	// sound_loop (v11.4.0, #288, contract sound.md §13.2): same discipline.
 	soundLoop := r.FormValue("sound_loop") == "true"

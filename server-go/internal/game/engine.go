@@ -1835,6 +1835,13 @@ func participantsConform(question *Question, state *GameState) bool {
 		// PREPARE->READY gate: SOLO now needs an explicit "who is playing"
 		// selection, same UX as MEMORY SOLO, before START).
 		return participantsCountConform(question.RafaleMode, len(state.RafaleParticipatingTeams))
+	case QuestionTypeRoue:
+		// PROVISIONAL GUARD (v12.0.0, LOT-1.1, #145): the ROUE engine arrives
+		// with LOT-1.2 (#144). Until then a ROUE question must never reach
+		// READY, hence never START (contracts/roue.md §13 item 4). LOT-1.2
+		// replaces this line by the real rule: ROUE_TEAMS conform to
+		// ROUE_MODE (SOLO = 1 team, otherwise >= 2) and a non-empty phrase.
+		return false
 	default:
 		return true
 	}
