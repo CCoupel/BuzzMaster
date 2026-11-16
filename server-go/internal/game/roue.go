@@ -522,9 +522,10 @@ func (e *Engine) roueFinishStoppingUnsafe(fx *roueFx) {
 	team := e.state.RoueCurrentTeam
 	switch seg.Kind {
 	case RoueKindBankrupt:
-		e.roueBankUnsafe(team, -e.state.RoueTeamBank[team])
+		lost := e.state.RoueTeamBank[team]
+		e.roueBankUnsafe(team, -lost)
 		e.state.RoueTurnGain = 0
-		e.roueEventUnsafe(RoueEvBankrupt, team, "", 0, 0, 0)
+		e.roueEventUnsafe(RoueEvBankrupt, team, "", 0, lost, 0) // VALUE = the pot lost (contract 5a4f70fe)
 		fx.notices = append(fx.notices, RoueNotice{Kind: RoueNoticeBad, Team: team})
 		e.roueEnterTurnEndUnsafe(false, false)
 	case RoueKindLoseTurn:

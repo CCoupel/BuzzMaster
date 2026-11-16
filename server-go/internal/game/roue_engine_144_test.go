@@ -197,3 +197,30 @@ func TestRoueEngine144_StopResetsState(t *testing.T) {
 		t.Fatalf("state not reset: %+v", st.RoueSubPhase)
 	}
 }
+
+// Un buzz de TABLETTE (VPlayer, action BUTTON) de l'équipe qui a la main arrête la roue ; jamais enregistré comme buzz
+// (accepted=false : pas de PAUSE), l'UPDATE part par OnRoueChange.
+func TestRoueEngine144_VPlayerBuzzStopsTheWheel(t *testing.T) {
+	e := roueEngine144(t, RoueModeTantQueJeGagne, "red", "blue")
+	e.SetBumpers(map[string]*Bumper{"p1": {Team: "red", IsVPlayer: true}, "p2": {Team: "blue", IsVPlayer: true}})
+	changed := make(chan struct{}, 4)
+	e.OnRoueChange = func() { changed <- struct{}{} }
+	_ = e.RoueSpin()
+	if e.ProcessButtonPress("p2", 1, "A") || e.GetState().RoueSubPhase != RoueSubSpinning {
+		t.Fatal("tablet of the other team ignored")
+	}
+	if e.ProcessButtonPress("p1", 2, "A") {
+		t.Fatal("a ROUE buzz is never a recorded buzz")
+	}
+	if e.GetState().RoueSubPhase != RoueSubStopping {
+		t.Fatal("tablet of the team with the hand must stop the wheel")
+	}
+	select {
+	case <-changed:
+	default:
+		t.Fatal("OnRoueChange must fire so the UPDATE is broadcast")
+	}
+	if e.GetState().Phase != PhaseStarted {
+		t.Fatal("no PAUSE")
+	}
+}
