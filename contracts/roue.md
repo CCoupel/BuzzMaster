@@ -108,7 +108,7 @@ buzzers.
 | `ROUE_NEXT_DEFAULT` | string | En `ANSWER` et `TURN_END` : bouton conseillé, `SAME` (« Tour suivant ») ou `NEXT` (« Équipe suivante ») — §5.2 ; `""` ailleurs |
 | `ROUE_TEAM_BANK` | map équipe → int | Cagnotte de manche de chaque équipe participante |
 | `ROUE_TURN_GAIN` | int | Gain du tour en cours, pas encore ajouté à la cagnotte (0 sinon) |
-| `ROUE_BOARD` | `{ "COLS": 14, "ROWS": string[] }` | Une chaîne par ligne : espace = pas de case, `_` = lettre cachée, `*` = case cachée **éclairée** (étape 4), tout autre caractère = visible (§3.1) |
+| `ROUE_BOARD` | `{ "COLS": 14, "ROWS": string[] }` | Une chaîne par ligne : espace = pas de case, `_` = lettre cachée, `*` = case cachée **éclairée** (sous-phase `LIT` uniquement, `ROUE_STEP = 5`), tout autre caractère = visible (§3.1) |
 | `ROUE_LETTERS` | `{ "LETTER": string, "TEAM": string, "HIT": bool }[]` | Consonnes déjà proposées, dans l'ordre : la lettre, l'équipe qui l'a proposée, présente (`true`) ou absente. Sert à colorer les lettres trouvées à la couleur de l'équipe (animateur) et à lister les lettres proposées |
 | `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question : afficher ou non les lettres proposées sur TV et tablettes (admin et anim les affichent toujours) |
 | `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |
@@ -164,8 +164,12 @@ Exemples `ROUE_BOARD` sur la phrase du §3.1, après `T`, `R`, `N`, quand l'équ
 | 2 | Arrêt de la roue | `SPINNING` | Équipe qui a la main : buzz (buzzer ou tablette) — ou admin / animateur : `ROUE_STOP` (« Forcer l'arrêt ») — ou durée maximale |
 | 3 | Affichage de la case | `STOPPING` | Serveur : case tirée, freinage |
 | 3 bis | *(à voix haute)* | `LETTER` | 🗣 L'équipe annonce une consonne — aucun appareil, aucun changement d'état |
-| 4 | Sélection de la consonne | `LETTER` puis `LIT` | Admin ou animateur : `ROUE_LETTER` ; les cases de la consonne s'éclairent |
-| 5 | Affichage des cases | `LIT` puis `REVEALING` | Admin ou animateur : `ROUE_FLIP` (« Retourner les cases ») ; elles se retournent une à une |
+| 4 | Sélection de la consonne | `LETTER` | Admin ou animateur : `ROUE_LETTER`. Consonne présente : passage à l'étape 5 (`LIT`). Aucun `*` dans `ROUE_BOARD` à cette étape |
+| 5 | Affichage des cases | `LIT` puis `REVEALING` | `LIT` : les cases de la consonne sont éclairées (`*` dans `ROUE_BOARD`, seule sous-phase où `*` apparaît). Admin ou animateur : `ROUE_FLIP` (« Retourner les cases ») → `REVEALING` : elles se retournent une à une |
+
+`ROUE_STEP` est fonction de `ROUE_SUBPHASE` seule : `TURN` = 1, `SPINNING` = 2, `STOPPING` = 3, `LETTER` = 4,
+`LIT` et `REVEALING` = 5, `ANSWER` = 6, `TURN_END` = 7, `""` et `SOLVED` = 0. L'éclairage des cases (`*`) relève donc
+de l'étape 5, pas de l'étape 4 : `ROUE_LETTER` est le geste de l'étape 4, son effet (`LIT`) ouvre l'étape 5.
 | 5 bis | *(à voix haute)* | `ANSWER` | 🗣 L'équipe propose une réponse (ou n'en propose pas) — aucun appareil, aucun changement d'état |
 | 6 | Réponse | `ANSWER` | Admin ou animateur : `ROUE_ANSWER` (« Réponse validée », **un seul bouton** — la réponse est un bonus) — sinon directement un des deux boutons de l'étape 7 |
 | 7 | Fin du tour | `TURN_END` | Gain ajouté à la cagnotte ; admin ou animateur, **deux boutons** : `ROUE_NEXT {HAND: SAME}` (« Tour suivant », la même équipe rejoue) ou `ROUE_NEXT {HAND: NEXT}` (« Équipe suivante », équipe suivante) |
@@ -173,7 +177,7 @@ Exemples `ROUE_BOARD` sur la phrase du §3.1, après `T`, `R`, `N`, quand l'équ
 ```
 START ─► 1 TURN ─ROUE_SPIN─► 2 SPINNING ─buzz / ROUE_STOP / durée max─► 3 STOPPING ─fin du freinage─┐
            ▲                                                                                         │
-           │        case valeur ─► 4 LETTER ─ROUE_LETTER (présente)─► LIT ─ROUE_FLIP─► 5 REVEALING ─► 6 ANSWER
+           │        case valeur ─► 4 LETTER ─ROUE_LETTER (présente)─► 5 LIT ─ROUE_FLIP─► REVEALING ─► 6 ANSWER
            │        Banqueroute / Tour perdu ───────────────┐              (absente / déjà proposée)   │
            │                                                ▼                        │                 │ juste
            └──────────── ROUE_NEXT ──────────────────── 7 TURN_END ◄─────────────────┴── fausse / aucune
