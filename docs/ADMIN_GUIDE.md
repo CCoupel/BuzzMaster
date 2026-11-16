@@ -1265,7 +1265,7 @@ apparaissent seulement à la résolution.
 
 ### Régler la roue
 
-La roue est **générée** à partir de 4 paramètres, dans `/settings` (carte « Roue ») :
+La roue est **générée** à partir de 4 paramètres, dans `/admin/settings` (carte « Roue ») :
 
 | Paramètre | Rôle | Défaut |
 |---|---|---|
@@ -1286,7 +1286,7 @@ La roue est **générée** à partir de 4 paramètres, dans `/settings` (carte �
 **Côté admin** (`/admin`, panneau de la manche) :
 
 1. Choisir les équipes participantes (`SOLO` : une seule équipe ; les autres modes : deux au moins), puis **Démarrer**.
-2. **Lancer la roue** (étape 1). La roue tourne sur tous les écrans. Elle s'arrête :
+2. **Lancer la roue** (étape 1). La roue tourne sur la TV. Elle s'arrête :
    - au **buzz** de l'équipe qui a la main (buzzer ou tablette) ;
    - sur **Forcer l'arrêt** ;
    - ou d'elle-même à la durée maximale de rotation.
@@ -1313,7 +1313,7 @@ La roue est **générée** à partir de 4 paramètres, dans `/settings` (carte �
 
 Autres commandes :
 
-- **Passer la main** : l'équipe qui a la main cède son tour immédiatement, sa cagnotte est conservée (hors `SOLO`).
+- **Passer la main** : au début du tour, avant de lancer la roue, l'équipe qui a la main cède son tour immédiatement ; sa cagnotte est conservée (hors `SOLO`).
 - **Dévoiler la phrase** : la phrase s'affiche sur toutes les tablettes et la TV, sans gagnant et sans crédit. Une
   confirmation en deux clics est demandée.
 - Les gains sont crédités à la résolution, sur les **points d'équipe** (historique « Points attribués » avec la

@@ -21,7 +21,7 @@ seront complétées à la fin du milestone.
   serveur ; cagnottes de manche par équipe, crédit en points d'équipe à la résolution.
 - **Roue générée (#144)** — section `wheel` de `game-config.json` (4 paramètres et durées), construction de la roue
   par le serveur (`POST /api/roue/wheel-preview`), correction du pas au diviseur le plus proche.
-- **Carte « Roue » des paramètres (#144)** — `/settings` : 4 paramètres, aperçu, « Roue par défaut ».
+- **Carte « Roue » des paramètres (#144)** — `/admin/settings` : 4 paramètres, aperçu, « Roue par défaut ».
 - **Écrans Roue (#144)** — TV (équipes en haut, plateau plein écran, roue permanente), tablette joueur, panneau admin
   de la manche, tablette animateur (sept étapes).
 - **Actions WebSocket `ROUE_*` (#144)** — `ROUE_SET_TEAMS`, `ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_FLIP`,

@@ -1369,7 +1369,7 @@ export function resolveHostContext(gameState) {
   
   if (MEMOTION_SUBPHASE && MEMOTION_SELECTED) {
     // Hôte carte MEMOTION
-    const card = gameState.MEMOTION_CARDS.find(c => c.ID === MEMOTION_SELECTED);
+    const card = gameState.MOTION_CARDS.find(c => c.ID === MEMOTION_SELECTED);
     return {
       hostType: 'MOTION_CARD',
       cardID: MEMOTION_SELECTED,
@@ -1416,7 +1416,7 @@ function resolveL3Content(gameState, hostContext) {
   
   if (hostContext.cardID) {
     // Hôte carte : synthétiser une question de la carte
-    const motionCard = gameState.MEMOTION_CARDS.find(c => c.ID === hostContext.cardID);
+    const motionCard = gameState.MOTION_CARDS.find(c => c.ID === hostContext.cardID);
     sourceObject = {
       TYPE: hostContext.type,
       QUESTION: motionCard.RECTO_THEME, // adaptateur de champs
@@ -1948,7 +1948,7 @@ Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-
 | `RoueBoard.jsx` | Plateau de l'**éditeur** (aperçu de la phrase, sans état de jeu) |
 | `RoueGameBoard.jsx` | Plateau de **jeu** (TV, tablette, admin, animateur), distinct de `RoueBoard` |
 | `RoueTv.jsx` | Écran TV ROUE : équipes en haut, plateau plein écran, roue permanente (bandeau ou arc selon `ROUE_WHEEL.LAYOUT`) |
-| `RouePanel.jsx` | Panneau admin de la manche : choix des équipes (`ROUE_SET_TEAMS`, même emplacement que RAFALE), démarrage, « Dévoiler la phrase » (confirmation en deux clics, sans `window.confirm`) |
+| `RouePanel.jsx` | Panneau admin de la manche : choix des équipes (`ROUE_SET_TEAMS`, même emplacement que RAFALE), bandeau des 7 étapes, commandes de l'étape courante, « Passer la main », « Dévoiler la phrase » (confirmation en deux clics, sans `window.confirm`). Le START reste celui de `GamePage` |
 | `RoueSteps.jsx` | Bandeau des 7 étapes |
 | `RoueControls.jsx` | Boutons de l'étape courante, clavier de consonnes, boutons « Tour suivant » / « Équipe suivante », message de refus `ROUE_ERROR`, décompte local |
 | `AnimRoue.jsx` | Vue animateur (tablette) : les 7 étapes, réponse colorée par équipe, consonnes jouées |
@@ -1960,7 +1960,7 @@ Règles d'interface :
 
 - **Aucune copie JavaScript** de la mise en lignes ni de la construction de la roue : l'aperçu vient toujours du serveur.
   Un pas corrigé est affiché « Pas ajusté à … » et remplace la valeur du champ.
-- La carte de réglage n'apparaît que si `GET /game-config.json` renvoie `wheel` (et `wheel_default`).
+- La carte de réglage n'apparaît que si `GET /game-config.json` renvoie `wheel`. `wheel_default` est facultatif : sans lui, le bouton « Roue par défaut » n'a pas de valeurs à appliquer.
 - Le plateau d'une phrase refusée n'est pas dessiné : le `400` ne renvoie pas de lignes.
 - Le champ générique `question` d'une question ROUE vaut la présentation, ou « Roue de la Fortune » si elle est vide.
   La phrase ne passe jamais par `question`.
@@ -1974,7 +1974,7 @@ Règles d'interface :
 | `hooks/useWebSocket.js` | Champs `ROUE_*` lus dans `UPDATE` ; `ROUE_ERROR` → `roueError` / `clearRoueError` |
 | `pages/PlayerDisplay.jsx` | Branche `isRoue` → `<RoueTv/>` (TV) |
 | `pages/VPlayerPage.jsx` | Appui `BUTTON` d'une tablette en `ROUE` |
-| `pages/GamePage.jsx` | Montage de `RouePanel` ; cartes génériques (présentation, chrono « Temps ») conservées pour ROUE |
+| `pages/GamePage.jsx` | Montage de `RouePanel` ; chrono « Temps » et motifs d'attente génériques masqués pour ROUE (décision GATE 2 : aucun chronomètre) |
 | `components/AnimConductPanel.jsx` | Niveau 3 pour ROUE (`AnimRoue`), rien au niveau 2 |
 | `pages/QuestionsPage.jsx` | Bouton de type « Roue » (🎡), `RoueEditor` |
 | `pages/ConfigPage.jsx` | État `wheelConfig` / `wheelDefault`, `WheelConfigCard` |
