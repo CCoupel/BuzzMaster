@@ -192,3 +192,95 @@ func TestRoueLeak145_NonRegression_OtherQuestionsUnchangedOnTV(t *testing.T) {
 		t.Errorf("la question SPEEDY doit rester intacte côté TV, got %v", got)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// #144 (v12.0.0, LOT-1.2) — non-fuite À CHAQUE SOUS-PHASE (contracts/roue.md §9) — CRITICAL.
+// « Pour chaque sous-phase avant SOLVED, la phrase et chacune de ses lettres non révélées sont absentes
+// des messages sérialisés TV et tablette. » Le plateau diffusé (ROUE_BOARD) ne porte que `_` / `*` pour les
+// lettres cachées : seule la phrase de QUESTION pourrait la trahir.
+// ---------------------------------------------------------------------------
+
+var roueSubphases = []string{"TURN", "SPINNING", "STOPPING", "LETTER", "LIT", "REVEALING", "ANSWER", "TURN_END"}
+
+// buildRoueSubphaseMsg : GameState ROUE réaliste pour une sous-phase, phrase « COMBIEN POUR CE CHIEN DANS LA
+// VITRINE » dont seules les lettres T, R, N sont révélées (les autres sont `_`), comme le moteur les diffuse.
+func buildRoueSubphaseMsg(t *testing.T, subphase string) *Message {
+	t.Helper()
+	q := game.Question{
+		ID: "r1", Question: "Manche roue", Type: game.QuestionTypeRoue,
+		TypedContent: game.TypedContent{RouePhrase: roueSecretPhrase},
+	}
+	board := map[string]interface{}{"COLS": 14, "ROWS": []string{"_____N ___R", "__ _____N __N_", "__ __TR_N_"}}
+	payload := map[string]interface{}{
+		"GAME": map[string]interface{}{
+			"PHASE": "STARTED", "QUESTION": q,
+			"ROUE_SUBPHASE": subphase, "ROUE_STEP": 3, "ROUE_TEAMS": []string{"TeamA", "TeamB"},
+			"ROUE_CURRENT_TEAM": "TeamA", "ROUE_BOARD": board, "ROUE_TEAM_BANK": map[string]int{"TeamA": 100, "TeamB": 0},
+			"ROUE_LETTERS":         []map[string]interface{}{{"LETTER": "T", "TEAM": "TeamA", "HIT": true}, {"LETTER": "R", "TEAM": "TeamB", "HIT": true}, {"LETTER": "N", "TEAM": "TeamA", "HIT": true}},
+			"ROUE_CONSONANTS_LEFT": true,
+			"ROUE_WHEEL":           map[string]interface{}{"LAYOUT": "strip", "CURRENT": 2, "STOP": nil},
+			"ROUE_LAST_EVENT":      map[string]interface{}{"SEQ": 4, "KIND": "LETTER_HIT", "TEAM": "TeamA", "LETTER": "N", "COUNT": 4},
+		},
+		"bumpers": map[string]interface{}{"p-1": map[string]interface{}{"NAME": "Alice", "TEAM": "TeamA", "CONNECTED": true}},
+		"teams":   map[string]interface{}{"TeamA": map[string]interface{}{"NAME": "TeamA", "SCORE": 0}},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	msg, _ := NewMessage(ActionUpdate, nil)
+	msg.Msg = raw
+	return msg
+}
+
+func TestRoueLeak144_EverySubphase_TVAndTablet(t *testing.T) {
+	for _, sp := range roueSubphases {
+		t.Run(sp, func(t *testing.T) {
+			m := buildRoueSubphaseMsg(t, sp)
+			tv, err := m.SerializeForTV()
+			if err != nil {
+				t.Fatalf("SerializeForTV: %v", err)
+			}
+			assertNoPhrase(t, "TV/"+sp, tv)
+			vc, _ := m.SerializeForVPlayerCommon()
+			assertNoPhrase(t, "VPlayer/"+sp, vc)
+			vi, _ := m.SerializeForVPlayer("p-1")
+			assertNoPhrase(t, "VPlayer(p-1)/"+sp, vi)
+		})
+	}
+}
+
+// Le plateau diffusé garde les champs de jeu publics : le retrait de la phrase ne doit pas les amputer.
+func TestRoueLeak144_PublicRoueFieldsSurviveOnTVAndTablet(t *testing.T) {
+	m := buildRoueSubphaseMsg(t, "LETTER")
+	for name, ser := range map[string]func() ([]byte, error){
+		"TV": m.SerializeForTV, "VPlayer": m.SerializeForVPlayerCommon,
+	} {
+		data, err := ser()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		g := gameNodeOf(t, data)
+		for _, k := range []string{"ROUE_SUBPHASE", "ROUE_BOARD", "ROUE_TEAM_BANK", "ROUE_LETTERS", "ROUE_WHEEL", "ROUE_LAST_EVENT", "ROUE_CURRENT_TEAM"} {
+			if _, ok := g[k]; !ok {
+				t.Errorf("%s : %s doit rester diffusé (public)", name, k)
+			}
+		}
+	}
+}
+
+// Les lettres cachées du plateau diffusé sont `_` : aucune lettre non révélée n'apparaît dans ROUE_BOARD.
+func TestRoueLeak144_BoardCarriesNoUnrevealedLetter(t *testing.T) {
+	data, _ := buildRoueSubphaseMsg(t, "LIT").SerializeForTV()
+	board, _ := gameNodeOf(t, data)["ROUE_BOARD"].(map[string]interface{})
+	rows, _ := board["ROWS"].([]interface{})
+	revealed := "TRN"
+	for _, r := range rows {
+		for _, ch := range r.(string) {
+			if strings.ContainsRune("_* ", ch) || strings.ContainsRune(revealed, ch) {
+				continue
+			}
+			t.Errorf("lettre non révélée %q dans ROUE_BOARD : %v", ch, rows)
+		}
+	}
+}
