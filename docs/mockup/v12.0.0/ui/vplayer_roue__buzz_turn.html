@@ -1,0 +1,107 @@
+<!--
+mockup:
+  composant: vplayer_roue
+  feature: buzz_turn
+  version: 12.0.0
+  type: ui
+  issue: "#144"
+  validee_le: 2026-11-16
+  proposition_retenue: "A — Plateau et bouton toujours visibles"
+  complete: []
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablette joueur — Roue de la Fortune : plateau pleine largeur, arrêt de la roue (#144) — version retenue</title>
+<style>
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#111827; color:#e5e7eb; }
+.mock-bar { position:sticky; top:0; z-index:300; background:#000; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:#4f46e5; border-color:#818cf8; }
+.mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:#9ca3af; line-height:1.45; } .mock-note b { color:#e5e7eb; }
+section[data-proposition] { display:none; } section[data-proposition].on { display:block; }
+.duo { display:flex; gap:2rem; justify-content:center; padding:.5rem 1rem 2rem; flex-wrap:wrap; }
+.who { text-align:center; font-size:.82rem; color:#cbd5e1; margin-bottom:.4rem; font-weight:700; }
+.dev { border:8px solid #374151; border-radius:1.4rem; overflow:hidden; background:radial-gradient(circle at 50% 10%, #1f2a5a, #0b1020 70%); display:flex; flex-direction:column; padding:10px; gap:8px; position:relative; }
+.dev.land { width:676px; height:416px; } .dev.port { width:356px; height:636px; }
+.top { display:flex; align-items:center; gap:.5rem; font-size:.74rem; min-width:0; }
+.me { border-radius:999px; padding:.15rem .7rem; font-weight:800; color:#fff; white-space:nowrap; }
+.cat { background:rgba(255,255,255,.14); border-radius:999px; padding:.15rem .7rem; font-weight:800; text-transform:uppercase; white-space:nowrap; }
+.pres { font-size:.9rem; font-weight:700; color:#fde68a; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bank { font-weight:800; white-space:nowrap; } .bank small { color:#9ca3af; font-weight:500; }
+.port .top { flex-wrap:wrap; } .port .pres { flex:1 0 100%; white-space:normal; }
+.board { display:grid; grid-template-columns:repeat(14, 1fr); gap:3px; width:100%; }
+.bc { aspect-ratio:1; border-radius:3px; background:rgba(255,255,255,.04); display:flex; align-items:center; justify-content:center; font-weight:900; color:#111827; }
+.land .bc { font-size:1.5rem; } .port .bc { font-size:.8rem; }
+.bc.t { background:#1d4ed8; } .bc.s { background:#f8fafc; }
+.msg { text-align:center; font-size:.95rem; font-weight:800; white-space:nowrap; overflow:hidden; } .msg em { font-style:normal; color:#fbbf24; }
+.port .msg { white-space:normal; min-height:2.4rem; display:flex; align-items:center; justify-content:center; }
+.letters { text-align:center; font-size:.74rem; color:#9ca3af; } .letters b { color:#fff; margin:0 .15rem; } .letters s { color:#fca5a5; }
+.buzz { flex:1; min-height:0; border-radius:1rem; border:0; font:inherit; font-weight:900; font-size:1.5rem; color:#fff; box-shadow:0 .4rem 0 rgba(0,0,0,.35); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; position:relative; overflow:hidden; }
+.buzz small { font-size:.78rem; font-weight:600; opacity:.95; } .buzz.off { background:#1f2937 !important; color:#6b7280; box-shadow:none; font-size:.9rem; font-weight:700; }
+.buzz .max { position:absolute; left:0; bottom:0; height:6px; width:62%; background:#fde047; }
+.full { position:absolute; inset:0; padding:14px; display:flex; background:rgba(11,16,32,.97); }
+.banks { display:grid; grid-template-columns:repeat(4, 1fr); gap:.3rem; font-size:.74rem; } .port .banks { grid-template-columns:1fr 1fr; }
+.banks div { background:rgba(255,255,255,.08); border-left:4px solid var(--c); border-radius:.3rem; padding:.25rem .5rem; display:flex; justify-content:space-between; gap:.3rem; } .banks div.a { background:rgba(255,255,255,.22); font-weight:800; }
+.win { text-align:center; font-size:1.15rem; font-weight:900; color:#4ade80; flex:1; display:flex; align-items:center; justify-content:center; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Orientation :</strong><span class="grp" id="ori"><button data-o="land" class="on">Paysage</button><button data-o="port">Portrait</button></span>
+  <strong>Moment :</strong>
+  <span class="grp" id="states"><button data-s="turn">Début de tour</button><button data-s="spin" class="on">Roue lancée</button><button data-s="letter">Case affichée</button><button data-s="solved">Phrase trouvée</button></span>
+</div>
+<div class="mock-note" id="pitch"></div>
+<div class="mock-note">Tablette d'un joueur pendant une manche ROUE, <b>plateau sur toute la largeur</b>, en <b>paysage</b> (par défaut) et en portrait. À gauche un joueur des <b>Rouges, qui ont la main</b> ; à droite un joueur des <b>Bleus, qui attendent</b>. L'équipe qui a la main peut <b>arrêter la roue en appuyant avant la fin de la durée maximale</b> (barre jaune sur le bouton) ; sans appui, la roue s'arrête d'elle-même. Dans les deux cas, c'est le serveur qui tire la case. Un appui des autres équipes est sans effet. La tablette ne montre <b>jamais</b> la phrase, seulement les lettres trouvées.</div>
+
+<div class="duo" id="dA"></div>
+
+<script>
+const PITCH = { A: "<b>Plateau et bouton toujours visibles.</b> Le plateau en haut sur toute la largeur, le bouton d'arrêt dessous, toujours à la même place ; il s'allume quand la roue tourne pour son équipe." };
+const st = { p:"A", o:"land", s:"spin" };
+const ROWS = ["______N ___R","__ ____N __N_","__ __TR_N_"], FULL = ["COMBIEN POUR","CE CHIEN DANS","LA VITRINE"];
+function board() {
+  let h = `<div class="board">`;
+  for (const r of ["", ...(st.s === "solved" ? FULL : ROWS)]) { const pad = Math.floor((14 - r.length) / 2);
+    for (let c = 0; c < 14; c++) { const ch = r[c - pad]; h += !ch || ch === " " ? `<div class="bc"></div>` : ch === "_" ? `<div class="bc t"></div>` : `<div class="bc s">${ch}</div>`; } }
+  return h + `</div>`;
+}
+const banks = `<div class="banks"><div class="a" style="--c:#ef4444"><span>Rouges</span><span>1 300</span></div><div style="--c:#3b82f6"><span>Bleus</span><span>400</span></div><div style="--c:#22c55e"><span>Verts</span><span>0</span></div><div style="--c:#eab308"><span>Jaunes</span><span>900</span></div></div>`;
+function msg(mine) {
+  if (st.s === "turn") return mine ? "À votre équipe de jouer" : "Aux <em>&nbsp;Rouges&nbsp;</em> de jouer";
+  if (st.s === "spin") return mine ? "La roue tourne — arrêtez-la !" : "Les <em>&nbsp;Rouges&nbsp;</em> vont arrêter la roue";
+  if (st.s === "letter") return mine ? "Case <em>&nbsp;500&nbsp;</em> — proposez une consonne" : "Case <em>&nbsp;500&nbsp;</em> pour les Rouges";
+  return "";
+}
+function dev(p, mine) {
+  const name = mine ? "Rouges" : "Bleus", color = mine ? "#ef4444" : "#3b82f6", bank = mine ? "1 300" : "400";
+  const solved = st.s === "solved", active = mine && st.s === "spin";
+  const top = `<div class="top"><span class="me" style="background:${color}">${name}</span><span class="cat">🐾 Animaux</span>${st.o === "land" ? `<span class="pres">Chanson de Line Renaud</span>` : `<span style="flex:1"></span>`}<span class="bank">${bank} <small>cagnotte</small></span>${st.o === "port" ? `<span class="pres">Chanson de Line Renaud</span>` : ""}</div>`;
+  const win = `<div class="win">${mine ? "🎉 Votre équipe a trouvé la phrase : +1 300 points" : "Les Rouges ont trouvé la phrase"}</div>`;
+  const stopBtn = `<button class="buzz" style="background:${color}">STOP<small>appuyez pour arrêter la roue — arrêt automatique dans 4 s</small><span class="max"></span></button>`;
+  let body = top + board();
+  if (solved) body += win;
+  else if (p === "A") body += `<div class="msg">${msg(mine)}</div>` + (active ? stopBtn : `<button class="buzz off">${mine ? "Bouton actif quand la roue tourne" : "Ce n'est pas votre tour"}</button>`);
+  else body += `<div class="msg">${msg(mine)}</div><div class="letters">Lettres proposées : <b>T</b><b>R</b><b>N</b><s>G</s></div><div style="flex:1"></div>${banks}` + (active ? `<div class="full">${stopBtn}</div>` : "");
+  return `<div><div class="who">${mine ? "Joueur des Rouges — son équipe a la main" : "Joueur des Bleus — en attente"}</div><div class="dev ${st.o}">${body}</div></div>`;
+}
+function render() {
+  document.getElementById("dA").innerHTML = dev("A", true) + dev("A", false);
+  document.getElementById("pitch").innerHTML = PITCH[st.p];
+  document.querySelectorAll("section[data-proposition]").forEach(s => s.classList.toggle("on", s.dataset.proposition === st.p));
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.p === st.p));
+  document.querySelectorAll("#ori button").forEach(b => b.classList.toggle("on", b.dataset.o === st.o));
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", b.dataset.s === st.s));
+}
+document.querySelector(".mock-bar").addEventListener("click", e => { const d = e.target.dataset; if (!d) return;
+  if (d.p) st.p = d.p; else if (d.o) st.o = d.o; else if (d.s) st.s = d.s; else return; render(); });
+render();
+</script>
+</body>
+</html>

@@ -1,6 +1,39 @@
 # Changelog des Contrats API
 
 ---
+## [20261116] — v12.0.0 — mode de jeu ROUE « Roue de la Fortune » (#144, #145, LOT-1)
+
+Nouveau contrat `roue.md` ; `wheel-component.md` §5 révisé, §7 mis à jour, §8 ajouté ; ligne `ROUE` de
+`question-types.md` §7. Décisions utilisateur du 2026-11-16 (`_work/reports/plan-ambiguities-20261116-112244.md`,
+Q1–Q4 ; ordre `_work/tasks/planner-20261116-112200.md`). **Aucun BREAKING** : types, actions et champs existants
+inchangés ; aucun changement de protocole BuzzClick ; un `game-config.json` sans section `wheel` reste valide.
+
+- **[NEW]** Type de question `ROUE` : champs `ROUE_PHRASE`, `ROUE_PRESENTATION`, `ROUE_MODE`
+  (`SOLO | CHACUN_SON_TOUR | TANT_QUE_JE_GAGNE`, enum existant), `ROUE_GAINS_RULE` (`WINNER_ONLY | ALL_TEAMS`),
+  `ROUE_WHEEL_LAYOUT` (`strip | arc`), `ROUE_SHOW_LETTERS` (`roue.md` §3).
+- **[CHANGED]** `POST /questions` — champs de formulaire `roue_phrase`, `roue_presentation`, `ROUE_MODE`,
+  `roue_gains_rule`, `roue_wheel_layout`, `roue_show_letters` pour `type=ROUE` ; refus `400` `ROUE_*` (§11.1). Additif.
+- **[NEW]** `POST /api/roue/preview` — validation et mise en lignes d'une phrase, sans écriture (§11.2).
+- **[NEW]** Champs `GameState` `ROUE_*` (sous-phase, étape 1 à 7, équipes, équipe suivante, cagnottes de manche,
+  gain du tour, plateau avec cases éclairées, lettres, roue, dernier événement, gagnant, crédits), diffusés aux
+  clients web, jamais persistés, jamais aux buzzers (§4).
+- **[NEW]** Actions client → serveur : `ROUE_SET_TEAMS`, `ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_FLIP`,
+  `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL` ; admin : toutes ; animateur : `ROUE_SPIN`, `ROUE_STOP`,
+  `ROUE_LETTER`, `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT` (§8.2) ; serveur → émetteur : `ROUE_ERROR` (§8).
+- **[CHANGED]** Action `BUTTON` — en type `ROUE`, n'est acceptée que de l'équipe qui a la main pendant `SPINNING`
+  (arrêt de la roue avant la durée maximale), sans statut `PAUSE` ; comportement inchangé pour les autres types (§5.1).
+- **[CHANGED]** Sérialisation TV et tablette — `QUESTION.ROUE_PHRASE` retiré (§9). Additif (champ nouveau).
+- **[CHANGED]** `GET/POST /game-config.json` — section `wheel` : 4 paramètres (points maximum, pas, nombre de
+  BANQUEROUTE, nombre de TOUR PERDU ; pas inférieur au maximum, corrigé au diviseur le plus proche s'il ne le
+  divise pas ; 64 cases au plus) et durées (tour, rotation maximale, freinage, retournement) ; champ en
+  lecture `wheel_default` ; paramètres hors limites refusés `400` (§10). La roue est générée par le serveur (§10.1).
+  Additif.
+- **[NEW]** `POST /api/roue/wheel-preview` — roue générée pour des paramètres non enregistrés (§11.3).
+- **[CHANGED]** Composant `Wheel` — `motion` implémenté sous une forme nouvelle (`spin` / `land`), sans horloge
+  serveur ; la forme réservée en v11.4.0 (`from, to, turns, durationMs, startedAt`), jamais implémentée ni
+  utilisée, est abandonnée ; `motion = null` inchangé (`wheel-component.md` §5, §8).
+
+---
 ## [20261112] — v11.8.0 — éditeur d'effets, import et export (#210, #305)
 
 `light-effects.md` **révision 5, §11** ; table de `http-endpoints.md`. Décisions utilisateur du 2026-11-12

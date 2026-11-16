@@ -58,14 +58,28 @@ tous les segments visibles sont rendus et le segment courant est sous le pointeu
 (`positionAt` → résultat dans `[0, n)` après 1 000 mouvements aléatoires) et vitest (100 `rerender` ⇒ cellule/secteur
 courant présent dans le cadre, aucune `translateX` au-delà de `REP × n` cellules).
 
-## 5. Mouvement long (`motion`, **réservé** — implémenté en v12.0)
+## 5. Mouvement long (`motion`) — **révisé en v12.0.0** (#144, `contracts/roue.md` §6)
+
+> Remplace la forme réservée en v11.4.0 (`{ from, to, turns, durationMs, startedAt }`, horloge serveur), jamais
+> implémentée. Décision utilisateur du 2026-11-16 : le serveur tire la case au buzz, la position pendant la
+> rotation n'a aucune valeur de jeu — **aucune horloge serveur, aucun offset client/serveur**.
 
 ```js
-motion = { from, to, turns, durationMs, startedAt }   // startedAt : horloge serveur (ms)
+motion = null                                          // bascule courte vers `current` (RAFALE, inchangé)
+motion = { mode: 'spin', periodMs: 2500 }              // défilement continu, un tour en periodMs ; `current` ignoré
+motion = { mode: 'land', to: 7, durationMs: 4000, minTurns: 1 }   // freinage jusqu'à l'index `to`
 ```
-Animation `requestAnimationFrame`, courbe ease-out cubique identique à la bascule courte, position dérivée du temps
-serveur (offset client/serveur à ajouter au hook WS en v12.0) pour que TV, admin et tablettes montrent le même angle au
-même instant. En v11.4.0 : `motion` est accepté et **ignoré** (bascule courte), documenté comme tel.
+
+- `spin` : animation `requestAnimationFrame` à vitesse constante, vers l'avant ; la position est ramenée modulo `n`
+  à chaque tour **sans saut visible** (les répétitions du ruban et la rotation du disque le permettent) ; aucune
+  mise en évidence du segment sous le pointeur.
+- `land` : depuis la position courante (quelle qu'elle soit), avance d'au moins `minTurns` tours puis s'arrête sur
+  `to`, courbe ease-out cubique ; à la fin, position normalisée (§4) et `to` mis en évidence. L'amplitude reste
+  bornée (`≤ 4n`, §4) : `minTurns` effectif plafonné en conséquence.
+- Passage `spin` → `land` sans à-coup (la vitesse initiale du freinage part de la vitesse de défilement, à
+  l'approximation de la courbe près). Montage direct en `land` (client qui se connecte en cours de freinage) ou
+  `prefers-reduced-motion` : placement immédiat sur `to`.
+- `motion` absent ou `null` : comportement v11.4.0 strictement inchangé (tests existants verts sans modification).
 
 ## 6. Accessibilité et performance
 
@@ -74,5 +88,18 @@ instantanée ; aucune ré-allocation du SVG à chaque mouvement (seul le `transf
 
 ## 7. Hors contrat
 
-Son de rotation, éclairage synchronisé, segments configurables côté serveur, nœud `WHEEL` de `GameState`, action
-`WHEEL_SPIN` — v12.0 (`_work/reports/planner-wheel-20261105-113000.md` §4).
+Segments configurables côté serveur, état de la roue dans `GameState` (`ROUE_WHEEL`) et actions de lancer / d'arrêt
+(`ROUE_SPIN`, `ROUE_STOP`) : `contracts/roue.md` (v12.0.0). Son de rotation et éclairage synchronisé sur la
+rotation : non prévus en v12.0.0.
+
+## 8. Adaptateur `FortuneWheel` (v12.0.0)
+
+`web/src/components/roue/FortuneWheel.jsx` traduit `GameState.ROUE_WHEEL` en props de `Wheel` :
+- `segments` : `KIND: value` → `{ kind: 'value', label: String(VALUE) }` ; `bankrupt` / `lose_turn` →
+  `{ kind: 'special', label: … }` (libellés et couleurs : maquette `tv_roue_started`) ;
+- `layout` = `ROUE_WHEEL.LAYOUT` ; `accent` = `ROUE_CURRENT_TEAM_COLOR` ;
+- `ROUE_SUBPHASE = SPINNING` → `motion = { mode: 'spin', periodMs: SPIN_PERIOD_MS }` ;
+  `STOPPING` → `motion = { mode: 'land', to: STOP.TO, durationMs: STOP.DURATION_MS, minTurns: 1 }` ;
+  sinon `motion = null`, `current = CURRENT` (ou `null` si `-1`).
+- Ajouts admis au composant, additifs : libellés longs (largeur de cellule du bandeau, taille de police de l'arc)
+  et `aria-label` selon `kind`.

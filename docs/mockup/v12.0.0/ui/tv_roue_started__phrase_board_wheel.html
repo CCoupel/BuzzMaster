@@ -1,0 +1,180 @@
+<!--
+mockup:
+  composant: tv_roue_started
+  feature: phrase_board_wheel
+  version: 12.0.0
+  type: ui
+  issue: "#144"
+  validee_le: 2026-11-16
+  proposition_retenue: "A — Équipes en haut, plateau plein écran, roue permanente (bandeau ou arc selon la question)"
+  complete: [docs/mockup/v11.4.0/ui/tv_rafale_started__letter_wheel.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV — Roue de la Fortune : équipes en haut, plateau plein écran, roue permanente (#144) — révision 2</title>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#111827; color:#e5e7eb; }
+  .mock-bar { position:sticky; top:0; z-index:300; background:#000; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+  .mock-bar strong { color:#fff; }
+  .mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+  .mock-bar button.on { background:#4f46e5; border-color:#818cf8; }
+  .grp { display:flex; gap:.3rem; align-items:center; flex-wrap:wrap; }
+  .mock-note { max-width:1120px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:#9ca3af; line-height:1.45; }
+  .mock-note b { color:#e5e7eb; }
+
+  /* ---- Écran TV 16:9, STATIQUE : aucun défilement, tout en unités d'écran ---- */
+  .tv { width:1120px; height:630px; margin:0 auto 1rem; position:relative; overflow:hidden; background:radial-gradient(circle at 50% 15%, #1f2a5a, #0b1020 70%); border:3px solid #374151; --vh:6.3px; --vw:11.2px; --team:#ef4444; display:flex; flex-direction:column; }
+  .banks { display:flex; gap:calc(.8*var(--vw)); padding:calc(1.2*var(--vh)) calc(2.5*var(--vw)) 0; height:calc(10*var(--vh)); }
+  .bank { flex:1; min-width:0; border-radius:calc(1*var(--vh)); padding:0 calc(.9*var(--vw)); background:rgba(255,255,255,.08); border-left:calc(.6*var(--vw)) solid var(--c); overflow:hidden; display:flex; align-items:center; justify-content:space-between; gap:.5em; }
+  .bank.active { background:rgba(255,255,255,.22); outline:calc(.35*var(--vh)) solid var(--c); }
+  .bank .n { font-size:calc(2.2*var(--vh)); font-weight:700; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .bank .v { font-size:calc(3.6*var(--vh)); font-weight:900; white-space:nowrap; }
+  .bank.win .v { color:#4ade80; } .bank .v.up { color:#fbbf24; }
+  .banks.dense .bank { flex-direction:column; align-items:flex-start; justify-content:center; gap:0; padding:0 calc(.6*var(--vw)); }
+  .banks.dense .bank .n { font-size:calc(1.7*var(--vh)); max-width:100%; } .banks.dense .bank .v { font-size:calc(2.9*var(--vh)); line-height:1.05; }
+
+  .head { display:flex; align-items:center; gap:calc(2*var(--vw)); padding:calc(1.4*var(--vh)) calc(3*var(--vw)) calc(.6*var(--vh)); height:calc(7*var(--vh)); }
+  .cat { background:rgba(255,255,255,.12); border-radius:999px; padding:.15em 1em; font-size:calc(2.6*var(--vh)); font-weight:800; text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
+  .pres { font-size:calc(3.4*var(--vh)); font-weight:700; color:#fde68a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
+
+  .mid { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; }
+  .board { display:grid; grid-template-columns:repeat(14, var(--cs)); grid-auto-rows:var(--cs); gap:calc(.5*var(--vh)); justify-content:center; perspective:800px; }
+  .bc { display:flex; align-items:center; justify-content:center; font-weight:900; font-size:calc(var(--cs)*.62); border-radius:calc(.5*var(--vh)); background:rgba(255,255,255,.04); color:#111827; }
+  .bc.tile { background:#1d4ed8; box-shadow:inset 0 0 0 2px rgba(255,255,255,.25); }
+  .bc.shown { background:#f8fafc; }
+  .bc.lit { background:#fde047; box-shadow:0 0 calc(2.5*var(--vh)) #fde047, inset 0 0 0 2px #fff; animation:pulse .9s ease-in-out infinite alternate; }
+  @keyframes pulse { from { filter:brightness(.9); } to { filter:brightness(1.25); } }
+  .bc.flip { background:#f8fafc; animation:flip .6s ease-out both; animation-delay:calc(var(--i) * .7s); }
+  @keyframes flip { 0% { transform:rotateY(180deg); background:#fde047; color:transparent; } 49% { color:transparent; background:#fde047; } 50% { color:#111827; background:#f8fafc; } 100% { transform:rotateY(0); } }
+
+  .event { text-align:center; font-size:calc(2.8*var(--vh)); font-weight:800; height:calc(4.6*var(--vh)); line-height:calc(4.6*var(--vh)); white-space:nowrap; overflow:hidden; }
+  .event em { font-style:normal; color:#fbbf24; }
+  .letters { text-align:center; font-size:calc(2*var(--vh)); color:#9ca3af; height:calc(3.4*var(--vh)); line-height:calc(3.4*var(--vh)); white-space:nowrap; overflow:hidden; }
+  .letters b { display:inline-block; min-width:1.5em; margin:0 .1em; border-radius:.3em; background:rgba(255,255,255,.14); color:#fff; line-height:1.5; }
+  .letters b.miss { text-decoration:line-through; color:#fca5a5; background:rgba(239,68,68,.18); }
+
+  /* ---- Roue : composant Wheel existant, toujours visible, pointeur fixe ---- */
+  .strip { position:relative; height:calc(13*var(--vh)); margin:0 calc(3*var(--vw)) calc(1.5*var(--vh)); border-radius:calc(1.5*var(--vh)); background:rgba(0,0,0,.35); border:2px solid rgba(255,255,255,.15); overflow:hidden; }
+  .track { position:absolute; top:0; bottom:0; left:50%; display:flex; transform:translateX(-50%); }
+  .spin .track { animation:slide 1.2s linear infinite; }
+  @keyframes slide { from { transform:translateX(-50%); } to { transform:translateX(calc(-50% - 30*var(--vw))); } }
+  .cell { width:calc(10*var(--vw)); flex:0 0 calc(10*var(--vw)); display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:900; color:#111827; border-right:2px solid #0b1020; font-size:calc(5.4*var(--vh)); line-height:1; }
+  .cell.special { background:#0f172a !important; color:#fff; }
+  .cell.special .pic { font-size:calc(4.6*var(--vh)); } .cell.special .lab { font-size:calc(1.7*var(--vh)); letter-spacing:.06em; margin-top:.25em; text-align:center; line-height:1.05; }
+  .strip::before, .strip::after { content:''; position:absolute; top:0; bottom:0; width:16%; z-index:2; pointer-events:none; }
+  .strip::before { left:0; background:linear-gradient(90deg, #0b1020, transparent); } .strip::after { right:0; background:linear-gradient(270deg, #0b1020, transparent); }
+  .ptr { position:absolute; left:50%; top:0; bottom:0; width:calc(10*var(--vw)); transform:translateX(-50%); border:calc(.6*var(--vh)) solid var(--team); border-radius:calc(1*var(--vh)); z-index:3; box-shadow:0 0 calc(2*var(--vh)) var(--team); }
+  .spin .ptr { box-shadow:none; opacity:.7; }
+  .arc { position:relative; height:calc(27*var(--vh)); overflow:hidden; }
+  .arc svg { position:absolute; left:50%; top:calc(3*var(--vh)); width:calc(150*var(--vh)); height:calc(150*var(--vh)); margin-left:calc(-75*var(--vh)); }
+  .arc.spin svg { animation:rot 2.5s linear infinite; transform-origin:50% 50%; }
+  @keyframes rot { to { transform:rotate(-360deg); } }
+  .arc .aptr { position:absolute; left:50%; top:0; transform:translateX(-50%); width:0; height:0; border-left:calc(2.2*var(--vh)) solid transparent; border-right:calc(2.2*var(--vh)) solid transparent; border-top:calc(4*var(--vh)) solid var(--team); z-index:3; filter:drop-shadow(0 0 6px var(--team)); }
+  .maxbar { position:absolute; left:0; bottom:0; height:calc(.8*var(--vh)); background:#fbbf24; width:62%; z-index:4; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Roue (réglage de la question) :</strong><span class="grp" id="g-w"><button data-w="strip" class="on">Bandeau</button><button data-w="arc">Arc</button></span>
+  <strong>Lettres proposées (réglage de la question) :</strong><span class="grp" id="g-l"><button data-l="1" class="on">Affichées</button><button data-l="0">Masquées</button></span>
+  <strong>Équipes :</strong><span class="grp" id="g-n"><button data-n="2">2</button><button data-n="4" class="on">4</button><button data-n="8">8</button></span>
+  <strong>Moment :</strong>
+  <span class="grp" id="g-s">
+    <button data-s="turn">1 Début de tour</button><button data-s="spin">2 Roue lancée</button><button data-s="land" class="on">3 Case affichée</button>
+    <button data-s="lit">4 Cases éclairées</button><button data-s="flip">5 Retournement</button><button data-s="end">7 Fin du tour</button>
+    <button data-s="bank">Banqueroute</button><button data-s="solved">Phrase trouvée</button>
+  </span>
+</div>
+<div class="mock-note"><b>Une seule mise en page</b> (agencement demandé) : <b>les équipes en haut</b> avec leur cagnotte de manche, <b>le plateau en plein écran</b>, <b>la roue toujours affichée</b> en bas. Deux réglages <b>de la question</b>, choisis dans l'éditeur : la forme de la roue (<b>bandeau</b> ou <b>arc</b>) et l'affichage ou non des <b>lettres déjà proposées</b>. Avec la roue en arc, le plateau est un peu plus petit pour lui laisser la place.</div>
+<div class="mock-note">Exemple : catégorie <b>Animaux</b>, présentation <b>« Chanson de Line Renaud »</b>, phrase COMBIEN POUR CE CHIEN DANS LA VITRINE. Lettres déjà proposées : T, R, N (trouvées), G (absente) ; les Rouges proposent <b>C</b> (3 cases) sur la case 500. Étape 4 : les cases du C <b>s'éclairent</b>. Étape 5 : elles <b>se retournent une à une</b> (recliquez « 5 Retournement » pour rejouer l'animation). Étape 7 : le gain rejoint la cagnotte de l'équipe. Pendant le lancer, une barre montre le temps restant avant l'arrêt automatique de la roue.
+Cases spéciales : <b>💸 BANQUE / ROUTE</b> et <b>⏭ TOUR / PERDU</b>, pictogramme et mot sur deux lignes, même largeur que les autres cases. Écran <b>statique</b>, de 2 à 8 équipes.</div>
+
+<div class="tv" id="tv"></div>
+
+<script>
+const TEAMS = [["Rouges","#ef4444",1300],["Bleus","#3b82f6",400],["Verts","#22c55e",0],["Jaunes","#eab308",900],["Violets","#a855f7",200],["Oranges","#f97316",0],["Roses","#ec4899",600],["Cyans","#06b6d4",100]];
+const SEG = [100,300,500,"B",200,400,800,100,600,300,"P",500,200,700,400,1000,"B",300,600,100,900,200,500,400];
+const PAL = ["#fca5a5","#93c5fd","#86efac","#fde68a","#d8b4fe","#fdba74"];
+const FULL = ["COMBIEN POUR","CE CHIEN DANS","LA VITRINE"];
+const st = { w:"strip", l:"1", n:4, s:"land" };
+
+function board(cs) {
+  const shown = st.s === "solved" ? null : (st.s === "end" ? "TRNC" : "TRN");
+  let h = `<div class="board" style="--cs:${cs}">`, k = 0;
+  for (const r of ["", ...FULL]) {
+    const pad = Math.floor((14 - r.length) / 2);
+    for (let c = 0; c < 14; c++) {
+      const ch = r[c - pad];
+      if (!ch || ch === " ") h += `<div class="bc"></div>`;
+      else if (ch === "C" && st.s === "lit") h += `<div class="bc lit"></div>`;
+      else if (ch === "C" && st.s === "flip") h += `<div class="bc flip" style="--i:${k++}">C</div>`;
+      else if (!shown || shown.includes(ch)) h += `<div class="bc shown">${ch}</div>`;
+      else h += `<div class="bc tile"></div>`;
+    }
+  }
+  return h + `</div>`;
+}
+const cur = () => st.s === "bank" ? 3 : 2;
+function segHtml(i) {
+  const j = ((i % 24) + 24) % 24, s = SEG[j];
+  if (s === "B") return `<div class="cell special"><span class="pic">💸</span><span class="lab">BANQUE<br>ROUTE</span></div>`;
+  if (s === "P") return `<div class="cell special"><span class="pic">⏭</span><span class="lab">TOUR<br>PERDU</span></div>`;
+  return `<div class="cell" style="background:${PAL[j % 6]}">${s}</div>`;
+}
+function strip() {
+  let cells = ""; for (let i = cur() - 7; i <= cur() + 7; i++) cells += segHtml(i);
+  return `<div class="strip ${st.s === "spin" ? "spin" : ""}"><div class="track">${cells}</div><div class="ptr"></div>${st.s === "spin" ? `<div class="maxbar"></div>` : ""}</div>`;
+}
+function arc() {
+  const n = 24, a = 360 / n, R = 480, r = 330, c = cur();
+  const pt = (rad, deg) => { const t = deg * Math.PI / 180; return [(500 + rad * Math.cos(t)).toFixed(1), (500 + rad * Math.sin(t)).toFixed(1)]; };
+  let g = "";
+  for (let i = 0; i < n; i++) {
+    const mid = -90 + (i - c) * a, a0 = mid - a / 2, a1 = mid + a / 2, s = SEG[i];
+    const [x0,y0] = pt(R,a0), [x1,y1] = pt(R,a1), [x2,y2] = pt(r,a1), [x3,y3] = pt(r,a0), [lx,ly] = pt(405, mid);
+    g += `<path d="M${x0} ${y0} A${R} ${R} 0 0 1 ${x1} ${y1} L${x2} ${y2} A${r} ${r} 0 0 0 ${x3} ${y3} Z" fill="${typeof s === "number" ? PAL[i % 6] : "#0f172a"}" stroke="#0b1020" stroke-width="3"/>`;
+    g += typeof s === "number"
+      ? `<text x="${lx}" y="${ly}" transform="rotate(${mid + 90} ${lx} ${ly})" text-anchor="middle" dominant-baseline="central" font-size="46" font-weight="900" fill="#111827">${s}</text>`
+      : `<g transform="rotate(${mid + 90} ${lx} ${ly})" text-anchor="middle" fill="#fff" font-weight="800"><text x="${lx}" y="${+ly - 30}" font-size="40">${s === "B" ? "💸" : "⏭"}</text><text x="${lx}" y="${+ly + 12}" font-size="19">${s === "B" ? "BANQUE" : "TOUR"}</text><text x="${lx}" y="${+ly + 34}" font-size="19">${s === "B" ? "ROUTE" : "PERDU"}</text></g>`;
+  }
+  return `<div class="arc ${st.s === "spin" ? "spin" : ""}"><div class="aptr"></div><svg viewBox="0 0 1000 1000">${g}</svg>${st.s === "spin" ? `<div class="maxbar"></div>` : ""}</div>`;
+}
+function banks() {
+  let h = `<div class="banks ${st.n === 8 ? "dense" : ""}">`;
+  for (let i = 0; i < st.n; i++) {
+    let v = TEAMS[i][2], cls = "";
+    if (i === 0 && st.s === "end") { v = 2800; cls = "up"; }
+    if (i === 0 && st.s === "bank") v = 0;
+    const win = st.s === "solved" && i === 0;
+    h += `<div class="bank ${i === 0 ? "active" : ""} ${win ? "win" : ""}" style="--c:${TEAMS[i][1]}"><span class="n">${TEAMS[i][0]}</span><span class="v ${cls}">${win ? "+" : ""}${v.toLocaleString("fr-FR")}</span></div>`;
+  }
+  return h + `</div>`;
+}
+const EVENT = { turn:"Aux <em>ROUGES</em> de jouer", spin:"<em>ROUGES</em> : buzzez pour arrêter la roue !", land:"Case <em>500</em> — proposez une consonne",
+  lit:"<em>C</em> : 3 cases", flip:"<em>C</em> : 3 × 500 = <em>+1 500</em>", end:"<em>+1 500</em> pour les Rouges — ils gardent la main",
+  bank:"💸 <em>BANQUEROUTE</em> — la cagnotte des Rouges retombe à 0", solved:"🎉 Les <em>ROUGES</em> trouvent la phrase : <em>+1 300 points</em>" };
+function letters() {
+  if (st.l !== "1") return "";
+  const hit = ["flip","end"].includes(st.s) ? ["T","R","N","C"] : ["T","R","N"];
+  return `<div class="letters">Lettres proposées : ${hit.map(l => `<b>${l}</b>`).join("")}<b class="miss">G</b></div>`;
+}
+function render() {
+  const cs = st.w === "arc" ? "calc(4.9*var(--vw))" : "calc(6*var(--vw))";
+  document.getElementById("tv").innerHTML = banks()
+    + `<div class="head"><span class="cat">🐾 Animaux</span><span class="pres">Chanson de Line Renaud</span></div>`
+    + `<div class="mid">${board(cs)}</div>`
+    + `<div class="event">${EVENT[st.s]}</div>` + letters()
+    + (st.w === "arc" ? arc() : strip());
+  for (const k of ["w","l","n","s"]) document.querySelectorAll(`#g-${k} button`).forEach(b => b.classList.toggle("on", String(b.dataset[k]) === String(st[k])));
+}
+document.querySelector(".mock-bar").addEventListener("click", e => { const d = e.target.dataset; if (!d) return;
+  if (d.w) st.w = d.w; else if (d.l) st.l = d.l; else if (d.n) st.n = +d.n; else if (d.s) st.s = d.s; else return; render(); });
+render();
+</script>
+</body>
+</html>

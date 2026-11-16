@@ -1,0 +1,161 @@
+<!--
+mockup:
+  composant: admin_settings
+  feature: wheel_config
+  version: 12.0.0
+  type: ui
+  issue: "#144"
+  validee_le: 2026-11-16
+  proposition_retenue: "A — Points maximum, pas, Banqueroute, Perdu : roue générée"
+  complete: []
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin › Paramètres — carte « Roue de la Fortune » : maximum, pas, Banqueroute, Perdu (#144) — version retenue</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --error:#dc2626; --errbg:#fee2e2; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:var(--primary); border-color:#818cf8; }
+.mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:var(--gray-500); line-height:1.5; } .mock-note b { color:var(--gray-700); }
+.mock-note ol { margin:.3rem 0; padding-left:1.3rem; } .mock-note code { background:#fff; border-radius:.25rem; padding:0 .3rem; color:var(--gray-900); font-weight:700; }
+.card { max-width:1060px; margin:.6rem auto; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.card.dim { opacity:.45; padding:.7rem 1.2rem; font-size:.86rem; font-weight:600; }
+.card h3 { margin:0 0 .2rem; font-size:1rem; } .sub { font-size:.78rem; color:var(--gray-500); margin:0 0 .8rem; }
+.params { display:grid; grid-template-columns:repeat(4, 1fr); gap:.7rem; }
+.param { border:1px solid var(--gray-200); border-radius:.6rem; padding:.6rem .7rem; background:var(--gray-50); }
+.param label { display:block; font-size:.8rem; font-weight:700; color:var(--gray-700); margin-bottom:.3rem; }
+.param input { font:inherit; font-size:1.2rem; font-weight:800; width:100%; padding:.3rem .5rem; border:1px solid var(--gray-300); border-radius:.4rem; }
+.param small { display:block; font-size:.7rem; color:var(--gray-500); margin-top:.25rem; }
+.row { display:flex; align-items:center; gap:.8rem; margin:.55rem 0; flex-wrap:wrap; } .lbl { width:210px; font-size:.84rem; font-weight:600; color:var(--gray-700); }
+.row input { font:inherit; font-size:.86rem; padding:.3rem .45rem; border:1px solid var(--gray-300); border-radius:.4rem; width:5.2rem; }
+.hint { font-size:.74rem; color:var(--gray-500); } .err { background:var(--errbg); color:var(--error); border-radius:.5rem; padding:.45rem .7rem; font-size:.82rem; font-weight:600; margin:.7rem 0; }
+.fix { background:#fef3c7; color:#92400e; border-radius:.5rem; padding:.45rem .7rem; font-size:.82rem; margin:.7rem 0 0; } .fix b { color:#78350f; }
+.sum { font-size:.82rem; background:var(--primary-100); border-radius:.5rem; padding:.45rem .7rem; margin:.7rem 0 .4rem; } .sum b { color:var(--gray-900); }
+h4 { font-size:.86rem; margin:1rem 0 .3rem; }
+.strip { display:flex; flex-wrap:wrap; gap:3px; }
+.pc { width:58px; height:46px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:900; font-size:.86rem; color:#111827; border-radius:.3rem; line-height:1; position:relative; }
+.pc.sp { background:#0f172a !important; color:#fff; font-size:1rem; } .pc.sp small { font-size:.42rem; letter-spacing:.03em; margin-top:.12rem; text-align:center; line-height:1.05; }
+.pc i { position:absolute; top:1px; left:3px; font-style:normal; font-size:.5rem; font-weight:600; opacity:.55; }
+.views { display:grid; grid-template-columns:1fr 380px; gap:1.2rem; align-items:start; }
+svg { display:block; width:100%; height:auto; }
+.btn { font:inherit; font-size:.86rem; font-weight:600; padding:.5rem .9rem; border-radius:.5rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); cursor:pointer; } .btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; } .btn[disabled] { opacity:.4; }
+.actions { display:flex; justify-content:space-between; gap:.5rem; border-top:1px solid var(--gray-200); padding-top:.8rem; margin-top:1rem; }
+.tvstrip { background:#0b1020; border-radius:.5rem; padding:.5rem; overflow:hidden; position:relative; height:74px; }
+.tvstrip .tr { position:absolute; top:.5rem; bottom:.5rem; left:50%; display:flex; transform:translateX(-50%); }
+.tvstrip .c { width:92px; flex:0 0 92px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:900; font-size:1.5rem; color:#111827; border-right:2px solid #0b1020; line-height:1; }
+.tvstrip .c.sp { background:#0f172a !important; color:#fff; font-size:1.3rem; } .tvstrip .c.sp small { font-size:.5rem; margin-top:.15rem; text-align:center; }
+.tvstrip .p { position:absolute; left:50%; top:.3rem; bottom:.3rem; width:92px; transform:translateX(-50%); border:4px solid #ef4444; border-radius:.5rem; box-shadow:0 0 12px #ef4444; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Exemples :</strong>
+  <span class="grp" id="ex">
+    <button data-e="100,10,0,0">max 100 · pas 10 · aucune spéciale</button>
+    <button data-e="100,10,1,0">100 · 10 · 1 Banqueroute</button>
+    <button data-e="100,10,1,1" class="on">100 · 10 · 1 B · 1 Perdu</button>
+    <button data-e="1000,100,2,1">1000 · 100 · 2 B · 1 P</button>
+    <button data-e="1000,50,2,1">1000 · 50 · 2 B · 1 P (par défaut)</button>
+    <button data-e="100,20,1,1">100 · 20 · 1 B · 1 P</button>
+    <button data-e="100,30,1,1">Pas corrigé : 30 → 25 pour max 100</button>
+    <button data-e="100,100,1,0">Refusé : pas = max</button>
+  </span>
+  <span style="color:#9ca3af">Les 4 champs de la carte sont actifs : modifiez-les pour essayer d'autres roues.</span>
+</div>
+<div class="mock-note">Page <b>Paramètres</b>, carte <b>« 🎡 Roue de la Fortune »</b> — la roue est générée à partir de <b>points maximum</b>, <b>pas</b>, <b>nombre de Banqueroute</b> et <b>nombre de Perdu</b> (plus les durées). <b>Règle de construction</b> :
+<ol>
+<li><b>Valeurs</b> : du maximum jusqu'au pas, de pas en pas — max 100, pas 10 → 100, 90, 80 … 10. Le nombre de cases gagnantes en découle (ici 10).</li>
+<li><b>Alternance forte / faible</b> : <code>100 · 10 · 90 · 20 · 80 · 30 · 70 · 40 · 60 · 50</code>.</li>
+<li><b>Banqueroute à la place de la valeur 0</b> : avec une Banqueroute, on fait comme si la roue avait aussi une case « 0 », qui se range juste après le maximum : <code>100 · B · 90 · 10 · 80 · 20 …</code></li>
+<li><b>Perdu à mi-tour, à l'opposé du maximum</b> : il se place au milieu de la suite, et la valeur du milieu (max ÷ 2, ici 50) <b>disparaît</b> de la roue — <code>100 · B · 90 · 10 · 80 · PERDU · 20 · 70 · 30 · 60 · 40</code>. Si max ÷ 2 n'est pas une valeur de la roue (max 100, pas 20), aucune valeur n'est retirée.</li>
+<li><b>Plusieurs Banqueroute ou Perdu</b> : les cases spéciales sont réparties à intervalles réguliers autour de la roue, en alternant Banqueroute et Perdu, la première Banqueroute restant juste après le maximum. Exemple par défaut (max 1000, pas 50, 2 B, 1 P) : Banqueroute en cases 2 et 15, Perdu en case 8.</li>
+</ol>
+<b>Le pas est corrigé à la saisie</b> : il doit diviser le maximum (sinon la plus petite valeur ne serait pas le pas). S'il ne le divise pas, il est remplacé par le <b>diviseur le plus proche</b> et un message indique la valeur retenue (max 100, pas 30 → pas 25). <b>Ce qui est refusé, et pourquoi</b> : un <b>pas égal ou supérieur au maximum</b> (une seule valeur, pas d'alternance) et une roue de <b>plus de 64 cases</b> (limite du composant de roue, lisibilité sur la TV). Rien d'autre.</div>
+<div class="card dim">Paramètres serveur · WiFi · Firmware Buzzers · Image par défaut · Mode Démo · IA · Effet Néon — cartes existantes, inchangées</div>
+<div class="card">
+  <h3>🎡 Roue de la Fortune</h3><p class="sub">La roue du mode ROUE est construite à partir de ces réglages. Elle est commune à toutes les questions ROUE ; sa forme (bandeau ou arc) se choisit sur chaque question.</p>
+  <div class="params">
+    <div class="param"><label for="m">Points maximum</label><input id="m" type="number" min="2"><small>valeur de la meilleure case</small></div>
+    <div class="param"><label for="s">Pas</label><input id="s" type="number" min="1"><small>écart entre deux valeurs ; aussi la plus petite valeur</small></div>
+    <div class="param"><label for="b">💸 Banqueroute</label><input id="b" type="number" min="0"><small>cases qui vident la cagnotte</small></div>
+    <div class="param"><label for="p">⏭ Perdu</label><input id="p" type="number" min="0"><small>cases qui font passer le tour</small></div>
+  </div>
+  <div id="out"></div>
+  <h4>Durées</h4>
+  <div class="row"><span class="lbl">Durée d'un tour de roue</span><input type="number" value="2.5" step="0.5"> <span class="hint">secondes (1 à 6) — vitesse de défilement</span></div>
+  <div class="row"><span class="lbl">Durée maximale de rotation</span><input type="number" value="10" step="1"> <span class="hint">secondes (3 à 30) — sans buzz de l'équipe, la roue s'arrête d'elle-même</span></div>
+  <div class="row"><span class="lbl">Durée du freinage</span><input type="number" value="4" step="0.5"> <span class="hint">secondes (1,5 à 8) — entre l'arrêt demandé et l'arrêt sur la case</span></div>
+  <div class="actions"><button class="btn" id="def">↺ Roue par défaut (1000 · 50 · 2 · 1)</button><button class="btn primary" id="save">Enregistrer</button></div>
+</div>
+<script>
+const PAL = ["#fca5a5","#93c5fd","#86efac","#fde68a","#d8b4fe","#fdba74"];
+const $ = id => document.getElementById(id);
+function gen(MAX, STEP, B, P) {
+  const vals = []; for (let v = MAX; v >= STEP; v -= STEP) if (!(P >= 1 && v === MAX / 2)) vals.push(v);
+  const S = [vals[0]]; let hi = 1, lo = vals.length - 1, low = B < 1;
+  while (hi <= lo) { if (low) S.push(vals[lo--]); else S.push(vals[hi++]); low = !low; }
+  const K = B + P, N = vals.length + K, out = Array(N).fill(null);
+  let b = B, p = P, prev = null;
+  for (let j = 0; j < K; j++) {
+    let idx = B >= 1 ? (j === 0 ? 1 : Math.floor(j * N / K)) : Math.floor((j + 0.5) * N / K);
+    while (idx % N === 0 || out[idx % N] !== null) idx++;
+    const t = j === 0 && B >= 1 ? "B" : ((prev !== "P" && p > 0) || b === 0 ? "P" : "B");
+    if (t === "B") b--; else p--; prev = t; out[idx % N] = t;
+  }
+  let k = 0; for (let i = 0; i < N; i++) if (out[i] === null) out[i] = S[k++];
+  return out;
+}
+function nearestDivisor(MAX, STEP) {
+  let best = 1;
+  for (let d = 1; d < MAX; d++) if (MAX % d === 0 && Math.abs(d - STEP) < Math.abs(best - STEP)) best = d;
+  return best;
+}
+const colorOf = (seg) => { let k = 0; return seg.map(s => typeof s === "number" ? PAL[k++ % 6] : "#0f172a"); };
+function ring(seg) {
+  const n = seg.length, a = 360 / n, R = 480, r = 300, col = colorOf(seg);
+  const pt = (rad, deg) => { const t = deg * Math.PI / 180; return [(500 + rad * Math.cos(t)).toFixed(1), (500 + rad * Math.sin(t)).toFixed(1)]; };
+  let g = "";
+  seg.forEach((s, i) => { const mid = -90 + i * a, a0 = mid - a / 2, a1 = mid + a / 2;
+    const [x0,y0] = pt(R,a0), [x1,y1] = pt(R,a1), [x2,y2] = pt(r,a1), [x3,y3] = pt(r,a0), [lx,ly] = pt(390, mid);
+    g += `<path d="M${x0} ${y0} A${R} ${R} 0 0 1 ${x1} ${y1} L${x2} ${y2} A${r} ${r} 0 0 0 ${x3} ${y3} Z" fill="${col[i]}" stroke="#0b1020" stroke-width="3"/>`;
+    const fs = Math.min(46, 1000 / n);
+    g += `<text x="${lx}" y="${ly}" transform="rotate(${mid + 90} ${lx} ${ly})" text-anchor="middle" dominant-baseline="central" font-size="${typeof s === "number" ? fs : fs * 1.1}" font-weight="900" fill="${typeof s === "number" ? "#111827" : "#fff"}">${s === "B" ? "💸" : s === "P" ? "⏭" : s}</text>`; });
+  return `<svg viewBox="0 0 1000 1000"><circle cx="500" cy="500" r="290" fill="#f9fafb"/>${g}<path d="M500 46 L478 6 L522 6 Z" fill="#ef4444"/><text x="500" y="490" text-anchor="middle" font-size="34" font-weight="800" fill="#374151">${n} cases</text><text x="500" y="535" text-anchor="middle" font-size="24" fill="#6b7280">case 1 en haut, lecture ↻</text></svg>`;
+}
+const cell = (s, c, cls) => typeof s === "number" ? `<div class="${cls}" style="background:${c}">${s}</div>` : `<div class="${cls} sp">${s === "B" ? "💸" : "⏭"}<small>${s === "B" ? "BANQUE<br>ROUTE" : "TOUR<br>PERDU"}</small></div>`;
+function render() {
+  const MAX = +$("m").value, STEP = +$("s").value, B = +$("b").value, P = +$("p").value;
+  let err = "", seg = null;
+  if (![MAX, STEP, B, P].every(Number.isInteger) || B < 0 || P < 0 || STEP < 1) err = "les quatre réglages sont des nombres entiers ; le pas vaut au moins 1";
+  else if (STEP >= MAX) err = `le pas (${STEP}) doit être plus petit que les points maximum (${MAX}) : sinon la roue n'a qu'une valeur`;
+  let fixed = "";
+  if (!err && MAX % STEP !== 0) { const d = nearestDivisor(MAX, STEP); fixed = `<div class="fix">ℹ Pas ajusté à <b>${d}</b> : le pas doit diviser les points maximum (${MAX}) ; ${STEP} ne le divise pas, ${d} est le diviseur le plus proche.</div>`; $("s").value = d; }
+  const STEP2 = +$("s").value;
+  if (!err) { seg = gen(MAX, STEP2, B, P); if (seg.length > 64) err = `la roue ne peut pas dépasser 64 cases (${seg.length} ici) : augmentez le pas ou retirez des cases spéciales`; }
+  $("save").disabled = !!err;
+  if (err) { $("out").innerHTML = `<div class="err">✗ Réglage refusé : ${err}. Rien n'est enregistré.</div>`; return; }
+  const col = colorOf(seg), N = seg.length, vals = seg.filter(s => typeof s === "number"), total = vals.reduce((a, b) => a + b, 0), K = N - vals.length;
+  const around = []; for (let i = -3; i <= 3; i++) { const j = ((i % N) + N) % N; around.push(cell(seg[j], col[j], "c")); }
+  const gone = P >= 1 && (MAX / 2) % STEP2 === 0 ? ` La valeur ${MAX / 2} est remplacée par le Perdu.` : "";
+  $("out").innerHTML = `${fixed}<div class="sum"><b>${N} cases</b> : ${vals.length} gagnantes de <b>${Math.min(...vals)}</b> à <b>${Math.max(...vals)}</b> par pas de ${STEP2} · <b>${B}</b> Banqueroute · <b>${P}</b> Perdu — ${K ? `une chance sur ${(N / K).toFixed(1).replace(".", ",").replace(",0", "")} de tomber sur une case spéciale` : "aucune case spéciale"} · gain moyen d'une case : ${Math.round(total / N)}.${gone}</div>
+    <div class="views"><div><h4>Roue générée, dans l'ordre (la dernière case rejoint la première)</h4><div class="strip">${seg.map((s, i) => cell(s, col[i], "pc").replace(">", `><i>${i + 1}</i>`)).join("")}</div>
+    <h4>Sur la TV — forme « bandeau » (autour de la case 1)</h4><div class="tvstrip"><div class="tr">${around.join("")}</div><div class="p"></div></div>
+    <p class="hint">Forme « arc » : la partie haute de la roue ci-contre émerge du bas de l'écran, la case tirée au sommet.</p></div>
+    <div><h4>Vue d'ensemble de la roue</h4>${ring(seg)}<p class="hint">Vue de réglage : permet de vérifier la place des cases spéciales. La TV n'affiche jamais la roue entière.</p></div></div>`;
+}
+function set(e) { const [m, s, b, p] = e.split(","); $("m").value = m; $("s").value = s; $("b").value = b; $("p").value = p; render(); document.querySelectorAll("#ex button").forEach(x => x.classList.toggle("on", x.dataset.e === e)); }
+$("ex").addEventListener("click", e => { if (e.target.dataset.e) set(e.target.dataset.e); });
+["m","s","b","p"].forEach(id => $(id).addEventListener("input", () => { render(); document.querySelectorAll("#ex button").forEach(x => x.classList.remove("on")); }));
+$("def").addEventListener("click", () => set("1000,50,2,1"));
+set("100,10,1,1");
+</script>
+</body>
+</html>
