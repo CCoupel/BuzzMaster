@@ -798,6 +798,8 @@ func (e *Engine) RoueNext(hand string) error {
 		}
 		if sub == RoueSubAnswer { // no validated answer: the turn ends with this very gesture
 			e.roueEnterTurnEndUnsafe(true, true)
+		} else if noConsonant { // nothing left to find: the hand moves, the turn ends with this gesture
+			e.roueEventUnsafe(RoueEvTurnEnd, e.state.RoueCurrentTeam, "", 0, 0, 0)
 		}
 		e.roueApplyHandUnsafe(hand)
 		return nil
