@@ -118,3 +118,13 @@ describe('roueState', () => {
     expect(roueGates(base({ ROUE_SUBPHASE: 'TURN', ROUE_CONSONANTS_LEFT: false })).canAnswer).toBe(true)
   })
 })
+
+import { roueRefusalText } from './RoueEditor'
+describe('roueRefusalText', () => {
+  it('traduit les codes ROUE_*, laisse le reste', () => {
+    expect(roueRefusalText('ROUE_PRESENTATION_CONTAINS_PHRASE: x')).toMatch(/contient la phrase/)
+    expect(roueRefusalText('ROUE_PHRASE_TOO_LONG: la phrase demande plus de 4 lignes')).toMatch(/4 lignes/)
+    expect(roueRefusalText('ROUE_AUTRE: détail serveur')).toBe('détail serveur')
+    expect(roueRefusalText('Erreur disque')).toBe('Erreur disque')
+  })
+})

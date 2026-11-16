@@ -37,6 +37,18 @@ const FALLBACK_ERRORS = {
   ROUE_PHRASE_TOO_LONG: 'Phrase trop longue : 4 lignes au plus (14 caractères par ligne, mots non coupés).',
 }
 
+/** Refus 400 de POST /questions (texte « ROUE_CODE: détail ») → message lisible ; autre texte inchangé. */
+export function roueRefusalText(text) {
+  const m = /^(ROUE_[A-Z_]+)\s*:?\s*(.*)$/s.exec(String(text || '').trim())
+  if (!m) return text
+  const friendly = {
+    ROUE_PRESENTATION_CONTAINS_PHRASE: 'La phrase de présentation contient la phrase à deviner : elle serait lisible sur la TV.',
+    ROUE_PRESENTATION_TOO_LONG: `La phrase de présentation dépasse ${ROUE_PRESENTATION_MAX} caractères.`,
+    ...FALLBACK_ERRORS,
+  }[m[1]]
+  return friendly || m[2] || text
+}
+
 function RadioCards({ name, options, value, onChange, two }) {
   return (
     <div className={`memory-mode-options roue-options${two ? ' roue-options-two' : ''}`}>

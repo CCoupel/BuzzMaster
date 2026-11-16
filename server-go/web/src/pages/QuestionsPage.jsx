@@ -30,7 +30,7 @@ import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import EntracteFields from '../components/EntracteFields'
-import RoueEditor from '../components/roue/RoueEditor'
+import RoueEditor, { roueRefusalText } from '../components/roue/RoueEditor'
 import RoundGroup from '../components/RoundGroup'
 import RoundDeleteDialog from '../components/RoundDeleteDialog'
 import RoundAmbianceDialog from '../components/RoundAmbianceDialog'
@@ -3841,7 +3841,7 @@ export default function QuestionsPage() {
                 {/* Refus serveur (corps HTTP brut) pour les types sans section « Son »
                     (RAFALE) — ex. POINTS_RULE_* (#190). */}
                 {soundError && (formData.type === 'RAFALE' || formData.type === 'ROUE') && (
-                  <p className="sound-error-message" role="alert">✕ {soundError}</p>
+                  <p className="sound-error-message" role="alert">✕ {formData.type === 'ROUE' ? roueRefusalText(soundError) : soundError}</p>
                 )}
 
                 <Button
