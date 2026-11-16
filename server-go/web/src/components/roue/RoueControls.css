@@ -1,0 +1,25 @@
+/* Commandes ROUE partagées (admin M2, animateur M7). */
+.roue-error { background: #fee2e2; color: #dc2626; border-radius: 0.5rem; padding: 0.4rem 0.7rem; font-size: 0.85rem; font-weight: 700; margin: 0.5rem 0 0; }
+.roue-kbd { display: grid; grid-template-columns: repeat(10, 1fr); gap: 0.3rem; margin: 0.4rem 0; }
+.roue-key { font: inherit; font-weight: 800; font-size: 1rem; padding: 0.5rem 0; border-radius: 0.4rem; border: 1px solid var(--gray-300, #d1d5db); background: #fff; cursor: pointer; text-align: center; display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.roue-key small { font-size: 0.6rem; font-weight: 600; color: var(--gray-500, #6b7280); }
+.roue-key.hit { background: #dcfce7; border-color: var(--c, #16a34a); color: #16a34a; }
+.roue-key.miss { background: #fee2e2; border-color: var(--c, #dc2626); color: #dc2626; text-decoration: line-through; }
+.roue-key[style*="--c"].hit, .roue-key[style*="--c"].miss { background: color-mix(in srgb, var(--c) 18%, #fff); color: #111827; border-color: var(--c); border-width: 2px; }
+.roue-key.sel { background: var(--primary, #4f46e5); border-color: var(--primary, #4f46e5); color: #fff; }
+.roue-key.sel small { color: #fff; }
+.roue-key[disabled] { opacity: 0.55; cursor: not-allowed; }
+.roue-vow { display: flex; gap: 0.3rem; align-items: center; font-size: 0.74rem; color: var(--gray-500, #6b7280); flex-wrap: wrap; }
+.roue-vow .roue-key { width: 2rem; padding: 0.2rem 0; font-size: 0.8rem; }
+.roue-steps { list-style: none; margin: 0.5rem 0 0.8rem; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.25rem; }
+.roue-step { text-align: center; font-size: 0.68rem; line-height: 1.2; padding: 0.4rem 0.15rem; border-radius: 0.5rem; background: var(--gray-100, #f3f4f6); color: var(--gray-500, #6b7280); border: 2px solid transparent; min-width: 0; }
+.roue-step b { display: block; font-size: 0.95rem; }
+.roue-step.done { background: #dcfce7; color: #16a34a; }
+.roue-step.cur { background: #fff; border-color: var(--primary, #4f46e5); color: var(--primary, #4f46e5); font-weight: 800; }
+.roue-btn { font: inherit; font-size: 0.86rem; font-weight: 600; padding: 0.55rem 0.9rem; border-radius: 0.5rem; border: 1px solid var(--gray-300, #d1d5db); background: #fff; color: var(--gray-700, #374151); cursor: pointer; }
+.roue-btn.big { font-size: 1rem; padding: 0.75rem 1.2rem; }
+.roue-btn.primary { background: var(--primary, #4f46e5); border-color: var(--primary, #4f46e5); color: #fff; }
+.roue-btn.ok { background: #16a34a; border-color: #16a34a; color: #fff; }
+.roue-btn.ghost { border-color: transparent; background: none; text-decoration: underline; font-weight: 500; font-size: 0.8rem; color: var(--gray-600, #4b5563); }
+.roue-btn[disabled] { opacity: 0.38; cursor: not-allowed; }
+.roue-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }

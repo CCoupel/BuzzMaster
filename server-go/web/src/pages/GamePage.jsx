@@ -49,6 +49,8 @@ import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import AnimRafaleActions from '../components/AnimRafaleActions'
 import AnimSoundActions from '../components/AnimSoundActions'
+import RouePanel from '../components/roue/RouePanel'
+import { makeRoueActions } from '../components/roue/roueState'
 import './GamePage.css'
 import '../styles/entracte.css'
 
@@ -103,6 +105,8 @@ export default function GamePage() {
     clearTeamPointsBatchResult,
     // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
     questionSound,
+    // ROUE (v12.0.0, #144) — refus serveur d'une action ROUE_* (contrat roue.md §8.3)
+    roueError,
   } = useGame()
   // #253 — popup « Lancer la partie » ouverte sur un AUTRE poste : le serveur suspend les actions de
   // jeu ; on désactive les commandes ici avec le motif (bandeau global sous la barre de navigation).
@@ -1202,6 +1206,20 @@ export default function GamePage() {
                 })}
               </div>
             </div>
+          )
+        })()}
+
+        {/* ROUE (v12.0.0, #144, maquette M2) — choix des équipes (PREPARE/READY) puis commandes d'un tour (STARTED/PAUSED) */}
+        {gameState.question?.TYPE === 'ROUE' && (() => {
+          const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+          return (
+            <RouePanel
+              gameState={gameState}
+              actions={makeRoueActions(sendMessage)}
+              error={roueError}
+              teamList={teamsWithBuzzers.map(t => ({ name: t.name, color: getRgbColor(t.COLOR), ready: isTeamReady(t) }))}
+              waitReasons={prepareWaitReasons(gameState.phase, gameState.question, teamsWithBuzzers, gameState)}
+            />
           )
         })()}
 
