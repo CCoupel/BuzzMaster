@@ -1446,7 +1446,7 @@ Une seule carte MEMOTION est jouable à la fois. Son état vivant (réponses inv
   "TYPE": "MEMOTION",
   "MEMOTION_MODE": "CHACUN_SON_TOUR",
   "TIME": 30,
-  "MEMOTION_CARDS": [
+  "MOTION_CARDS": [
     {
       "ID": "card_1",
       "TYPE": "SPEEDY",
@@ -1476,10 +1476,10 @@ Une seule carte MEMOTION est jouable à la fois. Son état vivant (réponses inv
   - `"SOLO"`: Une seule équipe joue, points à l'équipe
   - `"CHACUN_SON_TOUR"`: Rotation stricte après chaque carte
   - `"TANT_QUE_JE_GAGNE"`: L'équipe garde la main tant qu'elle gagne
-- `MEMOTION_CARDS`: Tableau de `MotionCard` — chacune suit la structure plate ci-dessus
+- `MOTION_CARDS`: Tableau de `MotionCard` — chacune suit la structure plate ci-dessus
 - `TIME`: Durée timer par carte (secondes, défaut: 30)
 
-**Cartes imbriquées** : chaque élément de `MEMOTION_CARDS` est une `MotionCard` complète, avec son propre `TYPE`, `TypedContent` embarqué plat, et `POINTS_RULE` optionnel.
+**Cartes imbriquées** : chaque élément de `MOTION_CARDS` est une `MotionCard` complète, avec son propre `TYPE`, `TypedContent` embarqué plat, et `POINTS_RULE` optionnel.
 
 ### Structure GameState MEMOTION
 
@@ -1799,3 +1799,86 @@ type RafaleCurrent struct {
 **Scoring pendant manche** : Aucun point réel, seul compteur visible.
 
 **Scoring en fin de manche (ROUND_END)** : Admin/anim clique équipe → `TEAM_POINTS`, valeur pré-remplie = `compteur_retenu × POINTS` (compteur_retenu = `TEAM_BEST` en MAILLON, `TEAM_COUNTERS` sinon). Ajustable avant validation.
+
+## Modèles v12.0.0 — Roue de la Fortune (#144, #145)
+
+Contrat : `contracts/roue.md` §3, §4, §10. Statut : LOT-1 en cours.
+
+### Question de type `ROUE` (`TypedContent`, tous `omitempty`)
+
+| Champ JSON | Type | Règle |
+|---|---|---|
+| `ROUE_PHRASE` | string | Obligatoire. Phrase à deviner, enregistrée telle que saisie (espaces compactés). **Jamais** envoyée à la TV ni aux tablettes (`SecretQuestionFields`). |
+| `ROUE_PRESENTATION` | string | Facultative, 80 caractères au plus. Publique. Ne peut pas contenir la phrase (comparaison repliée). |
+| `ROUE_MODE` | string | `SOLO` \| `CHACUN_SON_TOUR` \| `TANT_QUE_JE_GAGNE` (défaut). `MAILLON_FAIBLE` refusé. |
+| `ROUE_GAINS_RULE` | string | `WINNER_ONLY` (défaut) \| `ALL_TEAMS`. |
+| `ROUE_WHEEL_LAYOUT` | string | `strip` (défaut, bandeau) \| `arc`. Forme de la roue sur la TV pour cette question. |
+| `ROUE_SHOW_LETTERS` | bool | Affiche sur TV et tablettes les lettres déjà proposées. Absent = `true` ; écrit seulement pour `false`. |
+
+Champs communs réutilisés : `CATEGORY`, bloc son de question. `ANSWER`, `POINTS` et `TIME` ne sont pas utilisés
+(la phrase n'est jamais copiée dans `ANSWER`). Aucun chronomètre global. Non générable par IA.
+
+Refus à l'enregistrement (`POST /questions`, `400`, rien n'est écrit) : `ROUE_PHRASE_EMPTY`,
+`ROUE_PHRASE_INVALID_CHAR`, `ROUE_PHRASE_WORD_TOO_LONG`, `ROUE_PHRASE_TOO_LONG`, `ROUE_PRESENTATION_TOO_LONG`,
+`ROUE_PRESENTATION_CONTAINS_PHRASE`, `ROUE_MODE_INVALID`, `ROUE_GAINS_RULE_INVALID`, `ROUE_WHEEL_LAYOUT_INVALID`.
+
+Phrase : caractères admis = lettres (accents admis), chiffres, espace, `' - . , ! ? :`. Affichage en majuscules, accents
+repliés. Mise en lignes : 4 lignes de 14 colonnes au plus, mots non coupés, calculée **par le serveur seul**.
+
+### GameState ROUE (sans `omitempty`, jamais persistés)
+
+| Champ | Type JSON | Contenu |
+|---|---|---|
+| `ROUE_SUBPHASE` | string | `""` \| `TURN` \| `SPINNING` \| `STOPPING` \| `LETTER` \| `LIT` \| `REVEALING` \| `ANSWER` \| `TURN_END` \| `SOLVED` |
+| `ROUE_STEP` | int | 1 à 7 ; 0 hors tour (voir `GAME_STATE_MACHINE.md`) |
+| `ROUE_TEAMS` | string[] | Équipes participantes, ordre de rotation |
+| `ROUE_CURRENT_TEAM` | string | Équipe qui a la main (`""` hors manche) |
+| `ROUE_CURRENT_TEAM_COLOR` | int[] | RGB, accent de la roue |
+| `ROUE_NEXT_TEAM` | string | `ANSWER` / `TURN_END` : équipe désignée par « Équipe suivante » |
+| `ROUE_NEXT_DEFAULT` | string | `ANSWER` / `TURN_END` : `SAME` ou `NEXT` (bouton conseillé) |
+| `ROUE_TEAM_BANK` | map équipe → int | Cagnotte de manche |
+| `ROUE_TURN_GAIN` | int | Gain du tour, pas encore ajouté à la cagnotte |
+| `ROUE_BOARD` | `{ "COLS": 14, "ROWS": string[] }` | `_` = lettre cachée, `*` = cachée et éclairée (étape 4), autre = visible |
+| `ROUE_LETTERS` | `{ "LETTER", "TEAM", "HIT" }[]` | Consonnes proposées, dans l'ordre |
+| `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question |
+| `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |
+| `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE}`, `KIND` ∈ `value \| bankrupt \| lose_turn`), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`) |
+| `ROUE_LAST_EVENT` | objet | `{ SEQ, KIND, TEAM, LETTER, COUNT, VALUE, GAIN }` — au plus un événement par action |
+| `ROUE_WINNER` | string | Équipe qui a résolu (`""` sinon) |
+| `ROUE_AWARDS` | map équipe → int | Points crédités à la résolution |
+
+Règle de sérialisation : `ROUE_PHRASE` est retiré de `/ws/tv`, `/ws/player` (tablettes), dans toutes les phases.
+Admin et animateur le reçoivent.
+
+### Section `wheel` de `game-config.json`
+
+Struct Go `config.WheelConfig` (`internal/config/gameconfig.go`). Une section absente donne la roue par défaut.
+
+```json
+"wheel": {
+  "max_points": 1000,
+  "step": 50,
+  "bankrupt_count": 2,
+  "lose_turn_count": 1,
+  "spin_period_ms": 2500,
+  "spin_max_ms": 10000,
+  "stop_duration_ms": 4000,
+  "flip_interval_ms": 600
+}
+```
+
+| Champ | Défaut | Bornes / règle |
+|---|---|---|
+| `max_points` | 1000 | Entier, 1 000 000 au plus |
+| `step` | 50 | Entier ≥ 1, strictement inférieur à `max_points` ; s'il ne divise pas `max_points`, il est corrigé au diviseur le plus proche (égalité : le plus petit) — réponse `step_adjusted_from` |
+| `bankrupt_count` | 2 | ≥ 0 |
+| `lose_turn_count` | 1 | ≥ 0 |
+| — | — | 64 cases au plus, sinon `400` et rien n'est enregistré |
+| `spin_period_ms` | 2500 | 1000–6000 ; hors bornes ramené à la borne |
+| `spin_max_ms` | 10000 | 3000–30000 |
+| `stop_duration_ms` | 4000 | 1500–8000 |
+| `flip_interval_ms` | 600 | 200–1500 ; non exposé dans l'interface en v12.0 |
+
+La roue (`SEGMENTS`) n'est pas saisie : elle est générée par le serveur (`internal/game/roue_wheel.go`, contrat §10.1)
+et figée dans `ROUE_WHEEL` au `START`. La forme de la roue n'est pas dans la configuration : c'est `ROUE_WHEEL_LAYOUT`
+de la question. `GET /game-config.json` renvoie `wheel` et `wheel_default` (lecture seule) ; `POST` remplace la section.

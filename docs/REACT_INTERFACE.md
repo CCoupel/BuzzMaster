@@ -1923,6 +1923,64 @@ Fichier CSS partagé déclarant :
 
 ---
 
+## Roue de la Fortune — composants et branchements (v12.0.0, #144, #145)
+
+Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-component.md`. Statut : LOT-1 en cours.
+
+### Composant `Wheel` — mouvement long (`web/src/components/wheel/`)
+
+- `Wheel.jsx` reçoit une prop `motion` : `null` (comportement v11.4.0 inchangé, RAFALE), `spin` (défilement continu)
+  ou `land` (freinage jusqu'à la case cible, au moins un tour complet).
+- Le mouvement écrit directement `transform` dans le DOM, image par image : pas de `setState` par image. La position
+  est normalisée dans `[0, n)` à chaque image et à l'arrêt ; un passage `spin` → `land` repart de la position affichée
+  (pas de saut).
+- Amplitude de `land` : au plus 4 × n, minimum de tours plafonné à 3 (`MAX_LAND_TURNS`, `geometry.js`).
+- Montage directement en `land`, ou `prefers-reduced-motion` : placement immédiat, sans animation.
+- Libellés longs : `label` sur deux lignes (séparateur `\n`), icône additive (`💸 BANQUE / ROUTE`, `⏭ TOUR / PERDU`) ;
+  l'`aria-label` n'a pas de `\n`.
+- Limite : 64 cases.
+
+### Dossier `web/src/components/roue/`
+
+| Fichier | Rôle |
+|---|---|
+| `FortuneWheel.jsx` | Adaptateur : segments de la roue (`buildFortuneSegments`), mouvement `spin` / `land` (`fortuneMotion`) selon `ROUE_SUBPHASE` ; barre de durée maximale décomptée localement (intervalle 100 ms) pendant `SPINNING` |
+| `RoueBoard.jsx` | Plateau de l'**éditeur** (aperçu de la phrase, sans état de jeu) |
+| `RoueGameBoard.jsx` | Plateau de **jeu** (TV, tablette, admin, animateur), distinct de `RoueBoard` |
+| `RoueTv.jsx` | Écran TV ROUE : équipes en haut, plateau plein écran, roue permanente (bandeau ou arc selon `ROUE_WHEEL.LAYOUT`) |
+| `RouePanel.jsx` | Panneau admin de la manche : choix des équipes (`ROUE_SET_TEAMS`, même emplacement que RAFALE), démarrage, « Dévoiler la phrase » (confirmation en deux clics, sans `window.confirm`) |
+| `RoueSteps.jsx` | Bandeau des 7 étapes |
+| `RoueControls.jsx` | Boutons de l'étape courante, clavier de consonnes, boutons « Tour suivant » / « Équipe suivante », message de refus `ROUE_ERROR`, décompte local |
+| `AnimRoue.jsx` | Vue animateur (tablette) : les 7 étapes, réponse colorée par équipe, consonnes jouées |
+| `RoueEditor.jsx` | Éditeur de question ROUE (`QuestionsPage`) : phrase, présentation, mode, gains, forme, lettres ; aperçu par `POST /api/roue/preview` (debounce 300 ms) |
+| `WheelConfigCard.jsx` | Carte « Roue » des paramètres (`ConfigPage`) : 4 paramètres, durées, aperçu par `POST /api/roue/wheel-preview` (debounce 300 ms) |
+| `roueState.js` | Helpers partagés : portes d'action par sous-phase et par rôle, libellés |
+
+Règles d'interface :
+
+- **Aucune copie JavaScript** de la mise en lignes ni de la construction de la roue : l'aperçu vient toujours du serveur.
+  Un pas corrigé est affiché « Pas ajusté à … » et remplace la valeur du champ.
+- La carte de réglage n'apparaît que si `GET /game-config.json` renvoie `wheel` (et `wheel_default`).
+- Le plateau d'une phrase refusée n'est pas dessiné : le `400` ne renvoie pas de lignes.
+- Le champ générique `question` d'une question ROUE vaut la présentation, ou « Roue de la Fortune » si elle est vide.
+  La phrase ne passe jamais par `question`.
+- Tablette : l'appui ROUE envoie `BUTTON` directement, sans `useAckedSend` (le serveur ne consigne pas d'ACK pour
+  l'appui ROUE).
+
+### Branchements
+
+| Fichier | Branchement |
+|---|---|
+| `hooks/useWebSocket.js` | Champs `ROUE_*` lus dans `UPDATE` ; `ROUE_ERROR` → `roueError` / `clearRoueError` |
+| `pages/PlayerDisplay.jsx` | Branche `isRoue` → `<RoueTv/>` (TV) |
+| `pages/VPlayerPage.jsx` | Appui `BUTTON` d'une tablette en `ROUE` |
+| `pages/GamePage.jsx` | Montage de `RouePanel` ; cartes génériques (présentation, chrono « Temps ») conservées pour ROUE |
+| `components/AnimConductPanel.jsx` | Niveau 3 pour ROUE (`AnimRoue`), rien au niveau 2 |
+| `pages/QuestionsPage.jsx` | Bouton de type « Roue » (🎡), `RoueEditor` |
+| `pages/ConfigPage.jsx` | État `wheelConfig` / `wheelDefault`, `WheelConfigCard` |
+| `utils/questionTypeMeta.js` | Type `ROUE` : non générable par IA, non imbriquable |
+| `utils/prepareWaitReason.js` | Motif d'attente PREPARE : 1 équipe en `SOLO`, 2 sinon |
+
 ## Pages et Composants — Mode RAFALE (v8.0.0, #16)
 
 ### Page : `/admin/rafale` — Éditeur du réservoir

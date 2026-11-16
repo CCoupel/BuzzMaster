@@ -53,6 +53,21 @@ contracts/
 | **BuzzClick (ESP32)** | tcp-udp-protocol.md, models.md (Bumper) |
 | **Backend (Go)** | Tous (reference) |
 
+## Contrats de modes de jeu et de composants (v12.0.0)
+
+Ces contrats complètent les fichiers ci-dessus ; ils sont rédigés avant le développement (contract-first).
+
+| Fichier | Contenu | Milestone |
+|---------|---------|-----------|
+| `rafale.md` | Mode RAFALE (sous-phases, modes, réservoir) | v8.0.0 |
+| `roue.md` | Mode ROUE « Roue de la Fortune » : modèle de question, champs `ROUE_*`, 7 étapes, actions, confidentialité de la phrase, configuration `wheel`, construction de la roue, HTTP | v12.0.0 (#144, #145) |
+| `wheel-component.md` | Composant `Wheel` partagé (RAFALE et ROUE) : géométrie, mouvement `spin` / `land` | v12.0.0 (#144) |
+| `question-types.md` | Registre des types de question (`QuestionType`, champs possédés, médias, imbrication) — `ROUE` ajouté | v12.0.0 |
+| `CHANGELOG.md` | Historique des contrats | — |
+
+Le contrat fait foi pour `dev-backend` et `dev-frontend` ; en cas de divergence, il tranche. Le backend peut modifier
+un contrat sous contrainte technique, en documentant la raison dans le contrat.
+
 ## Format des fichiers
 
 ### websocket-actions.md

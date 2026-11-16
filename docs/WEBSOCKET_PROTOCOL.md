@@ -701,6 +701,64 @@ Exemple de valeurs dans `GameState` (`RAFALE_CURRENT_LETTER` = `"S"`, `RAFALE_LE
 
 ---
 
+## ROUE — Roue de la Fortune (v12.0.0, #144, #145)
+
+Contrat : `contracts/roue.md` §8 et §9. Les actions sont dans la liste blanche entrante
+(`internal/server/inbound_allowlist.go`) ; un émetteur absent de la liste est refusé.
+
+### Actions client → serveur
+
+| Action | Payload | Sous-phases acceptées | Émetteurs |
+|---|---|---|---|
+| `ROUE_SET_TEAMS` | `{ "TEAMS": string[] }` | `PREPARE`, `READY` ; `SOLO` : 1 équipe exactement, autres modes : 2 au moins | admin |
+| `ROUE_SPIN` | `{}` | `STARTED` + `TURN` + consonnes restantes | admin, anim |
+| `ROUE_STOP` | `{}` | `STARTED` + `SPINNING` (« Forcer l'arrêt ») | admin, anim |
+| `ROUE_LETTER` | `{ "LETTER": "T" }` | `STARTED` + `LETTER` | admin, anim |
+| `ROUE_FLIP` | `{}` | `STARTED` + `LIT` (« Retourner les cases ») | admin, anim |
+| `ROUE_ANSWER` | `{}` | `STARTED` + `ANSWER` ; aussi `TURN` sans consonne restante (« Réponse validée ») | admin, anim |
+| `ROUE_NEXT` | `{ "HAND": "SAME" \| "NEXT" }` | `STARTED` + `TURN_END` ou `ANSWER` ; aussi `TURN` sans consonne restante. `NEXT` refusé en `SOLO` | admin, anim |
+| `ROUE_PASS` | `{}` | `STARTED` + `TURN`, hors `SOLO` | admin seul |
+| `ROUE_REVEAL` | `{}` | `STARTED`, sous-phase différente de `SOLVED` | admin seul |
+
+- `/ws/tv` et `/ws/player` n'envoient aucune action `ROUE_*` : la tablette envoie seulement `BUTTON`.
+- `/ws/anim` envoie les six actions des boutons de la tablette animateur (`ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`,
+  `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT`). Jamais `ROUE_SET_TEAMS`, `ROUE_PASS` ni `ROUE_REVEAL`.
+- Admin et animateur peuvent commander en même temps : la première action valable pour la sous-phase courante
+  s'applique, la suivante est refusée (`WRONG_SUBPHASE`), sans double application.
+- Arrêt par les joueurs : action `BUTTON` existante (buzzer physique, tablette, simulation admin). Une tablette ou un
+  buzzer de l'équipe qui a la main arrête la roue pendant `SPINNING` ; les autres appuis sont ignorés sans diffusion.
+  Aucun changement de protocole BuzzClick.
+
+Exemple (admin, étape 4) :
+```json
+{ "ACTION": "ROUE_LETTER", "MSG": { "LETTER": "T" } }
+```
+
+### Actions serveur → client
+
+- `UPDATE` (`GameState`) après chaque transition, action existante. Les champs `ROUE_*` sont décrits dans
+  `docs/DATA_MODELS.md`.
+- `ROUE_ERROR` — **émetteur seul**, état inchangé :
+  ```json
+  { "ACTION": "ROUE_ERROR", "MSG": { "CODE": "NOT_A_LETTER", "MESSAGE": "…" } }
+  ```
+  `CODE` ∈ `VOWEL_NOT_AVAILABLE` (voyelle, non disponible en v12.0) | `NOT_A_LETTER` | `WRONG_SUBPHASE` |
+  `NOT_ALLOWED` | `INVALID_TEAMS`.
+
+### Confidentialité de la phrase
+
+- `QUESTION.ROUE_PHRASE` est retiré de tout message envoyé à `/ws/tv` (`SerializeForTV`) et aux tablettes
+  (`filterVPlayerAnswers`), dans toutes les phases. Il reste présent pour `/ws/admin` et `/ws/anim`.
+- `ROUE_BOARD` ne contient jamais de lettre non révélée (`_` ou `*` seulement).
+- La phrase n'est jamais écrite dans `ANSWER`, ni dans `/ws/logs`, ni dans un message aux buzzers.
+- Test de non-fuite : `internal/protocol/roue_leak_test.go` — pour chaque sous-phase avant `SOLVED`, la phrase et ses
+  lettres non révélées sont absentes des messages TV et tablette.
+
+### Diffusion aux buzzers
+
+Aucun message `ROUE_*` n'est envoyé aux buzzers. Côté LED : équipe qui a la main allumée, autres atténuées (règles
+`led.go`). Ambiance : `ActiveTeam` renvoie l'équipe qui a la main. Sons : bruitages existants seulement.
+
 ## Architecture serveur
 
 ### Hubs separes

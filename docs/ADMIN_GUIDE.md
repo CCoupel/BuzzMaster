@@ -1240,6 +1240,102 @@ Le champ SSID2/Mot de passe 2 permet de configurer un reseau WiFi de secours :
 
 ---
 
+## Roue de la Fortune (v12.0.0, #144, #145)
+
+> Statut : LOT-1 en cours (fonctionnalité non encore validée de bout en bout sur serveur réel).
+
+Une question **Roue** fait jouer une phrase à deviner. Les équipes tournent la roue, proposent une consonne, puis
+proposent la réponse. Une phrase = une manche.
+
+### Créer une question Roue
+
+1. Dans l'éditeur de questions, choisir le type **Roue** (🎡).
+2. Saisir la **phrase à deviner** (lettres, chiffres, espaces, apostrophes, tirets, `. , ! ? :`). L'aperçu du plateau
+   se met à jour ; la phrase tient sur 4 lignes de 14 caractères, mots non coupés. Un mot de plus de 14 caractères
+   ou une phrase trop longue est refusée avec un message.
+3. Choisir la **catégorie** (comme une autre question) et, facultatif, la **présentation** : un indice public affiché
+   à côté de la catégorie (80 caractères au plus). La présentation ne peut pas contenir la phrase.
+4. Choisir le **mode de rotation** : `SOLO`, `CHACUN_SON_TOUR` ou `TANT_QUE_JE_GAGNE` (défaut).
+5. Choisir la **règle des gains** : seule l'équipe gagnante reçoit sa cagnotte (défaut), ou toutes les équipes.
+6. Choisir la **forme de la roue** sur la TV (bandeau, défaut, ou arc) et si les **lettres déjà proposées** s'affichent
+   sur la TV et les tablettes (défaut : oui).
+
+Les voyelles (A, E, I, O, U, Y) ne peuvent pas être proposées : elles ne sont jamais proposées en v12.0. Elles
+apparaissent seulement à la résolution.
+
+### Régler la roue
+
+La roue est **générée** à partir de 4 paramètres, dans `/settings` (carte « Roue ») :
+
+| Paramètre | Rôle | Défaut |
+|---|---|---|
+| Points maximum | Valeur de la meilleure case (1 000 000 au plus) | 1000 |
+| Pas | Écart entre deux valeurs | 50 |
+| Banqueroute | Nombre de cases BANQUEROUTE | 2 |
+| Tour perdu | Nombre de cases TOUR PERDU (placée à mi-tour) | 1 |
+
+- Le total est de 64 cases au plus. Au-delà, l'enregistrement est refusé et rien n'est modifié.
+- **Pas corrigé** : si le pas ne divise pas le maximum, il est ramené au diviseur le plus proche (par exemple 30 → 25
+  pour un maximum de 100). L'interface affiche « Pas ajusté à … ».
+- L'aperçu de la roue se calcule sur le serveur ; il se met à jour au fil de la saisie.
+- « Roue par défaut » rétablit 1000 / 50 / 2 / 1 (22 cases).
+- Une modification ne touche pas une manche en cours : la roue est figée au lancement de la manche.
+
+### Conduire une manche
+
+**Côté admin** (`/admin`, panneau de la manche) :
+
+1. Choisir les équipes participantes (`SOLO` : une seule équipe ; les autres modes : deux au moins), puis **Démarrer**.
+2. **Lancer la roue** (étape 1). La roue tourne sur tous les écrans. Elle s'arrête :
+   - au **buzz** de l'équipe qui a la main (buzzer ou tablette) ;
+   - sur **Forcer l'arrêt** ;
+   - ou d'elle-même à la durée maximale de rotation.
+   Le tirage est fait par le serveur, au moment de l'arrêt demandé.
+3. La case tirée s'affiche :
+   - **Valeur** : l'équipe annonce une consonne à voix haute, puis l'admin la saisit (étape 4). Si elle est présente,
+     ses cases s'éclairent. Un bouton **Retourner les cases** (étape 5) les retourne une à une.
+   - **Banqueroute** : la cagnotte de l'équipe tombe à 0, le tour se termine.
+   - **Tour perdu** : le tour se termine sans consonne.
+4. **Réponse validée** (étape 6) : l'équipe a trouvé la phrase. Un seul bouton, la réponse est un bonus : une réponse
+   fausse ou absente se termine par l'étape 7 sans bouton « réponse fausse ».
+5. **Fin du tour** (étape 7) : deux boutons.
+   - **Tour suivant** : la même équipe rejoue.
+   - **Équipe suivante** : la main passe à l'équipe suivante.
+   Un bouton est mis en avant comme conseillé, selon le mode et le résultat du tour :
+
+   | Mode | Une lettre trouvée | Pas de lettre trouvée |
+   |---|---|---|
+   | `SOLO` | Tour suivant (seul bouton) | Tour suivant (seul bouton) |
+   | `CHACUN_SON_TOUR` | Équipe suivante | Équipe suivante |
+   | `TANT_QUE_JE_GAGNE` | Tour suivant | Équipe suivante |
+
+   Le choix reste à l'admin : les deux boutons restent utilisables, sauf en `SOLO`.
+
+Autres commandes :
+
+- **Passer la main** : l'équipe qui a la main cède son tour immédiatement, sa cagnotte est conservée (hors `SOLO`).
+- **Dévoiler la phrase** : la phrase s'affiche sur toutes les tablettes et la TV, sans gagnant et sans crédit. Une
+  confirmation en deux clics est demandée.
+- Les gains sont crédités à la résolution, sur les **points d'équipe** (historique « Points attribués » avec la
+  catégorie). Les corrections se font dans la page Scores. Les scores par joueur ne sont pas concernés.
+
+**Côté animateur** (tablette `/anim`) : l'animateur a les mêmes sept étapes (lancer, forcer l'arrêt, consonne, retourner,
+réponse validée, tour suivant, équipe suivante). Il ne peut pas choisir les équipes, passer la main ni dévoiler la
+phrase : ces actions restent à l'admin. Si l'admin et l'animateur agissent en même temps, la première action valable
+s'applique et la seconde est refusée sans effet.
+
+**Côté joueurs** : sur la TV, la roue reste affichée pendant toute la manche. Sur une tablette, un appui de l'équipe qui
+a la main arrête la roue. Les autres appuis sont ignorés.
+
+### Points d'attention
+
+- **Ne pas recharger la TV après l'arrêt de la manche.** L'arrêt efface toutes les données de la manche Roue : une TV
+  rechargée après l'arrêt n'a plus d'écran de fin à afficher. Montrer le résultat **avant** d'arrêter la manche.
+- Pendant une **pause**, toutes les minuteries (rotation, freinage, retournement) sont suspendues, puis reprennent à la
+  reprise. Les actions de manche sont refusées pendant la pause.
+- Pendant un **entracte**, les actions de la roue sont refusées.
+- Un **arrêt** (`STOP`) met fin à la manche ; **Nouvelle partie** annule toutes les minuteries.
+
 ## Jeu Memory - Modes multi-équipes
 
 ### Sélection du mode de jeu

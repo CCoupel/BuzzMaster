@@ -2,6 +2,44 @@
 
 Historique des versions du projet BuzzControl.
 
+## [12.0.0] - non publiée — Roue de la Fortune (#144, #145) — entrée partielle LOT-1
+
+Nouveau type de question **Roue** : une phrase à deviner, des équipes qui tournent la roue, proposent des consonnes et
+la réponse. Entrée partielle : elle couvre le LOT-1 (mécanique, configuration, éditeur, écrans). Les entrées finales
+seront complétées à la fin du milestone.
+
+### Added
+
+- **Question Roue (#145)** — type `ROUE` : phrase à deviner (4 lignes de 14 caractères au plus, mots non coupés),
+  catégorie existante et présentation publique (80 caractères au plus). Modes `SOLO`, `CHACUN_SON_TOUR`,
+  `TANT_QUE_JE_GAGNE` ; gains `WINNER_ONLY` ou `ALL_TEAMS` ; forme de la roue (bandeau ou arc) et affichage des lettres
+  proposées, par question.
+- **Éditeur de question Roue (#145)** — choix du type « Roue » dans l'éditeur de questions, aperçu du plateau par le
+  serveur (`POST /api/roue/preview`). Refus `400` avec code `ROUE_*`, rien n'est enregistré.
+- **Moteur de manche Roue (#144)** — 7 étapes par tour (lancer, arrêt, case, consonne, retournement, réponse, fin de
+  tour), arrêt au buzz de l'équipe qui a la main, à `ROUE_STOP` ou à la durée maximale ; tirage de la case par le
+  serveur ; cagnottes de manche par équipe, crédit en points d'équipe à la résolution.
+- **Roue générée (#144)** — section `wheel` de `game-config.json` (4 paramètres et durées), construction de la roue
+  par le serveur (`POST /api/roue/wheel-preview`), correction du pas au diviseur le plus proche.
+- **Carte « Roue » des paramètres (#144)** — `/settings` : 4 paramètres, aperçu, « Roue par défaut ».
+- **Écrans Roue (#144)** — TV (équipes en haut, plateau plein écran, roue permanente), tablette joueur, panneau admin
+  de la manche, tablette animateur (sept étapes).
+- **Actions WebSocket `ROUE_*` (#144)** — `ROUE_SET_TEAMS`, `ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_FLIP`,
+  `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL` ; refus à l'émetteur seul par `ROUE_ERROR`.
+- **Composant `Wheel` : mouvement long (#144)** — prop `motion` (`spin`, `land`), roue de RAFALE inchangée sans prop.
+
+### Security
+
+- **Phrase secrète (#145)** — `ROUE_PHRASE` n'est envoyé ni à la TV ni aux tablettes, dans aucune phase. Le serveur
+  refuse une présentation qui contient la phrase.
+
+### Notes
+
+- Hors périmètre v12.0 : round bonus final (#146), achat de voyelles (#147), round spécial (#148). Les voyelles ne
+  peuvent pas être proposées en v12.0.
+- Aucun nouveau stockage : la phrase vit dans `question.json`, la configuration dans `game-config.json`.
+- Protocole BuzzClick inchangé : aucune action nouvelle côté buzzer.
+
 ## [11.8.0] - 2026-11-12 — Import / export des effets et éditeur d'effets pas à pas (#305, #210)
 
 Effets lumière : import, téléchargement et suppression depuis le catalogue (#305), éditeur d'effets dans l'interface (#210), format de fichier révision 7 avec un changement cassant pour `gN`.
