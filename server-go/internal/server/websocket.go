@@ -687,7 +687,15 @@ func serializeForClientType(msg *protocol.Message, clientType ClientType) ([]byt
 	switch clientType {
 	case ClientTypeAdmin:
 		return msg.SerializeForAdmin()
-	case ClientTypeTV, ClientTypeAnim:
+	case ClientTypeTV:
+		// #145 (v12.0.0, contracts/roue.md §9): the TV path must go through
+		// SerializeForTV (the one the initial-state and hot fan-out paths in
+		// cmd/server/main.go already use) — SerializeForWebClient would leak
+		// QUESTION.ROUE_PHRASE. Versus SerializeForWebClient it removes ONLY
+		// GAME.LAUNCH_LOCK (#253, admin/anim banners, no use on the TV) and
+		// QUESTION.ROUE_PHRASE.
+		return msg.SerializeForTV()
+	case ClientTypeAnim:
 		// #155 (v6.2.0): ClientTypeAnim reuses SerializeForWebClient, same as
 		// TV — no dedicated serializer. Its payload need is a strict subset
 		// of what TV already gets (contracts/ws-payload-serialization.md
