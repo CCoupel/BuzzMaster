@@ -60,6 +60,16 @@ describe('RoueTv — tablette (#144, M5)', () => {
   })
 })
 
+describe('RoueTv — fin de manche', () => {
+  it('après le STOP (état ROUE vidé), garde le dernier plateau résolu', () => {
+    const solved = base({ ROUE_SUBPHASE: 'SOLVED', ROUE_WINNER: 'Rouges', ROUE_AWARDS: { Rouges: 1300 }, ROUE_BOARD: { COLS: 14, ROWS: ['ABC'] } })
+    const { container, rerender } = render(<RoueTv gameState={solved} teams={teams} />)
+    rerender(<RoueTv gameState={base({ phase: 'STOPPED', ROUE_SUBPHASE: '', ROUE_TEAMS: [], ROUE_BOARD: { COLS: 14, ROWS: [] }, ROUE_TEAM_BANK: {} })} teams={teams} />)
+    expect(container.querySelectorAll('.rgb-cell.shown').length).toBe(3)
+    expect(container.querySelectorAll('.roue-bank').length).toBe(2)
+  })
+})
+
 describe('RoueGameBoard', () => {
   it('cases : cachée, éclairée, visible', () => {
     const { container } = render(<RoueGameBoard board={{ COLS: 14, ROWS: ['*_AB'] }} />)

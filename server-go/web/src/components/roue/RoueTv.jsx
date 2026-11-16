@@ -7,6 +7,7 @@
  * par `onStop` (le serveur ignore tout appui hors SPINNING ou d'une autre équipe).
  * Aucune phrase en entrée : seulement `ROUE_BOARD` (jamais une lettre non révélée, contrat §9).
  */
+import { useRef } from 'react'
 import FortuneWheel from './FortuneWheel'
 import RoueGameBoard from './RoueGameBoard'
 import { fmtPts, roueAnnouncement, teamCss } from './roueState'
@@ -27,7 +28,12 @@ function Letters({ letters }) {
 }
 
 export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlayer = false, teamName = null, onStop = null }) {
-  const gs = gameState || {}
+  // Fin de manche : le serveur remet tout l'état ROUE à vide au STOP (stopUnsafe). L'écran garde alors le dernier
+  // état de la manche (plateau résolu, cagnottes) tant que la question reste affichée.
+  const lastRef = useRef(null)
+  if (gameState?.ROUE_SUBPHASE) lastRef.current = gameState
+  const ended = !gameState?.ROUE_SUBPHASE && ['STOPPED', 'REVEALED'].includes(gameState?.phase) && lastRef.current
+  const gs = (ended ? { ...lastRef.current, phase: gameState.phase } : gameState) || {}
   const q = gs.question || {}
   const wheel = gs.ROUE_WHEEL
   const roster = gs.ROUE_TEAMS || []
