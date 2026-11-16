@@ -69,6 +69,11 @@ export const QUESTION_TYPES = [
   // carte MEMOTION (maquette entracte-programme-214.html §04 — "pas une
   // question à score", "pas imbriquable").
   { key: 'ENTRACTE', label: 'Entracte', icon: '⏸️', color: '#6b7280', nestable: false },
+  // ROUE (v12.0.0, #145, contrat roue.md §3) — « Roue de la Fortune » : une
+  // phrase à deviner sur un plateau (la phrase est saisie dans l'éditeur ROUE,
+  // jamais dans le champ Question générique). Ni imbriquable en carte MEMOTION
+  // ni générable par IA (voir GENERABLE_TYPES).
+  { key: 'ROUE', label: 'Roue', icon: '🎡', color: '#e11d48', nestable: false },
 ]
 
 export const QUESTION_TYPE_META = QUESTION_TYPES.reduce((acc, t) => {
@@ -111,7 +116,7 @@ export const GENERABLE_TYPES = (() => {
   // silencieusement dans AIGenerateModal.jsx dès son ajout à QUESTION_TYPES
   // ci-dessus — exactement le type de divergence que ce fichier existe pour
   // éliminer (#183).
-  const generableBase = QUESTION_TYPES.filter(t => t.key !== 'RAFALE' && t.key !== 'ENTRACTE')
+  const generableBase = QUESTION_TYPES.filter(t => t.key !== 'RAFALE' && t.key !== 'ENTRACTE' && t.key !== 'ROUE')
   const memotionIndex = generableBase.findIndex(t => t.key === 'MEMOTION')
   const withMemotionPlus = [...generableBase]
   withMemotionPlus.splice(memotionIndex + 1, 0, {

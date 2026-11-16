@@ -1688,6 +1688,19 @@
   color: #7c2d12;
 }
 
+/* ROUE (v12.0.0, #145) — même patron, couleur de utils/questionTypeMeta.js (#e11d48). */
+.type-btn.roue {
+  background: rgba(225, 29, 72, 0.1);
+  border-color: #e11d48;
+  color: #e11d48;
+}
+
+.type-btn.roue.active {
+  background: rgba(225, 29, 72, 0.5);
+  border-color: #e11d48;
+  color: #881337;
+}
+
 /* ARDOISE section container */
 .ardoise-section {
   display: flex;
