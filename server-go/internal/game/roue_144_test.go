@@ -264,8 +264,12 @@ func TestRoue144_FullTurn_SevenSteps(t *testing.T) {
 func TestRoue144_Letter_AbsentEndsTheTurn(t *testing.T) {
 	r := newRoueRig(t, roueTestPhrase, RoueModeTantQueJeGagne, "", "red", "blue")
 	r.land(wIdx100)
+	seq := r.st().RoueLastEvent.Seq
 	r.mustOK(r.e.RoueLetter("Z"))
 	s := r.st()
+	if s.RoueLastEvent.Seq != seq+1 {
+		t.Errorf("un événement par action : SEQ %d → %d (attendu +1, pas de TURN_END en plus)", seq, s.RoueLastEvent.Seq)
+	}
 	if s.RoueSubPhase != RoueSubTurnEnd || s.RoueStep != 7 || s.RoueLastEvent.Kind != RoueEvLetterMiss || s.RoueLastEvent.Letter != "Z" {
 		t.Fatalf("lettre absente : %q step %d event %+v", s.RoueSubPhase, s.RoueStep, s.RoueLastEvent)
 	}
@@ -287,8 +291,12 @@ func TestRoue144_Letter_RepeatedIsTreatedAsAbsent(t *testing.T) {
 	r.playHit(wIdx100, "N")
 	r.mustOK(r.e.RoueNext(RoueHandSame))
 	r.land(wIdx90)
+	seq := r.st().RoueLastEvent.Seq
 	r.mustOK(r.e.RoueLetter("N")) // déjà proposée
 	s := r.st()
+	if s.RoueLastEvent.Seq != seq+1 {
+		t.Errorf("un événement par action : SEQ %d → %d", seq, s.RoueLastEvent.Seq)
+	}
 	if s.RoueSubPhase != RoueSubTurnEnd || s.RoueLastEvent.Kind != RoueEvLetterRepeat {
 		t.Fatalf("lettre répétée : %q %+v", s.RoueSubPhase, s.RoueLastEvent)
 	}
@@ -331,8 +339,15 @@ func TestRoue144_Bankrupt_ZeroesThePotAndEndsTheTurn(t *testing.T) {
 	if r.st().RoueTeamBank["red"] != 200 {
 		t.Fatalf("préparation : cagnotte 200 attendue, got %d", r.st().RoueTeamBank["red"])
 	}
-	r.land(wIdxBanq)
+	r.idx.Store(wIdxBanq)
+	r.mustOK(r.e.RoueSpin())
+	r.mustOK(r.e.RoueStop())
+	seq := r.st().RoueLastEvent.Seq // SPIN posé ; le freinage n'a pas encore produit d'événement
+	r.waitSub(RoueSubTurnEnd)
 	s := r.st()
+	if s.RoueLastEvent.Seq != seq+1 {
+		t.Errorf("fin du freinage sur BANQUEROUTE : un seul événement (SEQ +1), %d → %d", seq, s.RoueLastEvent.Seq)
+	}
 	if s.RoueSubPhase != RoueSubTurnEnd || s.RoueTeamBank["red"] != 0 || s.RoueLastEvent.Kind != RoueEvBankrupt {
 		t.Fatalf("BANQUEROUTE : %q bank=%d event=%s", s.RoueSubPhase, s.RoueTeamBank["red"], s.RoueLastEvent.Kind)
 	}
@@ -356,8 +371,15 @@ func TestRoue144_LoseTurn_KeepsThePotAndEndsTheTurn(t *testing.T) {
 	r := newRoueRig(t, roueTestPhrase, RoueModeChacunSonTour, "", "red", "blue")
 	r.playHit(wIdx100, "N")
 	r.mustOK(r.e.RoueNext(RoueHandSame))
-	r.land(wIdxPerdu)
+	r.idx.Store(wIdxPerdu)
+	r.mustOK(r.e.RoueSpin())
+	r.mustOK(r.e.RoueStop())
+	seq := r.st().RoueLastEvent.Seq
+	r.waitSub(RoueSubTurnEnd)
 	s := r.st()
+	if s.RoueLastEvent.Seq != seq+1 {
+		t.Errorf("fin du freinage sur TOUR PERDU : un seul événement (SEQ +1), %d → %d", seq, s.RoueLastEvent.Seq)
+	}
 	if s.RoueSubPhase != RoueSubTurnEnd || s.RoueTeamBank["red"] != 200 || s.RoueLastEvent.Kind != RoueEvLoseTurn {
 		t.Fatalf("TOUR PERDU : %q bank=%d event=%s", s.RoueSubPhase, s.RoueTeamBank["red"], s.RoueLastEvent.Kind)
 	}
@@ -499,6 +521,65 @@ func TestRoue144_Pass(t *testing.T) {
 
 	solo := newRoueRig(t, roueTestPhrase, RoueModeSolo, "", "red")
 	solo.wantErr(solo.e.RoucePass(), RoueErrNotAllowed)
+}
+
+// Règle « un événement par action » (arbitrage roue.md §4/§5.1) : TURN_END n'est émis que par ROUE_NEXT depuis
+// ANSWER (ou depuis TURN sans consonne) ; ROUE_NEXT depuis TURN_END n'émet rien.
+func TestRoue144_Events_OnePerAction(t *testing.T) {
+	r := newRoueRig(t, roueTestPhrase, RoueModeChacunSonTour, "", "red", "blue")
+	r.land(wIdx100)
+	r.mustOK(r.e.RoueLetter("Z")) // → TURN_END (étape 7), événement LETTER_MISS
+	seq := r.st().RoueLastEvent.Seq
+	r.mustOK(r.e.RoueNext(RoueHandNext))
+	if got := r.st().RoueLastEvent.Seq; got != seq {
+		t.Errorf("ROUE_NEXT depuis TURN_END n'émet aucun événement : SEQ %d → %d", seq, got)
+	}
+	// depuis ANSWER : l'événement TURN_END porte le gain du tour
+	r.playHit(wIdx100, "N")
+	seq = r.st().RoueLastEvent.Seq
+	r.mustOK(r.e.RoueNext(RoueHandSame))
+	ev := r.st().RoueLastEvent
+	if ev.Seq != seq+1 || ev.Kind != RoueEvTurnEnd || ev.Gain != 200 {
+		t.Errorf("ROUE_NEXT depuis ANSWER émet TURN_END (gain 200, SEQ +1) : %+v (seq avant %d)", ev, seq)
+	}
+}
+
+func TestRoue144_Events_SeqStrictlyIncreasesByOnePerAction(t *testing.T) {
+	r := newRoueRig(t, roueTestPhrase, RoueModeTantQueJeGagne, "", "red", "blue")
+	prev := r.st().RoueLastEvent.Seq
+	check := func(what string) {
+		t.Helper()
+		got := r.st().RoueLastEvent.Seq
+		if got != prev+1 {
+			t.Fatalf("%s : SEQ %d → %d (attendu +1)", what, prev, got)
+		}
+		prev = got
+	}
+	r.idx.Store(wIdx100)
+	r.mustOK(r.e.RoueSpin())
+	check("ROUE_SPIN")
+	r.mustOK(r.e.RoueStop())
+	r.waitSub(RoueSubLetter)
+	check("fin du freinage (LAND_VALUE)")
+	r.mustOK(r.e.RoueLetter("N"))
+	check("ROUE_LETTER (LETTER_HIT)")
+	r.mustOK(r.e.RoueFlip())
+	check("ROUE_FLIP")
+	r.waitSub(RoueSubAnswer) // la fin du retournement n'émet rien
+	if r.st().RoueLastEvent.Seq != prev {
+		t.Errorf("la fin du retournement n'émet pas d'événement : %d → %d", prev, r.st().RoueLastEvent.Seq)
+	}
+	r.mustOK(r.e.RoueNext(RoueHandSame))
+	check("ROUE_NEXT depuis ANSWER (TURN_END)")
+}
+
+func TestRoue144_Events_NextFromTurnWithoutConsonantEmitsTurnEnd(t *testing.T) {
+	r := newRoueRig(t, "OUI", RoueModeChacunSonTour, "", "red", "blue")
+	seq := r.st().RoueLastEvent.Seq
+	r.mustOK(r.e.RoueNext(RoueHandNext))
+	if ev := r.st().RoueLastEvent; ev.Seq != seq+1 || ev.Kind != RoueEvTurnEnd {
+		t.Errorf("ROUE_NEXT depuis TURN sans consonne émet TURN_END : %+v", ev)
+	}
 }
 
 // ---- plus de consonne -----------------------------------------------------------------------------------
