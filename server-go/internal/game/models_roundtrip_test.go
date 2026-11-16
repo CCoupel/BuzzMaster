@@ -117,7 +117,9 @@ func TestQuestionFixtures_RoundTrip_TypedContent(t *testing.T) {
 	// QuestionType (RAFALE, contracts/rafale.md §3.3).
 	// 8 since v9.0.0 (#214): entracte.json added, covering the 7th
 	// QuestionType (ENTRACTE, contracts/game-state.md §"Second déclencheur").
-	const wantFixtureCount = 8
+	// 9 since v12.0.0 (#145): roue.json added, covering the 8th
+	// QuestionType (ROUE, contracts/roue.md §3).
+	const wantFixtureCount = 9
 	if tested != wantFixtureCount {
 		t.Errorf("expected to test %d testdata/questions/*.json fixtures, tested %d — fixture count changed (update wantFixtureCount if deliberate) or the fixtures dir was not found as expected", wantFixtureCount, tested)
 	}

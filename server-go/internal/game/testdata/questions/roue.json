@@ -1,0 +1,15 @@
+{
+  "ANSWER": "",
+  "CATEGORY": "ANIMALS",
+  "ID": "t-roue",
+  "ORDER": 9,
+  "POINTS": "",
+  "QUESTION": "Roue de la Fortune",
+  "ROUE_GAINS_RULE": "WINNER_ONLY",
+  "ROUE_MODE": "TANT_QUE_JE_GAGNE",
+  "ROUE_PHRASE": "Combien pour ce chien dans la vitrine",
+  "ROUE_PRESENTATION": "Chanson de Line Renaud",
+  "ROUE_WHEEL_LAYOUT": "arc",
+  "TIME": "",
+  "TYPE": "ROUE"
+}
