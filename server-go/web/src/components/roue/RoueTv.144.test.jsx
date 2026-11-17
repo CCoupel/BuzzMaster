@@ -45,14 +45,32 @@ describe('RoueTv — TV (#144, M1)', () => {
 })
 
 describe('RoueTv — tablette (#144, M5)', () => {
-  it('STOP actif seulement pour l\'équipe qui a la main pendant SPINNING', () => {
+  it('la roue est tapable seulement pour l\'équipe qui a la main pendant SPINNING (plus de bouton STOP)', () => {
     const onStop = vi.fn()
-    const { container, rerender } = render(<RoueTv gameState={base({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
-    fireEvent.click(container.querySelector('button.roue-vp-stop'))
+    const { container, rerender, getByRole, queryByRole } = render(<RoueTv gameState={base({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
+    const tap = getByRole('button', { name: /Arrêter la roue/ })
+    expect(tap.querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
+    fireEvent.click(tap)
     expect(onStop).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.roue-vp-stop')).toBeNull()
     rerender(<RoueTv gameState={base({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Bleus" onStop={onStop} />)
-    expect(container.querySelector('button.roue-vp-stop')).toBeNull()
-    expect(container.querySelector('.roue-vp-stop.off').textContent).toMatch(/pas votre tour/)
+    expect(queryByRole('button', { name: /Arrêter la roue/ })).toBeNull()
+    expect(container.querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
+    expect(onStop).toHaveBeenCalledTimes(1)
+  })
+  it('messages : « Touchez la roue pour l\'arrêter » pour l\'équipe qui a la main, « vont arrêter la roue » pour l\'autre', () => {
+    const mine = render(<RoueTv gameState={base({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
+    expect(mine.container.textContent).toMatch(/Touchez la roue pour l'arrêter/)
+    mine.unmount()
+    const other = render(<RoueTv gameState={base({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Bleus" onStop={() => {}} />)
+    expect(other.container.textContent).toMatch(/Les Rouges vont arrêter la roue/)
+    expect(other.container.textContent).not.toMatch(/Touchez la roue/)
+  })
+  it('indice : catégorie et présentation affichées, jamais la phrase', () => {
+    const { container } = render(<RoueTv gameState={base({ question: { TYPE: 'ROUE', ROUE_PRESENTATION: 'Chanson de Line Renaud', ROUE_PHRASE: 'SECRETPHRASE' } })} teams={teams} catMeta={{ icon: '🐾', label: 'Animaux' }} isVPlayer teamName="Rouges" />)
+    expect(container.textContent).toMatch(/Animaux/)
+    expect(container.textContent).toMatch(/Chanson de Line Renaud/)
+    expect(container.textContent).not.toMatch(/SECRETPHRASE/)
   })
   it('ne contient jamais de phrase : seul le plateau est rendu', () => {
     const { container } = render(<RoueTv gameState={base({ question: { TYPE: 'ROUE', ROUE_PHRASE: 'SECRET' } })} teams={teams} isVPlayer teamName="Bleus" />)

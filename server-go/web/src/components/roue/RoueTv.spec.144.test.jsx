@@ -146,21 +146,97 @@ describe('roueAnnouncement — une annonce par sous-phase', () => {
 })
 
 describe('RoueTv — tablette (M5)', () => {
-  it('STOP : un appui = un seul onStop ; jamais actif hors SPINNING', () => {
-    for (const sub of ['TURN', 'STOPPING', 'LETTER', 'ANSWER', 'SOLVED']) {
-      const { container, unmount } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: sub })} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
-      expect(container.querySelector('button.roue-vp-stop'), sub).toBeNull()
+  const TAP = { name: /Arrêter la roue/ }
+
+  it('la roue est présente sur la tablette dans toutes les sous-phases, y compris SOLVED, pour les deux équipes', () => {
+    for (const sub of ['TURN', 'SPINNING', 'STOPPING', 'LETTER', 'LIT', 'REVEALING', 'ANSWER', 'TURN_END', 'SOLVED']) {
+      for (const team of ['Rouges', 'Bleus']) {
+        const { container, unmount } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: sub, ROUE_WINNER: sub === 'SOLVED' ? 'Bleus' : '' })} teams={teams} isVPlayer teamName={team} onStop={() => {}} />)
+        expect(container.querySelector('[data-testid="fortune-wheel"]'), `${sub}/${team}`).not.toBeNull()
+        unmount()
+      }
+    }
+  })
+
+  it('un tap = un seul onStop, seulement équipe qui a la main + SPINNING ; jamais ailleurs', () => {
+    for (const sub of ['TURN', 'STOPPING', 'LETTER', 'LIT', 'REVEALING', 'ANSWER', 'TURN_END', 'SOLVED']) {
+      const onStop = vi.fn()
+      const { container, queryByRole, unmount } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: sub })} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
+      expect(queryByRole('button', TAP), sub).toBeNull()
+      fireEvent.click(container.querySelector('[data-testid="fortune-wheel"]'))
+      expect(onStop, sub).not.toHaveBeenCalled()
       unmount()
     }
+    // autre équipe en SPINNING : pas de bouton, un clic sur la roue n'envoie rien
+    const other = vi.fn()
+    const o = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Bleus" onStop={other} />)
+    expect(o.queryByRole('button', TAP)).toBeNull()
+    fireEvent.click(o.container.querySelector('[data-testid="fortune-wheel"]'))
+    expect(other).not.toHaveBeenCalled()
+    o.unmount()
     const onStop = vi.fn()
-    const { container } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
-    fireEvent.click(container.querySelector('button.roue-vp-stop'))
+    const { getByRole } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
+    fireEvent.click(getByRole('button', TAP))
     expect(onStop).toHaveBeenCalledTimes(1)
   })
 
-  it('tablette sans nom d\'équipe (non liée) : jamais de bouton STOP', () => {
-    const { container } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName={null} onStop={() => {}} />)
-    expect(container.querySelector('button.roue-vp-stop')).toBeNull()
+  it('plus aucun bouton STOP, dans aucune sous-phase', () => {
+    for (const sub of ['TURN', 'SPINNING', 'STOPPING', 'LETTER', 'SOLVED']) {
+      const { container, unmount } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: sub })} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
+      expect(container.querySelector('.roue-vp-stop'), sub).toBeNull()
+      expect(Array.from(container.querySelectorAll('button')).some(b => /^\s*STOP/.test(b.textContent)), sub).toBe(false)
+      unmount()
+    }
+  })
+
+  it('SPINNING : un seul bouton (la roue), cadre à la couleur de l\'équipe, messages pour chaque équipe', () => {
+    const mine = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
+    expect(mine.container.querySelectorAll('button').length).toBe(1)
+    expect(mine.container.textContent).toMatch(/Touchez la roue pour l'arrêter/)
+    mine.unmount()
+    const other = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Bleus" onStop={() => {}} />)
+    expect(other.container.querySelectorAll('button').length).toBe(0)
+    expect(other.container.textContent).toMatch(/Les Rouges vont arrêter la roue/)
+    expect(other.container.textContent).not.toMatch(/Touchez la roue/)
+  })
+
+  it('tablette sans nom d\'équipe (non liée) : roue affichée mais jamais tapable', () => {
+    const { container, queryByRole } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName={null} onStop={() => {}} />)
+    expect(queryByRole('button', TAP)).toBeNull()
+    expect(container.querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
+  })
+
+  it('onStop absent : jamais tapable (pas d\'erreur)', () => {
+    const { queryByRole } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" />)
+    expect(queryByRole('button', TAP)).toBeNull()
+  })
+
+  it('indice : catégorie + présentation (courte, 80 caractères, absente), jamais la phrase, en toutes sous-phases', () => {
+    const long = 'P'.repeat(40) + ' ' + 'Q'.repeat(39)
+    expect(long.length).toBe(80)
+    for (const [pres, re] of [['Chanson de Line Renaud', /Chanson de Line Renaud/], [long, new RegExp(long)], [undefined, null]]) {
+      for (const sub of ['TURN', 'SPINNING', 'SOLVED']) {
+        const q = { TYPE: 'ROUE', ROUE_MODE: 'TANT_QUE_JE_GAGNE', ROUE_PHRASE: 'COMBIENPOURCECHIEN', ...(pres ? { ROUE_PRESENTATION: pres } : {}) }
+        const { container, unmount } = render(<RoueTv gameState={gs({ question: q, ROUE_SUBPHASE: sub })} teams={teams} catMeta={{ icon: '🐾', label: 'Animaux' }} isVPlayer teamName="Rouges" onStop={() => {}} />)
+        expect(container.textContent, sub).toMatch(/Animaux/)
+        if (re) expect(container.textContent, sub).toMatch(re)
+        expect(container.textContent, sub).not.toMatch(/COMBIENPOURCECHIEN/)
+        unmount()
+      }
+    }
+  })
+
+  it('l\'indice n\'est plus dans la ligne du haut (équipe + cagnotte seulement)', () => {
+    const { container } = render(<RoueTv gameState={gs({ question: { TYPE: 'ROUE', ROUE_PRESENTATION: 'Chanson de Line Renaud' } })} teams={teams} catMeta={{ icon: '🐾', label: 'Animaux' }} isVPlayer teamName="Rouges" />)
+    const top = container.querySelector('.roue-vp-top')
+    expect(top.textContent).not.toMatch(/Animaux|Chanson/)
+    expect(container.textContent).toMatch(/Chanson de Line Renaud/)
+  })
+
+  it('tablette : pas de points de suspension sur l\'indice (CSS)', () => {
+    const css = readFileSync(join(here, 'RoueTv.css'), 'utf8')
+    const blocks = css.match(/\.roue-vp-(hint|pres|cat|clue)[^{]*\{[^}]*\}/g) || []
+    for (const b of blocks) expect(b).not.toMatch(/text-overflow\s*:\s*ellipsis/)
   })
 
   it('cagnotte de son équipe uniquement', () => {
