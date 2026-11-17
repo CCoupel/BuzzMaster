@@ -254,12 +254,23 @@ reste toujours acquis à la cagnotte, quel que soit le bouton choisi.
   n'a aucune valeur de jeu et n'est pas synchronisée entre écrans. Les écrans montrent le temps restant avant
   l'arrêt automatique (`SPIN_MAX_MS`, compté localement depuis la réception de `SPINNING`, montée comprise).
   Un client qui se connecte ou se reconnecte pendant `SPINNING` démarre directement à la vitesse de croisière.
-- **`STOPPING`** : chaque écran freine depuis sa position jusqu'à la case `STOP.TO` en `STOP.DURATION_MS`, avec
-  au moins un tour complet (`wheel-component.md` §5). Le freinage part de **la vitesse courante de la roue à
-  l'instant de l'arrêt**, sans saut de vitesse : la vitesse de croisière si elle est atteinte — la vitesse de
+- **`STOPPING`** : chaque écran freine depuis sa position jusqu'à la case `STOP.TO` et s'y arrête **exactement**,
+  **au plus tard à `STOP.DURATION_MS`** (`wheel-component.md` §5). Le freinage part de **la vitesse courante de la
+  roue à l'instant de l'arrêt**, sans saut de vitesse : la vitesse de croisière si elle est atteinte — la vitesse de
   croisière est donc aussi celle du début du freinage — ou, si l'arrêt survient **pendant la montée**, la vitesse
-  atteinte à cet instant (jamais un saut à la vitesse de croisière). Un client qui se connecte ou se reconnecte
-  pendant `STOPPING` se place directement sur `TO`.
+  atteinte à cet instant (jamais un saut à la vitesse de croisière).
+  - **Profil** (depuis le correctif `656067e5`, QUALIF 12.0.0.3) : la roue **continue à sa vitesse**, puis
+    **décélère à taux constant** jusqu'à l'arrêt sur `TO` ; la décélération dure au moins 500 ms.
+  - **Distance** : la première occurrence de `TO` vers l'avant, plus **0 à 3 tours** ajoutés — le nombre qui permet
+    ce profil dans `DURATION_MS`. Il n'y a **pas de tour complet garanti** : la distance découle de la vitesse et de
+    `DURATION_MS`, pas d'un minimum de tours.
+  - Quand aucune distance n'atterrit exactement à `DURATION_MS`, la roue freine sans palier et s'arrête **avant**
+    `DURATION_MS` ; elle reste alors sur `TO` jusqu'à la fin de la minuterie du serveur.
+  - **Repli** : à vitesse de croisière, ce profil existe toujours quand `DURATION_MS ≥ SPIN_PERIOD_MS + 250 ms`.
+    En deçà, il peut ne pas exister selon la position de la roue : l'écran retombe alors sur l'ancien profil
+    (ease-out cubique, au moins un tour, vitesse non continue). Réglages par défaut : 4 000 ms pour 2 500 ms,
+    donc jamais de repli ; un repli n'est possible qu'avec un freinage court et un tour lent (§10).
+  - Un client qui se connecte ou se reconnecte pendant `STOPPING` se place directement sur `TO`.
 - L'accélération est purement visuelle : le tirage, les minuteries et les messages du serveur sont inchangés ; un
   appui pendant la montée arrête la roue comme à tout autre moment de `SPINNING`.
 - `prefers-reduced-motion` : ni montée ni freinage animés, placement direct sur la case (`wheel-component.md` §5).
