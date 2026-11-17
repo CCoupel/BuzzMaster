@@ -1842,7 +1842,7 @@ repliés. Mise en lignes : 4 lignes de 14 colonnes au plus, mots non coupés, ca
 | `ROUE_LETTERS` | `{ "LETTER", "TEAM", "HIT" }[]` | Consonnes proposées, dans l'ordre |
 | `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question |
 | `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |
-| `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE}`, `KIND` ∈ `value \| bankrupt \| lose_turn`), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`) |
+| `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE}`, `KIND` ∈ `value \| bankrupt \| lose_turn`), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`), `SPIN_UP_MS` (durée de la montée, posée au `START` = 4 × `SPIN_PERIOD_MS`, soit 2 tours), `FULL_SPEED` (`true` seulement en `SPINNING` une fois la montée terminée ; `false` pendant la montée et hors `SPINNING`) |
 | `ROUE_LAST_EVENT` | objet | `{ SEQ, KIND, TEAM, LETTER, COUNT, VALUE, GAIN }` — au plus un événement par action |
 | `ROUE_WINNER` | string | Équipe qui a résolu (`""` sinon) |
 | `ROUE_AWARDS` | map équipe → int | Points crédités à la résolution |

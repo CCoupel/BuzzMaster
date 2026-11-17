@@ -28,6 +28,12 @@ seront complétées à la fin du milestone.
   `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL` ; refus à l'émetteur seul par `ROUE_ERROR`.
 - **Sélection des équipes ROUE** : plus de contrôle du nombre à chaque clic, comptage au passage en READY (12.0.0.2).
 - **Composant `Wheel` : mouvement long (#144)** — prop `motion` (`spin`, `land`), roue de RAFALE inchangée sans prop.
+- **Roue : freinage sans saut (#144)** — le freinage part toujours de la vitesse de croisière, à vitesse continue.
+- **Roue : montée en 2 tours (#144)** — la roue accélère pendant 2 tours (`SPIN_UP_MS`) ; la durée maximale de rotation
+  est comptée après la montée.
+- **Roue : arrêt seulement à pleine vitesse (#144)** — pendant la montée, personne ne peut arrêter la roue (admin,
+  animateur, équipe qui a la main) : `ROUE_STOP` est refusé `NOT_FULL_SPEED`, un appui est ignoré.
+- **Roue sur la tablette (#144)** — la roue et l'indice remplacent le bouton STOP ; la roue n'est tapable qu'à pleine vitesse.
 
 ### Security
 

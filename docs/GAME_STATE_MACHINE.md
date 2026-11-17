@@ -335,7 +335,10 @@ STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulem
 - **Cagnotte de manche** : gain temporaire par équipe (`ROUE_TEAM_BANK`). Aucun score n'est modifié pendant la manche ;
   le crédit n'intervient qu'à la résolution (`ANSWER` → `SOLVED`, `ROUE_ANSWER`).
 - **Le serveur tire la case** au moment où l'arrêt est demandé (buzz de l'équipe qui a la main, `ROUE_STOP`, ou durée
-  maximale `SPIN_MAX_MS`). Les écrans n'ont aucune horloge à synchroniser : ils animent à réception.
+  maximale `SPIN_MAX_MS` comptée après la montée). Les écrans n'ont aucune horloge à synchroniser : ils animent à réception.
+- **Montée** : `SPINNING` se déroule en deux temps, distingués par `ROUE_WHEEL.FULL_SPEED`. La montée dure
+  `SPIN_UP_MS` (2 tours) ; pendant ce temps, personne ne peut arrêter la roue (`ROUE_STOP` refusé `NOT_FULL_SPEED`,
+  appui ignoré). À la fin de la montée, `FULL_SPEED = true` : l'arrêt devient possible.
 
 ### Sous-phases (`ROUE_SUBPHASE`)
 
@@ -343,7 +346,7 @@ STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulem
 |---|---|---|
 | `""` | 0 | Hors tour (manche non démarrée ou `SOLVED`) |
 | `TURN` | 1 | Roue prête, en attente du lancer (ou, si plus aucune consonne, des boutons de fin) |
-| `SPINNING` | 2 | Roue qui tourne ; arrêt au buzz, à `ROUE_STOP` ou après `SPIN_MAX_MS` |
+| `SPINNING` | 2 | Roue qui tourne ; montée (`FULL_SPEED = false`, 2 tours) puis pleine vitesse (`FULL_SPEED = true`) ; arrêt au buzz, à `ROUE_STOP` ou après `SPIN_MAX_MS`, seulement en pleine vitesse |
 | `STOPPING` | 3 | Case tirée (`STOP = {TO, DURATION_MS}`), freinage ; effet appliqué à la fin du freinage |
 | `LETTER` | 4 | Attente d'une consonne (`ROUE_LETTER`) — l'équipe l'annonce à voix haute avant |
 | `LIT` | 5 | Consonne présente : ses cases sont éclairées (`*`), retournement à l'admin / l'animateur |
@@ -408,8 +411,11 @@ Kinds : `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | L
 | Depuis | Déclencheur | Effet |
 |---|---|---|
 | `START` | — | Plateau construit, cagnottes à 0, `ROUE_WHEEL` figé (copie de la configuration), main à la première équipe, `TURN` |
-| `TURN` | `ROUE_SPIN` (si consonnes restantes) | `SPINNING`, minuterie `SPIN_MAX_MS` armée |
-| `SPINNING` | Buzz de l'équipe qui a la main, `ROUE_STOP`, fin de `SPIN_MAX_MS` | Tirage uniforme d'une case, `STOPPING` |
+| `TURN` | `ROUE_SPIN` (si consonnes restantes) | `SPINNING`, `FULL_SPEED = false`, minuterie de montée `SPIN_UP_MS` armée (la durée maximale n'est pas encore armée) |
+| `SPINNING` (montée) | Fin de `SPIN_UP_MS` | `FULL_SPEED = true`, minuterie `SPIN_MAX_MS` armée à cet instant |
+| `SPINNING` (montée) | `ROUE_STOP` (admin ou animateur) | Refusé `NOT_FULL_SPEED`, état et minuterie de montée inchangés |
+| `SPINNING` (montée) | Appui `BUTTON` (joueur, buzzer, tablette) | Ignoré en silence |
+| `SPINNING` (pleine vitesse) | Buzz de l'équipe qui a la main, `ROUE_STOP`, fin de `SPIN_MAX_MS` | Tirage uniforme d'une case, `STOPPING`, `FULL_SPEED = false` |
 | `STOPPING` | Fin de `DURATION_MS` | Application de la case : valeur → `LETTER` ; Banqueroute → cagnotte à 0, `TURN_END` ; Tour perdu → `TURN_END` |
 | `LETTER` | `ROUE_LETTER` | Présente → `LIT` ; absente ou déjà proposée → `TURN_END` ; voyelle ou non-lettre → refus, reste en `LETTER` |
 | `LIT` | `ROUE_FLIP` | `REVEALING` ; événement `FLIP` avec `COUNT` |
@@ -425,9 +431,11 @@ Appuis ignorés sans effet ni diffusion : buzzer d'une autre équipe, appui hors
 
 ### Minuteries, pause et annulation
 
-- Trois minuteries serveur : durée maximale de rotation (`SPIN_MAX_MS`), freinage (`STOP.DURATION_MS`), retournement
-  (`COUNT × FLIP_INTERVAL_MS`). Chacune porte une génération ; une minuterie périmée ne fait rien.
-- `PAUSE` suspend les trois ; `CONTINUE` les reprend. Toute action `ROUE_*` est refusée en phase `PAUSED`.
+- Quatre minuteries serveur : montée (`SPIN_UP_MS`), durée maximale de rotation (`SPIN_MAX_MS`, armée seulement à la fin
+  de la montée, donc arrêt automatique à `SPIN_UP_MS + SPIN_MAX_MS` après le lancer), freinage (`STOP.DURATION_MS`),
+  retournement (`COUNT × FLIP_INTERVAL_MS`). Chacune porte une génération ; une minuterie périmée ne fait rien.
+- `PAUSE` suspend les quatre (une montée suspendue reprend pour sa durée restante, `FULL_SPEED` reste `false`) ;
+  `CONTINUE` les reprend. Toute action `ROUE_*` est refusée en phase `PAUSED`.
 - Toutes les minuteries sont annulées à l'arrêt de manche, à `ROUE_REVEAL` et à `NEW_GAME`.
 - Entracte : les actions `ROUE_*` sont refusées (comportement par défaut de la liste blanche d'entracte).
 
@@ -449,7 +457,7 @@ ROUE_TURN_GAIN           int            // gain du tour, pas encore ajouté à l
 ROUE_BOARD               RoueBoard      // { COLS: 14, ROWS: [...] } — "_" caché, "*" caché éclairé (sous-phase LIT)
 ROUE_LETTERS             []RoueLetter   // consonnes proposées (LETTER, TEAM, HIT)
 ROUE_CONSONANTS_LEFT     bool
-ROUE_WHEEL               RoueWheel      // LAYOUT, durées, SEGMENTS, CURRENT, STOP
+ROUE_WHEEL               RoueWheel      // LAYOUT, durées, SPIN_UP_MS, FULL_SPEED, SEGMENTS, CURRENT, STOP
 ROUE_LAST_EVENT          RoueEvent      // SEQ, KIND, TEAM, LETTER, COUNT, VALUE, GAIN
 ROUE_WINNER              string
 ROUE_AWARDS              map[string]int

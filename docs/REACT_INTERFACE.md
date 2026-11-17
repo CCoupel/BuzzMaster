@@ -1930,7 +1930,15 @@ Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-
 ### Composant `Wheel` — mouvement long (`web/src/components/wheel/`)
 
 - `Wheel.jsx` reçoit une prop `motion` : `null` (comportement v11.4.0 inchangé, RAFALE), `spin` (défilement continu)
-  ou `land` (freinage jusqu'à la case cible, au moins un tour complet).
+  ou `land` (freinage jusqu'à la case cible).
+- `spin` avec `accelTurns` (Roue de la Fortune : 2) : **montée** depuis l'arrêt, à accélération constante, jusqu'à la vitesse
+  de croisière, atteinte après exactement `accelTurns` tours (durée `2 × accelTurns × periodMs`), puis croisière. Sans
+  `accelTurns`, pas de montée : vitesse de croisière dès le départ. `cruise: true` (`FULL_SPEED` du serveur) passe
+  aussitôt à la croisière depuis la position courante, sans saut ; il ne relance jamais la montée. Un montage direct en
+  `spin` ne joue pas la montée.
+- `land` avec `periodMs` (Roue de la Fortune) : freinage à vitesse continue, qui part toujours de la croisière (aucun
+  freinage depuis la montée). `minTurns` est ignoré dans ce mode ; sans `periodMs`, l'ancien profil (au moins
+  `minTurns` tours, ease-out cubique) reste en vigueur.
 - Le mouvement écrit directement `transform` dans le DOM, image par image : pas de `setState` par image. La position
   est normalisée dans `[0, n)` à chaque image et à l'arrêt ; un passage `spin` → `land` repart de la position affichée
   (pas de saut).
@@ -1944,10 +1952,10 @@ Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-
 
 | Fichier | Rôle |
 |---|---|
-| `FortuneWheel.jsx` | Adaptateur : segments de la roue (`buildFortuneSegments`), mouvement `spin` / `land` (`fortuneMotion`) selon `ROUE_SUBPHASE` ; barre de durée maximale décomptée localement (intervalle 100 ms) pendant `SPINNING` |
+| `FortuneWheel.jsx` | Adaptateur : segments de la roue (`buildFortuneSegments`), mouvement `spin` / `land` (`fortuneMotion`) selon `ROUE_SUBPHASE` ; `spin` = `{ accelTurns: SPIN_UP_MS / (2 × SPIN_PERIOD_MS), cruise: FULL_SPEED }` ; barre de durée maximale décomptée localement (intervalle 100 ms) depuis `FULL_SPEED = true`, pas pendant la montée |
 | `RoueBoard.jsx` | Plateau de l'**éditeur** (aperçu de la phrase, sans état de jeu) |
 | `RoueGameBoard.jsx` | Plateau de **jeu** (TV, tablette, admin, animateur), distinct de `RoueBoard` |
-| `RoueTv.jsx` | Écran TV ROUE : équipes en haut, plateau plein écran, roue permanente (bandeau ou arc selon `ROUE_WHEEL.LAYOUT`) |
+| `RoueTv.jsx` | Écran TV ROUE : équipes en haut, plateau plein écran, roue permanente (bandeau ou arc selon `ROUE_WHEEL.LAYOUT`). Rend aussi la zone roue de la **tablette joueur** (`.roue-vp-zone`) : la roue y remplace le bouton STOP (voir Règles d'interface) |
 | `RouePanel.jsx` | Panneau admin de la manche : choix des équipes (`ROUE_SET_TEAMS`, même emplacement que RAFALE), bandeau des 7 étapes, commandes de l'étape courante, « Passer la main », « Dévoiler la phrase » (confirmation en deux clics, sans `window.confirm`). Le START reste celui de `GamePage` |
 | `RoueSteps.jsx` | Bandeau des 7 étapes |
 | `RoueControls.jsx` | Boutons de l'étape courante, clavier de consonnes, boutons « Tour suivant » / « Équipe suivante », message de refus `ROUE_ERROR`, décompte local |
@@ -1966,6 +1974,17 @@ Règles d'interface :
   La phrase ne passe jamais par `question`.
 - Tablette : l'appui ROUE envoie `BUTTON` directement, sans `useAckedSend` (le serveur ne consigne pas d'ACK pour
   l'appui ROUE).
+- Tablette joueur, zone roue : la roue est affichée dans toutes les sous-phases (y compris `SOLVED`), à la place du
+  bouton STOP. Elle n'est tapable (`button`, « Arrêter la roue ») que pour l'équipe qui a la main, en `SPINNING`, à
+  `FULL_SPEED = true`. Message « 👆 Touchez la roue pour l'arrêter » ; pour l'autre équipe, l'annonce habituelle
+  (« Les <équipe> vont arrêter la roue »).
+- Pendant la montée (`FULL_SPEED = false`) : pas de cadre ni de « Touchez la roue » sur la tablette ; le message
+  « La roue prend de la vitesse… » s'affiche (`roueAnnouncement`, `roueState.js`). Sur le panneau admin (`RouePanel`) et
+  la tablette animateur (`AnimRoue`), « Forcer l'arrêt » est grisé tant que `FULL_SPEED` est `false` ; le libellé
+  `NOT_FULL_SPEED` (« La roue prend de la vitesse : attendez la pleine vitesse pour l'arrêter ») couvre la course entre
+  l'appui et la réception.
+- L'indice (catégorie et `ROUE_PRESENTATION`, jamais la phrase) est sur sa propre ligne, au-dessus du plateau, sur la
+  tablette joueur (2 lignes au plus).
 
 ### Branchements
 

@@ -712,7 +712,7 @@ Contrat : `contracts/roue.md` §8 et §9. Les actions sont dans la liste blanche
 |---|---|---|---|
 | `ROUE_SET_TEAMS` | `{ "TEAMS": string[] }` | `PREPARE`, `READY` ; aucun contrôle du nombre (existence et doublon seulement ; liste vide = effacement). Comptage `SOLO` : 1 équipe exactement, autres modes : 2 au moins, appliqué au passage `PREPARE`→`READY` et `FORCE_READY` | admin |
 | `ROUE_SPIN` | `{}` | `STARTED` + `TURN` + consonnes restantes | admin, anim |
-| `ROUE_STOP` | `{}` | `STARTED` + `SPINNING` (« Forcer l'arrêt ») | admin, anim |
+| `ROUE_STOP` | `{}` | `STARTED` + `SPINNING` (« Forcer l'arrêt ») **et `ROUE_WHEEL.FULL_SPEED = true`** ; pendant la montée : `ROUE_ERROR` `NOT_FULL_SPEED`, admin comme animateur | admin, anim |
 | `ROUE_LETTER` | `{ "LETTER": "T" }` | `STARTED` + `LETTER` | admin, anim |
 | `ROUE_FLIP` | `{}` | `STARTED` + `LIT` (« Retourner les cases ») | admin, anim |
 | `ROUE_ANSWER` | `{}` | `STARTED` + `ANSWER` ; aussi `TURN` sans consonne restante (« Réponse validée ») | admin, anim |
@@ -725,6 +725,9 @@ Contrat : `contracts/roue.md` §8 et §9. Les actions sont dans la liste blanche
   `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT`). Jamais `ROUE_SET_TEAMS`, `ROUE_PASS` ni `ROUE_REVEAL`.
 - Admin et animateur peuvent commander en même temps : la première action valable pour la sous-phase courante
   s'applique, la suivante est refusée (`WRONG_SUBPHASE`), sans double application.
+- Montée (`ROUE_WHEEL.FULL_SPEED = false`, `SPIN_UP_MS` = 2 tours) : personne ne peut arrêter la roue, pas même l'admin.
+  Un appui `BUTTON` pendant la montée est ignoré en silence (aucun effet, aucune diffusion, aucune erreur) ; `ROUE_STOP`
+  de l'admin ou de l'animateur est refusé avec `ROUE_ERROR` `NOT_FULL_SPEED` (état et minuterie de montée inchangés).
 - Arrêt par les joueurs : action `BUTTON` existante (buzzer physique, tablette, simulation admin). Une tablette ou un
   buzzer de l'équipe qui a la main arrête la roue pendant `SPINNING` ; les autres appuis sont ignorés sans diffusion.
   Aucun changement de protocole BuzzClick.
@@ -743,7 +746,8 @@ Exemple (admin, étape 4) :
   { "ACTION": "ROUE_ERROR", "MSG": { "CODE": "NOT_A_LETTER", "MESSAGE": "…" } }
   ```
   `CODE` ∈ `VOWEL_NOT_AVAILABLE` (voyelle, non disponible en v12.0) | `NOT_A_LETTER` | `WRONG_SUBPHASE` |
-  `NOT_ALLOWED` | `INVALID_TEAMS` (équipe inconnue ou en double dans `ROUE_SET_TEAMS` ; jamais un nombre d'équipes).
+  `NOT_ALLOWED` | `INVALID_TEAMS` (équipe inconnue ou en double dans `ROUE_SET_TEAMS` ; jamais un nombre d'équipes) |
+  `NOT_FULL_SPEED` (`ROUE_STOP` pendant la montée de la roue, admin ou animateur).
 
 ### Confidentialité de la phrase
 

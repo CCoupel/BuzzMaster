@@ -1282,6 +1282,13 @@ La roue est **générée** à partir de 4 paramètres, dans `/admin/settings` (c
 - « Roue par défaut » rétablit 1000 / 50 / 2 / 1 (22 cases).
 - Une modification ne touche pas une manche en cours : la roue est figée au lancement de la manche.
 
+**Durées de la roue** (carte « Roue », en secondes) : durée d'un tour de roue (1 à 6 s), durée maximale de rotation (3 à
+30 s), durée du freinage (1,5 à 8 s).
+
+- **Règle de réglage** : la durée du freinage doit être au moins égale à **la durée d'un tour + 250 ms**, pour un freinage
+  sans à-coup. Avec le défaut (tour de 2,5 s, freinage de 4 s), la règle est respectée. En deçà, la roue peut ne pas
+  trouver de freinage continu : son arrêt devient moins régulier.
+
 ### Conduire une manche
 
 **Côté admin** (`/admin`, panneau de la manche) :
@@ -1289,10 +1296,12 @@ La roue est **générée** à partir de 4 paramètres, dans `/admin/settings` (c
 1. Choisir les équipes participantes (`SOLO` : une seule équipe ; les autres modes : deux au moins), puis **Démarrer**.
    Le nombre n'est vérifié qu'au passage en READY : pendant la sélection, toute combinaison d'équipes existantes est acceptée, et la manche ne peut démarrer qu'avec une sélection conforme au mode.
    Si la sélection ne convient pas, le motif d'attente affiché en `PREPARE` le dit : en `SOLO`, « sélectionnez une seule équipe » quand plus d'une équipe est cochée, « sélectionnez une équipe » sinon ; dans les autres modes, « sélectionnez au moins deux équipes participantes ». Une équipe inconnue ou cochée deux fois est refusée avec « Équipe inconnue ou en double ».
-2. **Lancer la roue** (étape 1). La roue tourne sur la TV. Elle s'arrête :
-   - au **buzz** de l'équipe qui a la main (buzzer ou tablette) ;
-   - sur **Forcer l'arrêt** ;
-   - ou d'elle-même à la durée maximale de rotation.
+2. **Lancer la roue** (étape 1). La roue tourne sur la TV et sur la tablette joueur. Elle accélère pendant **2 tours** :
+   pendant cette montée, **personne ne peut l'arrêter**, ni l'équipe qui a la main, ni l'admin (« Forcer l'arrêt » est grisé),
+   ni l'animateur. Un appui pendant la montée est ignoré. La roue s'arrête ensuite :
+   - au **buzz** de l'équipe qui a la main (buzzer ou tablette), une fois la pleine vitesse atteinte ;
+   - sur **Forcer l'arrêt** (à partir de la pleine vitesse) ;
+   - ou d'elle-même à la durée maximale de rotation, **comptée après la montée**.
    Le tirage est fait par le serveur, au moment de l'arrêt demandé.
 3. La case tirée s'affiche :
    - **Valeur** : l'équipe annonce une consonne à voix haute, puis l'admin la saisit (étape 4). Si elle est présente,
@@ -1327,8 +1336,9 @@ réponse validée, tour suivant, équipe suivante). Il ne peut pas choisir les �
 phrase : ces actions restent à l'admin. Si l'admin et l'animateur agissent en même temps, la première action valable
 s'applique et la seconde est refusée sans effet.
 
-**Côté joueurs** : sur la TV, la roue reste affichée pendant toute la manche. Sur une tablette, un appui de l'équipe qui
-a la main arrête la roue. Les autres appuis sont ignorés.
+**Côté joueurs** : sur la TV, la roue reste affichée pendant toute la manche. Sur une tablette, la roue remplace le bouton STOP et
+l'indice s'affiche sur sa propre ligne. Un appui de l'équipe qui a la main arrête la roue, une fois la pleine vitesse
+atteinte (pendant la montée, la roue n'est pas tapable). Les autres appuis sont ignorés.
 
 ### Points d'attention
 
