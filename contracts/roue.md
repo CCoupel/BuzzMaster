@@ -274,7 +274,7 @@ reste toujours acquis à la cagnotte, quel que soit le bouton choisi.
 
 | Action | Payload | Phases / sous-phases acceptées |
 |---|---|---|
-| `ROUE_SET_TEAMS` | `{ "TEAMS": string[] }` | `PREPARE`, `READY` (patron `RAFALE_SET_TEAMS`) ; `SOLO` : exactement 1 équipe ; autres modes : 2 au moins |
+| `ROUE_SET_TEAMS` | `{ "TEAMS": string[] }` | `PREPARE`, `READY` (patron `RAFALE_SET_TEAMS`) ; **aucun contrôle du nombre d'équipes** — voir ci-dessous |
 | `ROUE_SPIN` | `{}` | `STARTED` + `TURN` + `ROUE_CONSONANTS_LEFT` |
 | `ROUE_STOP` | `{}` | `STARTED` + `SPINNING` (« Forcer l'arrêt ») |
 | `ROUE_LETTER` | `{ "LETTER": "T" }` | `STARTED` + `LETTER` |
@@ -283,6 +283,18 @@ reste toujours acquis à la cagnotte, quel que soit le bouton choisi.
 | `ROUE_NEXT` | `{ "HAND": "SAME" \| "NEXT" }` | `STARTED` + `TURN_END` ou `ANSWER` ; aussi `TURN` quand `!ROUE_CONSONANTS_LEFT` — `SAME` = « Tour suivant », `NEXT` = « Équipe suivante » (refusé en `SOLO`) |
 | `ROUE_PASS` | `{}` | `STARTED` + `TURN`, hors `SOLO` |
 | `ROUE_REVEAL` | `{}` | `STARTED`, sous-phase ≠ `SOLVED` |
+
+**`ROUE_SET_TEAMS`** (décision utilisateur du 2026-11-17, après la QUALIF 12.0.0.1 — aligné sur RAFALE) :
+- seuls contrôles : chaque équipe de `TEAMS` **existe**, et **aucun doublon** ; sinon refus `INVALID_TEAMS`, sélection
+  inchangée ;
+- **le nombre d'équipes n'est pas contrôlé** : toute liste valable est enregistrée telle quelle dans `ROUE_TEAMS`
+  (ordre = ordre de rotation), quel que soit `ROUE_MODE` — y compris 1 équipe hors `SOLO`, ou plusieurs en `SOLO` ;
+  l'admin peut ainsi composer la sélection équipe par équipe ;
+- **liste vide = effacement** de la sélection (`ROUE_TEAMS = []`, plus d'équipe ayant la main) ;
+- le comptage (`SOLO` : exactement 1 équipe ; autres modes : 2 au moins) n'est appliqué **qu'au passage
+  `PREPARE` → `READY` et à `FORCE_READY`** (garde `participantsConform`, §13 point 4). Après chaque `ROUE_SET_TEAMS`
+  accepté, la phase est réévaluée : une sélection conforme permet `READY`, une sélection non conforme laisse — ou
+  ramène — la manche en `PREPARE`. Une manche ne démarre donc jamais avec un nombre d'équipes non conforme.
 
 L'arrêt par les joueurs passe par l'action `BUTTON` existante (buzzer physique, tablette, simulation admin) —
 aucune action nouvelle côté buzzer, **aucun changement de protocole BuzzClick**.
@@ -304,6 +316,7 @@ sous-phase courante et refuse la suivante (`WRONG_SUBPHASE`), sans effet ni doub
 - `UPDATE` (`GameState`) après chaque transition — action existante.
 - `ROUE_ERROR` à l'émetteur seul : `{ "CODE": string, "MESSAGE": string }`, `CODE` ∈
   `VOWEL_NOT_AVAILABLE | NOT_A_LETTER | WRONG_SUBPHASE | NOT_ALLOWED | INVALID_TEAMS`.
+  `INVALID_TEAMS` = équipe inconnue ou en double dans `ROUE_SET_TEAMS` — jamais un nombre d'équipes (§8.1).
 
 ## 9. Confidentialité de la phrase — règle non négociable
 
@@ -479,7 +492,9 @@ maximum n'est **pas** une erreur : il est corrigé (`step_adjusted_from`).
 3. Logique de manche dans un fichier dédié `internal/game/roue.go` (pas dans `engine.go`) : départ, lancer, arrêt
    (trois déclencheurs), minuteries (durée maximale, freinage, retournement — annulation et pause),
    lettre, réponse, fin de tour, passe, dévoilement, crédit.
-4. Garde de départ (`participantsConform`) : `ROUE_TEAMS` conforme au mode, phrase non vide.
+4. Garde de départ (`participantsConform`, `PREPARE` → `READY` et `FORCE_READY`) : `ROUE_TEAMS` conforme au mode
+   (`SOLO` : exactement 1 équipe ; autres modes : 2 au moins), phrase non vide. **Seul endroit** où le nombre
+   d'équipes est contrôlé — `ROUE_SET_TEAMS` ne le contrôle pas (§8.1).
 5. `ProcessButtonPress` : cas `ROUE` (équipe qui a la main + `SPINNING`, sinon ignoré).
 6. Renommage / purge d'équipe : `ROUE_TEAMS`, `ROUE_TEAM_BANK`, `ROUE_CURRENT_TEAM`, `ROUE_NEXT_TEAM`,
    `ROUE_AWARDS`, `ROUE_WINNER`, `ROUE_LETTERS[].TEAM`.
