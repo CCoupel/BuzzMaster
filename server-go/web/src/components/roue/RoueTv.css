@@ -24,20 +24,45 @@
 .roue-wheel-strip .wheel-strip { --cell-w: 10vw; }
 .roue-wheel-strip .wheel-cell { font-size: 5.4vh; }
 
-/* Tablette (M5) */
+/* Tablette (M5 révisée) : la roue remplace le bouton d'arrêt. Habillage de FortuneWheel seulement (géométrie de Wheel intacte). */
 .roue-vp { position: absolute; inset: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; overflow: hidden; color: #e5e7eb; }
-.roue-vp-top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.8rem; min-width: 0; }
+.roue-vp-top { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; min-width: 0; }
 .roue-vp-me { border-radius: 999px; padding: 0.15rem 0.7rem; font-weight: 800; color: #fff; white-space: nowrap; }
-.roue-vp-cat { background: rgba(255, 255, 255, 0.14); border-radius: 999px; padding: 0.15rem 0.7rem; font-weight: 800; text-transform: uppercase; white-space: nowrap; }
-.roue-vp-pres { font-size: 0.9rem; font-weight: 700; color: #fde68a; flex: 1 1 8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .roue-vp-bank { font-weight: 800; white-space: nowrap; margin-left: auto; }
 .roue-vp-bank small { color: #9ca3af; font-weight: 500; }
+/* Indice (catégorie + présentation) : sa propre ligne, comme sur la TV, 2 lignes au plus, jamais tronqué par « … » */
+.roue-vp-hint { display: flex; align-items: center; gap: 0.5rem; min-width: 0; flex: 0 0 auto; }
+.roue-vp-cat { background: rgba(255, 255, 255, 0.14); border-radius: 999px; padding: 0.15rem 0.7rem; font-size: 0.74rem; font-weight: 800; text-transform: uppercase; white-space: nowrap; flex: 0 0 auto; }
+.roue-vp-pres { font-size: 1.05rem; font-weight: 800; color: #fde68a; flex: 1; min-width: 0; line-height: 1.15; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (orientation: portrait) { .roue-vp-hint { flex-direction: column; align-items: flex-start; gap: 0.3rem; } .roue-vp-pres { flex: 0 0 auto; font-size: 1rem; } }
+.roue-vp-info { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
 .roue-vp-msg { text-align: center; font-size: 0.95rem; font-weight: 800; min-height: 1.4rem; }
-.roue-vp-win { text-align: center; font-size: 1.15rem; font-weight: 900; color: #4ade80; flex: 1; display: flex; align-items: center; justify-content: center; }
-.roue-vp-stop { flex: 1; min-height: 0; border-radius: 1rem; border: 0; font: inherit; font-weight: 900; font-size: 1.6rem; color: #fff; box-shadow: 0 0.4rem 0 rgba(0, 0, 0, 0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; cursor: pointer; }
-.roue-vp-stop small { font-size: 0.78rem; font-weight: 600; opacity: 0.95; }
-.roue-vp-stop.off { background: #1f2937; color: #6b7280; box-shadow: none; font-size: 0.9rem; font-weight: 700; cursor: default; }
+.roue-vp-win { text-align: center; font-size: 1.15rem; font-weight: 900; color: #4ade80; min-height: 1.4rem; }
 .roue-vp .roue-letters { height: auto; line-height: 1.6; font-size: 0.78rem; }
+@media (orientation: landscape) {
+  .roue-vp-info { flex-direction: row; align-items: center; justify-content: space-between; gap: 1rem; }
+  .roue-vp-info .roue-vp-msg, .roue-vp-info .roue-vp-win { text-align: left; white-space: nowrap; }
+  .roue-vp-info .roue-letters { white-space: nowrap; }
+}
+/* Zone de la roue : occupe la place de l'ancien bouton ; toute la zone est la cible du doigt quand elle est tapable */
+.roue-vp-zone { flex: 1 1 0; min-height: 0; position: relative; overflow: hidden; border-radius: 1rem; border: 3px solid rgba(255, 255, 255, 0.15); background: rgba(0, 0, 0, 0.35); padding: 0; font: inherit; color: inherit; display: flex; flex-direction: column; justify-content: center; width: 100%; box-sizing: border-box; container-type: size; --wheel-accent: var(--roue-accent); }
+.roue-vp-zone .fortune-wheel { flex: 1 1 auto; min-height: 0; }
+.roue-vp-zone.tap { border-color: var(--roue-accent); cursor: pointer; animation: roue-vp-ring 1s ease-in-out infinite alternate; }
+.roue-vp-zone.tap:active { transform: scale(0.985); }
+@keyframes roue-vp-ring { from { box-shadow: inset 0 0 0 0 var(--roue-accent); } to { box-shadow: inset 0 0 0 5px var(--roue-accent), inset 0 0 26px var(--roue-accent); } }
+.roue-vp-zone .fortune-wheel-timer { height: 6px; top: auto; bottom: 0; left: 0; right: 0; border-radius: 0; background: transparent; z-index: 5; }
+.roue-vp-glyph { display: none; position: absolute; left: 0; right: 0; bottom: 6%; text-align: center; font-size: 1rem; font-weight: 800; z-index: 4; pointer-events: none; }
+/* Bandeau : cases dimensionnées sur la zone (paysage : toute la hauteur ; portrait : bandeau de 120 px centré) */
+.roue-vp-zone .wheel-strip { --cell-w: clamp(52px, 16cqmin, 96px); }
+.roue-vp-zone .wheel-cell { font-size: clamp(16px, 9cqmin, 36px); }
+.roue-vp-zone .wheel-cell .wheel-icon { font-size: clamp(14px, 6cqmin, 24px); }
+.roue-vp-zone .wheel-cell .wheel-lab.multi { font-size: clamp(8px, 3.4cqmin, 11px); }
+/* Arc : la partie haute du disque émerge de la zone */
+.roue-vp-zone .wheel-arc .wheel-svg { width: min(98cqw, 2.6 * 100cqh); height: min(98cqw, 2.6 * 100cqh); }
+@media (orientation: portrait) {
+  .roue-vp-strip .roue-vp-zone .fortune-wheel { flex: 0 0 120px; height: 120px; border-top: 2px solid rgba(255, 255, 255, 0.15); border-bottom: 2px solid rgba(255, 255, 255, 0.15); }
+  .roue-vp-zone.tap .roue-vp-glyph { display: block; }
+}
 .game-display:has(.roue-tv), .game-display:has(.roue-vp) { padding: 0; }
 .roue-tv { flex: 1 1 auto; }
 .roue-vp { z-index: 2; }

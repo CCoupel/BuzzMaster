@@ -3,8 +3,9 @@
  *
  * TV : équipes en haut avec leur cagnotte, catégorie + présentation, plateau plein écran, annonce, lettres
  * proposées (selon `ROUE_SHOW_LETTERS`), roue toujours affichée (bandeau ou arc selon la question).
- * Tablette (`isVPlayer`) : plateau pleine largeur et bouton STOP pour l'équipe qui a la main ; BUTTON est envoyé
- * par `onStop` (le serveur ignore tout appui hors SPINNING ou d'une autre équipe).
+ * Tablette (`isVPlayer`) : plateau pleine largeur, indice sur sa ligne, et la roue (mêmes props que la TV) à la place de l'ancien
+ * bouton STOP : toute la zone est le bouton d'arrêt pour l'équipe qui a la main en SPINNING ; BUTTON est envoyé par `onStop`
+ * (le serveur ignore tout appui hors SPINNING ou d'une autre équipe).
  * Aucune phrase en entrée : seulement `ROUE_BOARD` (jamais une lettre non révélée, contrat §9).
  */
 import { useRef } from 'react'
@@ -52,32 +53,42 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
     const myBank = bank[teamName]
     const canStop = mine && sub === 'SPINNING' && typeof onStop === 'function'
     const aw = solved && gs.ROUE_WINNER ? gs.ROUE_AWARDS?.[teamName] : 0
+    // Zone de la roue (M5 révisée) : à la place de l'ancien bouton STOP, affichée dans toutes les sous-phases (SOLVED
+    // comprise) ; c'est un bouton seulement quand l'équipe a la main en SPINNING (le serveur reste seul juge de l'appui).
+    const wheelEl = <FortuneWheel wheel={wheel} subphase={sub} teamColor={gs.ROUE_CURRENT_TEAM_COLOR} />
     return (
-      <div className="roue-vp" data-testid="roue-vp" style={{ '--roue-accent': accent }}>
+      <div className={`roue-vp roue-vp-${layout}`} data-testid="roue-vp" style={{ '--roue-accent': accent }}>
         <div className="roue-vp-top">
           {teamName && <span className="roue-vp-me" style={{ background: colorOf(teamName) }}>{teamName}</span>}
-          {catMeta && <span className="roue-vp-cat">{catMeta.icon} {catMeta.label}</span>}
-          {q.ROUE_PRESENTATION && <span className="roue-vp-pres">{q.ROUE_PRESENTATION}</span>}
           {myBank !== undefined && <span className="roue-vp-bank">{fmtPts(myBank)} <small>cagnotte</small></span>}
         </div>
-        <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tablet" />
-        {solved ? (
-          <div className="roue-vp-win">
-            {gs.ROUE_WINNER === teamName ? `🎉 Votre équipe a trouvé la phrase${aw ? ` : +${fmtPts(aw)} points` : ''}`
-              : gs.ROUE_WINNER ? `Les ${gs.ROUE_WINNER} ont trouvé la phrase` : 'Phrase dévoilée'}
+        {(catMeta || q.ROUE_PRESENTATION) && (
+          <div className="roue-vp-hint">
+            {catMeta && <span className="roue-vp-cat">{catMeta.icon} {catMeta.label}</span>}
+            {q.ROUE_PRESENTATION && <span className="roue-vp-pres">{q.ROUE_PRESENTATION}</span>}
           </div>
+        )}
+        <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tablet" />
+        <div className="roue-vp-info">
+          {solved ? (
+            <div className="roue-vp-win">
+              {gs.ROUE_WINNER === teamName ? `🎉 Votre équipe a trouvé la phrase${aw ? ` : +${fmtPts(aw)} points` : ''}`
+                : gs.ROUE_WINNER ? `Les ${gs.ROUE_WINNER} ont trouvé la phrase` : 'Phrase dévoilée'}
+            </div>
+          ) : (
+            <div className="roue-vp-msg">
+              {canStop ? <span>👆 Touchez la roue pour l'arrêter</span> : <Announcement parts={roueAnnouncement(gs, { mine })} />}
+            </div>
+          )}
+          {!solved && showLetters && <Letters letters={gs.ROUE_LETTERS} />}
+        </div>
+        {canStop ? (
+          <button type="button" className="roue-vp-zone tap" aria-label="Arrêter la roue" onClick={onStop}>
+            {wheelEl}
+            <span className="roue-vp-glyph" aria-hidden="true">👆 Touchez la roue</span>
+          </button>
         ) : (
-          <>
-            <div className="roue-vp-msg"><Announcement parts={roueAnnouncement(gs, { mine })} /></div>
-            {showLetters && <Letters letters={gs.ROUE_LETTERS} />}
-            {canStop ? (
-              <button type="button" className="roue-vp-stop" style={{ background: accent }} onClick={onStop}>
-                STOP<small>appuyez pour arrêter la roue</small>
-              </button>
-            ) : (
-              <div className="roue-vp-stop off">{mine ? 'Bouton actif quand la roue tourne' : "Ce n'est pas votre tour"}</div>
-            )}
-          </>
+          <div className="roue-vp-zone">{wheelEl}</div>
         )}
       </div>
     )
