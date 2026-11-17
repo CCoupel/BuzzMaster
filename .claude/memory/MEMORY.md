@@ -3,7 +3,28 @@
 > Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
-## État courant (2026-11-12) — v11.8.0 en PROD
+## État courant (2026-11-17) — v12.0.0 en PROD
+
+- **PROD = v12.0.0** « Roue de la Fortune » livrée le 2026-11-17 : tag `v12.0.0`, main `7f09de4d` (bump `8dd4bfb9`, date du CHANGELOG), release https://github.com/CCoupel/BuzzMaster/releases/tag/v12.0.0, CI verte, govulncheck et npm audit propres. Milestone #21 clos (#144, #145 fermées), branche `milestone/v12.0.0` supprimée. CHANGELOG 12.0.0 final `cb234c78`, docs à jour `98b02865`, `f8490fdf`, `3177d63a`.
+- **Marketing** : site publié (gh-pages `5c6576ac`, carte Roue avec la capture réelle de la TV) ; notes de version `docs/releases/v12.0.0/` (`15af0564`) ; posts et newsletter en brouillon, à diffuser par l'utilisateur.
+- **Travail en cours** : aucun. Prochain milestone : v12.1 « Roue de la Fortune — Extensions » (#146 round bonus, #147 achat de voyelles, #148 round spécial), non démarré.
+- **Décisions produit de la session (Roue)** :
+  - équipes contrôlées au démarrage seulement (pas à chaque sélection) ;
+  - roue et indice affichés sur la tablette, la roue remplace le bouton STOP, tap pour arrêter ;
+  - montée en **1 tour** (`SPIN_UP_MS = 2 × période`) ;
+  - arrêt possible seulement à pleine vitesse, pour tous : buzzer et tablette ignorés en silence, admin et animateur refusés `NOT_FULL_SPEED` ;
+  - durée maximale comptée après la montée ;
+  - freinage sans saut, depuis la croisière ; règle « durée d'arrêt ≥ durée d'un tour + 250 ms » dans le guide seulement ;
+  - bouton « Tester » sur la carte Roue des réglages, qui anime les 2 aperçus existants ;
+  - écho d'état ciblé (#248) toléré pour la tablette.
+- **Leçons / points de contexte** :
+  - QUALIF en 5 cycles (12.0.0.1, .2, .8, .11) ; les règles de montée ont changé 3 fois, et chaque changement de contrat a imposé de reprendre code et tests ;
+  - un `<button>` / `<div>` qui change de type démonte la roue React (cause du freinage absent sur la tablette) ;
+  - le serveur web du launcher (127.0.0.1:9999) est tombé une fois : l'appariement par l'URL `pair` l'a rétabli ;
+  - économie de tokens : pas de cron d'avancement, rapports lus au verdict.
+- **Backlog à proposer** : `StartImmediate` sans garde `participantsConform` (tous types, chemin test-only), à fermer ou réserver aux tests.
+
+## État précédent (2026-11-12) — v11.8.0 en PROD (archivé)
 
 - **PROD = v11.8.0** « Ambiance : définir ses propres scènes » (éditeur d'effets + import/export) : bump `7d495d9b` (5 emplacements à 11.8.0), merge `main` `f681ed0b`, tag `v11.8.0`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.8.0 (4 assets, description = notes), `release.yml` run 43226962934 vert. Notes `docs/releases/v11.8.0/release-notes.md` (`6b6e4165`), merge final `4cf41a35`. Site gh-pages `c33232f8`. Milestone #46 clos 2/2. Branche courante `main`, branche milestone supprimée.
 - **Livré** : LOT-1 #305 (import multi-fichiers + conflit Remplacer / Garder les deux, télécharger, supprimer, revenir à l'origine, essai sur la salle avec choix de zone) ; LOT-2 #210 (éditeur pas à pas : grille à groupes réglables 6 par défaut / 12 max, dernière ligne `g*` ; variables en haut, « Avance régulière » / « Suite de groupes », expressions en `N` (division tronquée, rebouclage, suivre `gB: gA+1` / partir `gB: gA+1; +2`), 24 variables / 40 actions ; pinceaux avec info-bulles, roue chromatique maison, onglet Texte (commentaires conservés tant que la grille n'est pas modifiée) ; simulateur 1/3/6/12 + zones réelles pas à pas ; essai du brouillon par zone (`draft/try`) ; garde « modifications non enregistrées » (lien interne, Précédent, beforeunload)). QUALIF validées : 11.8.0.1 (LOT-1), 11.8.0.2 (LOT-1 + LOT-2).
@@ -31,7 +52,7 @@
 - **Issues créées** : **#306** (chargeur du dossier d'effets : mêmes refus que l'import — alias, ids réservés) ; **#307** (sauvegarde : case « Effets lumière » cochée par défaut, effets joints aux questions, restauration contrôlée ; niveau B choix global `lighting.effects/speeds` à trancher, jamais la clé du pont).
 - Point UX non bloquant : écran Groupes — lignes provisoires `cfg-` remplacées à l'arrivée de l'inventaire (clic perdu possible en théorie).
 - À remonter au template : Go 1.26.11 dans `env-template.yaml` (puis retirer l'étape projet de `.claude-launcher/env.yaml`) ; défauts des modèles de procédure (messages d'échec adressés à `"main"` au lieu de `"team-lead"`, suivi CI à viser `release.yml`, contrôle CHANGELOG cherchant `X.Y.Z.a`) ; `deploy.md` compagnon devrait écrire l'exception QUALIF `access.verified` failed limitée à `local-shell` / `port 9090` (rapport infra 2026-11-12).
-- Milestones ouverts : v12.0 / v12.1 Roue, v13.0 PICTIONARY, vX.0.x DNS, vx.x.x Scoring MEMORY ; hors milestone : #209 #259 #281 #296 #297 #298 #300 #301 #302 #303 #304 #306 #307.
+- Milestones ouverts : v12.1 Roue (Extensions), v13.0 PICTIONARY, vX.0.x DNS, vx.x.x Scoring MEMORY ; hors milestone : #209 #259 #281 #296 #297 #298 #300 #301 #302 #303 #304 #306 #307.
 - Site marketing : règle des badges « Nouveau » = majeure en cours + 2 dernières mineures, retrait à chaque republication (`.claude/agents/marketing-release.md`).
 - Stash : 18 entrées anciennes toujours non nettoyées.
 - Toujours valables : panneau milestone-panel (sélection PLANNING), liste « Nommage des Agents » du bloc template.
