@@ -1728,7 +1728,7 @@ se range dans `PRIVATE/<ENV>/` (Etape 10b) : la variable de `<env>.env` le desig
 
 ### Etape 9b : Chaine d'outils native (detection, sans question si tout est natif)
 
-Les tests doivent tourner avec les binaires de l'OS qui execute (`context/COMMON.md` 15.10) — sous WSL, un
+Les tests doivent tourner avec les binaires de l'OS qui execute (`context/TEST_PLAN.md` 15.10) — sous WSL, un
 `node`/`npm`/`go` Windows (`/mnt/c/...`, `.exe`) rend les suites un ordre de grandeur plus lentes :
 
 ```bash
@@ -1796,7 +1796,7 @@ lui-meme). Claude et Chrome ne voient pas forcement le projet au meme endroit : 
 le dit** (`CL_BROWSER_PATH_MAP`, reglage `browser_paths` de sa config) — normalement vers son **serveur web embarque**
 (`http://localhost:8081<chemin absolu>`, `os: url`), sinon vers une URL `file://` mappee. Sans launcher (ou launcher
 anterieur a v5.9.0), repli `file://` par `browser.path_map`. Regle, sources et conversion :
-`TEMPLATE_claude/commands/context/COMMON.md` 14.9 (fonction `browser_url`, appariement du navigateur).
+`TEMPLATE_claude/commands/context/MOCKUPS.md` 14.9 (fonction `browser_url`, appariement du navigateur).
 
 1. **`CL_BROWSER_PATH_MAP` fournie** (`launcher_browser_map` repond : environnement tmux de la session, sinon du
    processus — launcher a jour) → **aucune question**. Afficher la correspondance effective pour
@@ -1828,7 +1828,7 @@ anterieur a v5.9.0), repli `file://` par `browser.path_map`. Regle, sources et c
      Normaliser la reponse : OS deduit de la forme (`X:\…` ou `\\…` → `windows`, `/…` → `linux`), sans separateur final.
    - Ecriture dans `project-config.json` (section 1, `browser.path_map`).
 3. **Verification** (si Chrome est disponible) : creer `_work/tmp/browser-check.html` (« Correspondance OK »), l'ouvrir
-   avec `browser_url` (serveur web du launcher : apres l'appariement du navigateur, COMMON.md 14.9), lire la page (`get_page_text`) : texte attendu → OK ; sinon afficher l'URL essayee et, en repli
+   avec `browser_url` (serveur web du launcher : apres l'appariement du navigateur, MOCKUPS.md 14.9), lire la page (`get_page_text`) : texte attendu → OK ; sinon afficher l'URL essayee et, en repli
    (point 2), reposer la question (2 essais, puis enregistrer tel quel avec `⚠ correspondance non verifiee` au message
    de fin). 404 / page inaccessible du serveur web du launcher → corriger `browser_paths` du launcher (ou verifier
    que le navigateur apparie est bien celui du hub). URL `file://` refusee par l'extension → rappeler l'option « Autoriser l'accès aux URL de fichier » de
@@ -1978,7 +1978,7 @@ deplacement est fait a la Finalisation (sous-section « Elements prives »), apr
     "close_on": "ci"
   },
   "progress": {
-    "interval_min": 10
+    "interval_min": 20
   },
   "commands": {
     "env": "<ENV_CMD : prefixe shell de la chaine native, ex. export PATH=...>",
@@ -2044,17 +2044,17 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `commands.coverage` | Stack : `go test -cover ./...` / `npm run test -- --coverage` / `pytest --cov` |
 | `marketing.site` | Defaut `"auto"` : un site marketing est attendu (branche `gh-pages`, uniquement — `MARKETING/` en est le worktree git, jamais un dossier de la branche de code) ; s'il n'existe pas, l'agent marketing declenche une initialisation (questions de cadrage + maquette). `false` = ordre direct de ne pas avoir de site (le CDP dispatche `PREPARE ... — SANS SITE`) |
 | `issues.close_on` | Etape 7. `ci` (defaut ; absent = `ci`) : issue fermee sur CI verte apres QA ; `validation` : issue laissee ouverte en `DONE` jusqu'a une validation utilisateur qui la couvre (GATE LOT explicite, sinon GATE 4) — `commands/context/GITHUB.md` §9.5 |
-| `progress.interval_min` | Defaut `10` (absent = `10`, aucune question, modifiable a la main ; projet deja initialise : rien a migrer). Cadence en minutes du point d'avancement periodique du teamleader (% et ETA par teammate actif) — `agents/cdp.md` « Point d'avancement periodique » |
-| `docs.mockup_dir` | Defaut `docs/mockup` (dossier des maquettes validees — voir `context/COMMON.md` §14) |
-| `browser.path_map` | Etape 9d. **Repli** quand Claude-Launcher ne fournit pas `CL_BROWSER_PATH_MAP` (projet lance sans launcher, ou launcher anterieur a v5.9.0, sans serveur web) : correspondance de chemins pour ouvrir un fichier du projet dans Chrome en `file://` — `project_root` (racine vue par Claude), `launcher_root` (meme racine vue par le poste qui execute Chrome), `launcher_os` (`windows` \| `linux`). Non pose si la variable est fournie. Absent = meme chemin (WSL : `wslpath -m`). Regle : `context/COMMON.md` 14.9 |
-| `commands.env` | Etape 9b. Prefixe shell evalue par tout agent avant ses commandes `commands.*` (chaine d'outils native de l'OS — `context/COMMON.md` 15.10). Ex. sous WSL : `export PATH=$HOME/.nvm/versions/node/v22.11.0/bin:/usr/local/go/bin:$PATH`. Vide si les outils du PATH sont deja natifs |
+| `progress.interval_min` | Defaut `20` (absent = `20`, aucune question, modifiable a la main ; projet deja initialise : rien a migrer). Cadence en minutes du point d'avancement periodique du teamleader (% et ETA par teammate actif) — `agents/cdp.md` « Point d'avancement periodique » |
+| `docs.mockup_dir` | Defaut `docs/mockup` (dossier des maquettes validees — voir `context/MOCKUPS.md` §14) |
+| `browser.path_map` | Etape 9d. **Repli** quand Claude-Launcher ne fournit pas `CL_BROWSER_PATH_MAP` (projet lance sans launcher, ou launcher anterieur a v5.9.0, sans serveur web) : correspondance de chemins pour ouvrir un fichier du projet dans Chrome en `file://` — `project_root` (racine vue par Claude), `launcher_root` (meme racine vue par le poste qui execute Chrome), `launcher_os` (`windows` \| `linux`). Non pose si la variable est fournie. Absent = meme chemin (WSL : `wslpath -m`). Regle : `context/MOCKUPS.md` 14.9 |
+| `commands.env` | Etape 9b. Prefixe shell evalue par tout agent avant ses commandes `commands.*` (chaine d'outils native de l'OS — `context/TEST_PLAN.md` 15.10). Ex. sous WSL : `export PATH=$HOME/.nvm/versions/node/v22.11.0/bin:/usr/local/go/bin:$PATH`. Vide si les outils du PATH sont deja natifs |
 | `commands.test_related` | Boucle DEV : tests lies aux fichiers source modifies, `{FILES}` = liste de fichiers. Stack : `npx vitest related --run {FILES}` / `npx jest --findRelatedTests {FILES}` — vide pour Go/pytest (les dev-* utilisent alors `commands.test_targeted` sur les paquets/dossiers touches) |
 | `commands.test_fast` | **Obsolete** (conserve s'il existe, plus utilise par les dev-*) : il relancait toute la suite hors tag `slow`. Remplace par `commands.test_related` / `commands.test_targeted` |
 | `commands.test_targeted` | Tests d'un sous-ensemble, `{TARGETS}` = fichiers ou dossiers (lots QA, paquets touches par un dev, tests du test-writer). Stack : `go test {TARGETS}` / `npx vitest run {TARGETS}` / `pytest {TARGETS}` |
 | `commands.smoke` | Optionnel : tests tagues `smoke` (verification post-deploy). Absent → `curl /health` |
-| `testing.components` | Composant → globs de sources (ex. `"http_server": ["server-go/internal/server/**"]`) — sert a selectionner les NR impactees (`context/COMMON.md` 15.3). Derive de l'arborescence detectee (Etape 0) ; a defaut, un composant par dossier de premier niveau de `src_dir` |
-| `testing.regression_at_qa` | Defaut `gated` (`gated` \| `parallel` \| `none`) — `context/COMMON.md` 15.3 |
-| `testing.full_regression_at` | Defaut `qualif` (`qualif` \| `build` \| `prod`) — `context/COMMON.md` 15.4 |
+| `testing.components` | Composant → globs de sources (ex. `"http_server": ["server-go/internal/server/**"]`) — sert a selectionner les NR impactees (`context/TEST_PLAN.md` 15.3). Derive de l'arborescence detectee (Etape 0) ; a defaut, un composant par dossier de premier niveau de `src_dir` |
+| `testing.regression_at_qa` | Defaut `gated` (`gated` \| `parallel` \| `none`) — `context/TEST_PLAN.md` 15.3 |
+| `testing.full_regression_at` | Defaut `qualif` (`qualif` \| `build` \| `prod`) — `context/TEST_PLAN.md` 15.4 |
 | `testing.coverage_min` | Defaut `70` (seuil minimal de couverture, en %) |
 | `milestone.defaults` | Intensite de depart d'un milestone selon son type de version (`patch` / `minor` / `major` → `leger` / `complet`). Defaut `patch: leger`, `minor` et `major: complet`. Le cadrage complet (options, team) est propose par le planner et valide au GATE 2 : `agents/context/MILESTONE_CADRAGE.md`. Absent = `complet` partout |
 | `testing.lot_max_tests` | Defaut `50` (nombre max de cas de test par lot ; QA execute et rapporte lot par lot) |
@@ -2133,7 +2133,7 @@ specification repond `BLOQUE` au demarrage). Le fichier est **tracke git**, jama
 (le compagnon `generic.md` sans nom reste, lui, un compagnon classique du template `generic.template.md`).
 Si l'instance justifie un autre modele ou effort que `generic.template.md` (`sonnet` / `medium`), ajouter en tete
 de la specification un frontmatter ne contenant que `model:` et/ou `effort:` (ex. `opus` pour un redacteur de
-documents longs) — resolu au spawn, voir `agents/context/TEAMMATES_PROTOCOL.md` section 7. Ce choix est
+documents longs) — resolu au spawn, voir `agents/context/MODEL_EFFORT.md` section 7. Ce choix est
 revu avec les autres agents a la section 2ter ci-dessous.
 
 Ajouter une ligne par instance dans la table `## Agents Disponibles` de `CLAUDE.md` :
@@ -2143,7 +2143,7 @@ Le CDP les connait via cette table et `agents.generic[]` (voir `agents/cdp.md`).
 ### 2ter. Adequation modele/effort des agents
 
 Une fois tous les agents connus (communs, de stack, instances `generic.<nom>`), verifier que leurs modele et effort
-resolus (compagnon > template, `agents/context/TEAMMATES_PROTOCOL.md` section 7) conviennent a **ce** projet.
+resolus (compagnon > template, `agents/context/MODEL_EFFORT.md` section 7) conviennent a **ce** projet.
 Claude confronte les reponses de l'init (`project-config.json`, `docs/CADRAGE.md` s'il existe) a la grille de la
 section 7.1 du meme fichier. Aucun agent n'est surcharge sans validation.
 
@@ -2153,7 +2153,7 @@ section 7.1 du meme fichier. Aucun agent n'est surcharge sans validation.
 Adequation modele/effort : 2 alertes (14 agents, defauts du template sinon)
   ↑ security       sonnet/high    → opus/high      paiements (PCI-DSS) — Etape 10
   ↑ dev-firmware   sonnet/medium  → sonnet/high    firmware temps reel — Etape 5
-  ↓ infra          opus/medium    → sonnet/medium  aucun deploiement distant — Etape 8
+  ↓ infra          sonnet/medium  → sonnet/low     aucun deploiement distant — Etape 8
   = surcharges projet conservees : teamleader (fable/high)
 ```
 
@@ -2580,7 +2580,7 @@ mkdir -p "$MOCKUP_DIR"
 [ -f "$MOCKUP_DIR/INDEX.md" ] || cat > "$MOCKUP_DIR/INDEX.md" <<'INDEX_EOF'
 # Index des maquettes
 
-> Tenu exclusivement par le CDP — convention : `context/COMMON.md` section 14.
+> Tenu exclusivement par le CDP — convention : `context/MOCKUPS.md` section 14.
 
 ## Actives
 | Composant | Feature | Fichier | Version | Relation |
@@ -2616,7 +2616,7 @@ mkdir -p tests
 > Tests de specification ecrits par le test-writer, ranges en lots `<famille>/<theme>/<lot>/` ; statuts tenus par le CDP.
 > Le chemin porte l'identite ; cet index ne porte que l'etat : une ligne par lot (chemin termine par `/`),
 > plus des lignes fichier pour les exceptions (quarantaine). Lot sans ligne = `feature`.
-> Convention : `context/COMMON.md` section 15. Statuts : `feature` | `regression` | `quarantaine`.
+> Convention : `context/TEST_PLAN.md` section 15. Statuts : `feature` | `regression` | `quarantaine`.
 > Tags : `smoke`, `critical`, `slow`.
 
 | Chemin | Niveau | Composant | Feature | Statut | Tags |
@@ -2702,7 +2702,7 @@ Afficher la liste (titres, labels) puis AskUserQuestion :
 gh label create "feature" --color "a2eeef" --description "Nouvelle fonctionnalite"       --force
 gh label create "roadmap" --color "fbca04" --description "Visible sur le site marketing" --force
 
-# Milestone — titre = version seule (context/COMMON.md §5.7 : le titre fixe X.Y.Z pour tout le cycle)
+# Milestone — titre = version seule (context/VERSIONING.md §5.7 : le titre fixe X.Y.Z pour tout le cycle)
 gh api "repos/$REPO/milestones" --method POST -f title="v0.1.0" -f description="Release v0.1.0 — socle du projet"
 
 # Issues — idempotent : un titre deja present dans le milestone (ouvert ou ferme) n'est pas recree
@@ -2736,7 +2736,7 @@ Les règles critiques du teamleader sont dans `CLAUDE.md` (bloc `TEAMLEADER_PROT
 
 Déployer `TEMPLATE_claude/settings.json` dans `.claude/settings.json` si absent, puis y écrire le **modèle et
 l'effort du teamleader** résolus depuis les frontmatters (`.claude/agents/teamleader.md` compagnon s'il en a un,
-sinon `.claude/agents/teamleader.template.md` — règle `agents/context/TEAMMATES_PROTOCOL.md` section 7). Les
+sinon `.claude/agents/teamleader.template.md` — règle `agents/context/MODEL_EFFORT.md` section 7). Les
 autres clés de `settings.json` ne sont jamais touchées ; `model` et `effortLevel` sont **dérivées** (toute édition
 manuelle est écrasée à la prochaine sync — la surcharge se fait dans le compagnon) :
 
@@ -3260,7 +3260,7 @@ La ligne `PRIVATE/` du `.gitignore` est ajoutee par la fusion de l'etape d6b —
 
 #### Etape d1i — Chaine d'outils native et tests cibles
 
-Un projet initialise avant la regle de duree des tests (`context/COMMON.md` 15.10) n'a ni `commands.env` ni
+Un projet initialise avant la regle de duree des tests (`context/TEST_PLAN.md` 15.10) n'a ni `commands.env` ni
 `commands.test_related`, et ses dev-* peuvent encore suivre `commands.test_fast` (suite complete hors `slow`).
 Lecture seule ici :
 
@@ -3326,6 +3326,24 @@ awk 'FNR==NR{s=s $0 "\n"; next}
      skip&&/^## /{skip=0} !skip' _work/tmp/confinement.md CLAUDE.md > CLAUDE.md.tmp \
   && mv CLAUDE.md.tmp CLAUDE.md && rm -f _work/tmp/confinement.md && echo "✓ CLAUDE.md — section Confinement mise a jour"
 ```
+
+#### Etape d1m — Economie de tokens (protocole allege)
+
+Un projet initialise avant l'allegement du protocole (DONE par exception, rapports en pyramide, point d'avancement
+passif) recoit les nouveaux templates par la synchronisation normale (d3/d5) — y compris les nouveaux contextes
+`SUBAGENTS_PROTOCOL`, `MODEL_EFFORT`, `DEPLOY_RELEASE`, `DEPLOY_MILESTONE`, `MARKETING_SITE`, `VERSIONING`, `MOCKUPS`,
+`TEST_PLAN`, `CDP_WORKFLOWS_PHASES` (registre `contexts`, deployes en `*.template.md` comme les autres) — et le bloc
+`TEAMLEADER_PROTOCOL` reduit par d6. Lecture seule ici :
+
+- `progress.interval_min` = `10` (ancien defaut ecrit a l'init) → au rapport d4 `[~] progress.interval_min 10 → 20
+  (point d'avancement passif)` ; a l'etape d5, question : Passer a 20 (Recommande) / Garder 10. Autre valeur : rien.
+- Compagnons `.claude/agents/*.md` et `.claude/**/context/*.md` qui prescrivent l'ancien protocole — `ACTIF` a la
+  reception d'une tache ou apres `/clear`, lecture systematique des rapports par le teamleader, sortie de tests en
+  verbeux (`-v`, `--verbose`), recopie du plan en texte, `AVANCEMENT ?` a tous les teammates → conflit avec le
+  template, arbitre a l'etape d5c comme les autres conflits.
+- Compagnon `infra.md` avec `model: opus` ecrit pour suivre l'ancien defaut (sans motif note) → au rapport d4
+  `[i] infra : model opus fixe par le compagnon — la bascule par mode (MODEL_EFFORT.md 7.2) ne s'applique pas` ; meme
+  chose pour un compagnon `implementation-planner.md` avec `model: fable`. Aucune modification sans accord (d6a).
 
 #### Etape d2 — Calculer les noms deployes attendus
 

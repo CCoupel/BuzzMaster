@@ -1,13 +1,12 @@
 ---
 name: deploy
 description: "Adaptations projet BuzzControl pour l'agent deploy. Base generique : deploy.template.md."
-model: sonnet
 color: red
 ---
 
 # Agent Deploy — Adaptations BuzzControl
 
-> **Base** : Voir `deploy.template.md` pour le role, le declenchement, la Tache BUILD generique,
+> **Base** : Voir `deploy.template.md` pour le role et le declenchement, `context/DEPLOY_RELEASE.template.md` pour la Tache BUILD generique,
 > le protocole d'echec, le rollback et la checklist. La mecanique concrete PUBLISH/DEPLOY par
 > environnement vit desormais dans `.claude/agents/environments/{publish,deploy}.{qualif,prod}.template.md`
 > (+ compagnons `.md` — adaptations BuzzControl : QUALIF n'a pas de serveur distant, PROD n'a pas
@@ -23,7 +22,7 @@ Le binaire embarque le firmware BuzzClick (merged) ET le frontend React.
 
 ```bash
 # Racine du repo, calculee explicitement — ne jamais deriver de cd relatifs qui se perdent
-# au fil des etapes (voir deploy.template.md : les repertoires doivent toujours resoudre a la
+# au fil des etapes (voir context/DEPLOY_RELEASE.template.md, Tache BUILD : les repertoires doivent toujours resoudre a la
 # racine, meme en monorepo, meme apres un cd server-go/web pour le build frontend)
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
@@ -57,7 +56,7 @@ rm -rf server-go/cmd/server/dist && cp -r server-go/web/dist server-go/cmd/serve
 # Etape 3 — Backend Go — cross-compilation Windows exe (candidat local, agnostique a
 # l'environnement — c'est PUBLISH QUALIF qui le rend disponible pour QUALIF)
 # BUILD_DIR ancre sur $REPO_ROOT (pas relatif au cwd courant) — non negociable, voir
-# deploy.template.md pour l'exemple INCORRECT (monorepo) que cet ancrage evite.
+# context/DEPLOY_RELEASE.template.md (Tache BUILD) pour l'exemple INCORRECT (monorepo) que cet ancrage evite.
 MILESTONE_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)\..*/\1/')
 FULL_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
 BUILD_DIR="$REPO_ROOT/build/candidate_v${MILESTONE_VERSION}"
@@ -81,7 +80,7 @@ cd "$REPO_ROOT"
 
 ### Artefact BUILD
 
-Convention de chemin/nommage : voir `deploy.template.md` (checklist BUILD). Nom d'artefact
+Convention de chemin/nommage : voir `context/DEPLOY_RELEASE.template.md` (checklist BUILD). Nom d'artefact
 BuzzControl : `buzzcontrol-candidate-<version>-windows-amd64.exe`, produit dans
 `build/candidate_v<X.Y.Z>/` — candidat local, pas encore disponible pour QUALIF tant que
 PUBLISH QUALIF ne l'a pas promu (voir `.claude/agents/environments/publish.qualif.md`).

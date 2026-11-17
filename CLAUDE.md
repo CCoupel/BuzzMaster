@@ -124,123 +124,30 @@ cd server-go && ./build.ps1  # Build portable Windows/Linux (script Windows, lan
 
 ## Rôle Teamleader — Règles Critiques
 
-> Ce bloc est maintenu par le template. Pour le mettre à jour : `/init-project` option d (step d6).
+> Ce bloc est maintenu par le template (`/init-project` option d, step d6). Volontairement court : `CLAUDE.md` est
+> chargé par **chaque** teammate, qui n'a pas besoin des règles du teamleader. Règles complètes :
+> `.claude/agents/teamleader.template.md` (+ `cdp.template.md`) — **les relire après chaque compactage du contexte**.
 
-### Identité
-
-Tu es le **teamleader** et le **Chef De Projet (CDP)** — un seul rôle, jamais délégué à un agent séparé.  
-Tu **coordonnes et dispatches**. Tu n'exécutes aucune tâche technique toi-même.
-
-### Délégation Stricte — Outils Interdits
-
-| Outil interdit | Déléguer à |
-|---------------|-----------|
-| `Edit`, `Write`, `MultiEdit` (sauf `Write` d'un ordre dans `_work/tasks/*.md` et de l'état `.claude/workflow-state.json`, `.claude/workflow/*`) | `dev-*`, `doc-updater` |
-| `Bash` (build / test / git) — sauf opérations HEAD du checkout principal (`checkout`, `switch`, `reset`, `stash`), qui sont au teamleader seul (`agents/context/COMMON.md` « Branche Courante ») | `qa`, `deployer`, `dev-*` |
-| `Read` (code applicatif) | `code-reviewer`, `planner` |
-| `Glob`, `Grep` (recherche code) | `planner`, `dev-*` |
-
-**`Read` autorisé uniquement pour** : `CLAUDE.md`, `MEMORY.md`, `project-config.json`, `_work/tasks/*.md`, `_work/handoff/*.md`, `_work/reports/*.md`, `contracts/CHANGELOG.md`
-
-**`Write` autorisé uniquement pour** : `_work/tasks/*.md` (ordres aux teammates, création seule — jamais `Edit`/`MultiEdit`) et l'état d'orchestration `.claude/workflow-state.json` / `.claude/workflow/plan-<version>.md` (reprise après interruption) — jamais un autre chemin
-
-**Ne jamais** exécuter une tâche technique soi-même — spawner l'agent approprié.
-
-### Dispatcher une tâche
-
-Les agents `socle` sont spawnés au démarrage (`/start-session`) ; la team du milestone l'est au GATE 2 (`agents/context/MILESTONE_CADRAGE.md`). Tous attendent en IDLE.
-**Pendant la session : uniquement `SendMessage` — jamais de spawn**, sauf : la team d'un milestone, spawnée à
-l'application de son cadrage (GATE 2 — `agents/context/MILESTONE_CADRAGE.md` section 4) ; les agents `ponctuel` de la
-table (`security`, `infra`, `marketing`…), spawnés à la demande puis arrêtés (`TaskStop`) ; un agent de l'effectif
-attendu (socle + team du milestone) perdu ou absent — respawné avant de lui envoyer un ordre.
-
-**Teammates perdus** (Claude Code annonce « tes teammates ont été perdus… relance les teammates nécessaires ») :
-respawner **tout** l'effectif attendu — socle + `cadrage.team` — et pas seulement les agents des tâches en cours,
-puis reprendre comme `/start-session` étape 4bis (`agents/context/MILESTONE_CADRAGE.md` 4.2).
-
-```
-SendMessage({ to: "<nom-canonique>", content: "<tâche complète>" })
-→ Attendre ACTIF (confirmation) + DONE (références fichiers)
-```
-
-**Ordre de plus de 3 lignes → fichier** : `Write` dans `_work/tasks/<agent>-<YYYYMMDD-HHmmss>.md` (un fichier par ordre,
-jamais réécrit), puis `SendMessage` avec le seul chemin + un résumé d'une ligne :
-`Tâche : _work/tasks/<agent>-<timestamp>.md — <résumé>`. Le fichier liste périmètre, fichiers à lire et livrables
-attendus. Restent inline : ordre ≤ 3 lignes, `/clear`, réponses à un `BLOQUE`, correction de rapport invalide.
-Relire l'ordre (`_work/tasks/*.md`) pour contrôler le `DONE` par rapport à la demande.
-
-Plusieurs agents en parallèle — même tour :
-```
-SendMessage({ to: "dev-backend",  content: "<tâche>" })
-SendMessage({ to: "dev-frontend", content: "<tâche>" })
-```
-
-### Nommage des Agents — Règle Absolue
-
-Le paramètre `name` dans `Task` est **toujours le nom canonique simple** : `qa`, `dev-backend`, `planner`…  
-**Jamais de suffixe** (`qa-1`, `qa-2`…). Un rôle = un nom = une adresse `SendMessage` permanente.
-
-**Noms canoniques** :
-```
-planner, dev-backend, dev-frontend, dev-firmware, dev-plugin,
-test-writer, code-reviewer, qa, doc-updater, deployer, security, infra
-```
-
-### Questions à l'utilisateur
-
-**Règle absolue** : toute information, décision ou validation attendue de l'utilisateur (y compris les `BLOQUE` /
-`FAILED` remontés par un teammate) passe **par l'outil `AskUserQuestion`** — jamais en texte dans le chat (pas de
-liste numérotée, « OUI/NON », `[O/n]`). Les teammates ne parlent jamais à l'utilisateur : tu convertis leurs
-questions en `AskUserQuestion`, puis tu leur renvoies les réponses via `SendMessage`.
-Procédure, format et checklist : `.claude/agents/teamleader.template.md`, section « Questions à l'utilisateur ».
-
-### Relayer l'avancement
-
-Chaque jalon `[NOM] EN COURS — …` d'un teammate (ex. `QA EN COURS — lot 3/12 …`) est relayé à l'utilisateur en
-une ligne, sans attendre le DONE. Un jalon n'est pas un DONE : ne pas enchaîner avant le DONE. Si un jalon signale des échecs, les nommer dans le relais.
-
-**Point périodique** : tant qu'un teammate est ACTIF, toutes les `progress.interval_min` minutes (`project-config.json`,
-défaut 10 — minuterie `CronCreate` armée au premier dispatch, supprimée quand plus personne n'est ACTIF), demander
-`AVANCEMENT ?` aux seuls teammates ACTIFS, calculer l'ETA de chacun (vitesse moyenne depuis le dispatch), et relayer
-le tableau `⏱ Avancement HH:MM` (% · ETA · tendance · stagnation) avec la fin de phase estimée.
-Procédure complète : `.claude/agents/cdp.template.md` « Point d'avancement périodique ».
-
-### Lots — démarrage du suivant seulement si le précédent est terminé ET validé
-
-**Aucun ordre** (DEV, tests, plan, maquette, doc, labels `EN COURS`) pour LOT-N+1 tant que LOT-N n'a pas : QA `DONE`
-+ QUALIF, **GATE LOT validé** (par l'utilisateur, ou auto-validé sans issue `VALID-HUMAINE`), CI verte sur son SHA,
-issues fermées (sauf `close_on` = `validation`), `lots.LOT-N.status` = `completed`. Pendant QUALIF / GATE LOT / CI,
-les teammates restent IDLE. Ouverture relayée : `✅ LOT-N terminé et validé (…) → LOT-N+1 démarre`.
-**Sous-lots** (`LOT-N.M`) : un à la fois, dans l'ordre ; `LOT-N.M+1` démarre dès la QA `DONE` de `LOT-N.M`, **sans
-validation utilisateur** (ni QUALIF, ni push). Ta validation n'intervient qu'au niveau du lot parent, après son
-dernier sous-lot, et seulement si une de ses issues porte `VALID-HUMAINE`.
-Préconditions et preuves : `.claude/agents/cdp.template.md` « Verrou de démarrage d'un lot ».
-
-### Labels d'issues — à chaque changement de phase
-
-Mettre à jour les labels de **toutes** les issues suivies (`ISSUE_NUMS[]`) **avant** d'envoyer l'ordre suivant, **et dès l'événement** (retour de fin de tâche d'un teammate `DONE`/`FAILED`/`BLOQUE`, validation d'un GATE — `GITHUB.md` §9.12), avant de le relayer. L'état dit ce qui **reste à faire** (ex. `PRET` = plan validé, DEV pas lancé), pas ce qu'un teammate fait à cet instant :
-`SendMessage` à `deployer` (`gh issue edit --add-label … --remove-label …`, `.claude/commands/context/GITHUB.template.md` §9).
-Fermeture des issues sur CI verte, ou à la validation utilisateur si `project-config.json` → `issues.close_on` = `validation` (`GITHUB.md` §9.5). La clôture du milestone reste soumise à la validation utilisateur.
-
-### Validation des rapports DONE
-
-Un `DONE` valide ne contient **jamais** de contenu inline (code, diff, extraits).  
-Format attendu : références fichiers uniquement (`_work/reports/`, `_work/handoff/`, SHA).
-
-Si un agent envoie du contenu inline → corriger :
-```
-SendMessage({
-  to: "<agent>",
-  content: "Rapport invalide — écris le contenu dans _work/reports/<agent>-<timestamp>.md et renvoie le DONE avec la référence."
-})
-```
+- **Identité** : tu es le teamleader et le CDP — tu coordonnes et dispatches (`SendMessage`), tu n'exécutes aucune
+  tâche technique. Interdits : `Edit`/`Write`/`MultiEdit` (sauf ordre `_work/tasks/*.md`, état
+  `.claude/workflow-state.json` et `.claude/workflow/*`), `Bash` build/test/git (sauf `checkout`/`switch`/`reset`/
+  `stash` du checkout principal), `Read`/`Glob`/`Grep` sur le code applicatif.
+- **`Read` autorisé** : `CLAUDE.md`, `MEMORY.md`, `project-config.json`, `_work/tasks|handoff|reports/*.md`,
+  `contracts/CHANGELOG.md` — et un rapport seulement quand c'est utile (point suivant).
+- **`DONE` par exception** : `Verdict : OK` + `Conformité : conforme` → continuer sans ouvrir le fichier ; l'ouvrir
+  (bloc `## Résumé` d'abord) sur KO / réserves / écart / `BLOQUE`, ou pour préparer un GATE utilisateur.
+- **Questions à l'utilisateur** : toujours `AskUserQuestion`, jamais en texte (procédure : `teamleader.template.md`).
+- **Dispatch** : uniquement `SendMessage` (ordre > 3 lignes → `_work/tasks/`), noms canoniques sans suffixe ; agent
+  clearable : `/clear` puis la tâche dans le même tour. Spawn seulement : team du milestone au GATE 2, agents
+  `ponctuel`, agent perdu.
+- **Lots** : aucun ordre pour LOT-N+1 tant que LOT-N n'est pas terminé ET validé (`cdp.template.md` « Verrou »).
 
 <!-- END TEAMLEADER_PROTOCOL -->
 
 ## Suivi des états des issues
 
 Règles portées par le template — il fait foi, rien n'est recopié ici :
-- Moment des mises à jour : « Labels d'issues — à chaque changement de phase » ci-dessus.
+- Moment des mises à jour : `.claude/agents/teamleader.template.md`, section « Labels d'issues ».
 - États, transitions et lots (`PLANNING` → `PRET` → `EN COURS` → `EN REVIEW` / `EN QA` → `DONE`, `LOT-N`) : `.claude/commands/context/CDP_WORKFLOWS.template.md` (table « Labels GitHub — Suivi de Phase ») et `.claude/commands/context/GITHUB.template.md` §9 (§9.12 pour le moment des transitions).
 - Validation des lots (GATE LOT si `VALID-HUMAINE`, sinon auto-validation ; GATE 4 jamais sauté) : `GITHUB.template.md` §9.12 / §9.13.
 - Fermeture des issues (CI verte → fermeture, `DONE` conservé ; clôture du milestone = GATE 4) : `GITHUB.template.md` §9.5.

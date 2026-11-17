@@ -1,7 +1,6 @@
 ---
 name: dev-firmware
 description: "Adaptations projet BuzzControl pour l'agent dev-firmware (firmware BuzzClick ESP32-C3). Base generique : dev-firmware.template.md."
-model: sonnet
 color: yellow
 ---
 
