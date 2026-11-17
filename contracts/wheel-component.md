@@ -66,13 +66,15 @@ courant présent dans le cadre, aucune `translateX` au-delà de `REP × n` cellu
 
 ```js
 motion = null                                          // bascule courte vers `current` (RAFALE, inchangé)
-motion = { mode: 'spin', periodMs: 2500, accelMs: 1500 }   // défilement : montée puis croisière ; `current` ignoré
+motion = { mode: 'spin', periodMs: 2500, accelTurns: 2 }   // défilement : montée sur 2 tours puis croisière ; `current` ignoré
+motion = { mode: 'spin', periodMs: 2500, accelTurns: 2, cruise: true }   // idem, vitesse de croisière imposée (voir `cruise`)
 motion = { mode: 'land', to: 7, durationMs: 4000, periodMs: 2500, minTurns: 1 }   // freinage jusqu'à l'index `to`
 ```
 
 > **Révision du 2026-11-17** (décisions utilisateur après les QUALIF 12.0.0.2 et 12.0.0.3, `contracts/roue.md` §6) :
-> montée en vitesse au lancement (`accelMs`) ; freinage à **vitesse continue**, depuis la vitesse instantanée de la
-> roue. La vitesse est une grandeur interne du composant (segments par milliseconde), jamais une prop.
+> montée en vitesse **par distance** — la pleine vitesse est atteinte en `accelTurns` tours (2 pour la Roue de la
+> Fortune) ; freinage à **vitesse continue**. `accelTurns` remplace `accelMs` (durée fixe de 1 500 ms, abandonnée).
+> La vitesse est une grandeur interne du composant (segments par milliseconde), jamais une prop.
 
 **Vitesse de croisière** : `vc = n / periodMs` (un tour en `periodMs`). C'est la vitesse maximale de la roue : aucun
 profil ne la dépasse.
@@ -80,26 +82,34 @@ profil ne la dépasse.
 - **`spin`** : animation `requestAnimationFrame`, vers l'avant ; aucune mise en évidence du segment sous le pointeur ;
   la position est ramenée modulo `n` à chaque tour **sans saut visible** (les répétitions du ruban et la rotation
   du disque le permettent).
-  - **Montée** (`accelMs > 0`) : la roue part **de l'arrêt**, depuis sa position courante, et sa vitesse croît
-    linéairement de 0 à `vc` en `accelMs` (accélération constante `vc / accelMs` ; distance parcourue pendant la
-    montée : `vc × accelMs / 2`). Aucun à-coup à la jonction : la vitesse en fin de montée vaut exactement `vc`.
+  - **Montée** (`accelTurns > 0`) : la roue part **de l'arrêt**, depuis sa position courante, et accélère **à taux
+    constant** jusqu'à `vc`, atteinte après **exactement `accelTurns` tours** (`accelTurns × n` segments). Il en
+    découle : durée de la montée `= 2 × accelTurns × periodMs` (10 s pour 2 tours à 2 500 ms), accélération
+    `= vc / (2 × accelTurns × periodMs)`, position à l'instant `t` de la montée
+    `= départ + vc × t² / (4 × accelTurns × periodMs)`. Aucun à-coup à la jonction : la vitesse en fin de montée
+    vaut exactement `vc`, et la roue se retrouve sur le segment de départ.
   - **Croisière** : ensuite, vitesse constante `vc`.
-  - `accelMs` absent, nul ou invalide : pas de montée, vitesse `vc` dès le départ (comportement antérieur).
+  - **`cruise: true`** : l'adaptateur signale que la pleine vitesse est acquise (signal venu du serveur,
+    `roue.md` §6). Si la montée n'est pas terminée, le composant passe **aussitôt** à `vc` depuis sa position
+    courante (pas de saut de position ; l'écart de vitesse, en fin de montée, est négligeable). Sans effet une fois
+    en croisière. Ne relance jamais la montée.
+  - `accelTurns` absent, nul ou invalide : pas de montée, vitesse `vc` dès le départ (comportement antérieur).
   - **Montage direct en `spin`** (composant monté alors que la roue tourne déjà : client qui se connecte en cours
-    de rotation) : pas de montée, croisière immédiate. La montée ne joue que sur le passage `null` → `spin`.
+    de rotation) : pas de montée, croisière immédiate, que `cruise` soit `true` ou non. La montée ne joue que sur le
+    passage `null` → `spin`.
 - **`land`** : freinage jusqu'à l'index `to`, arrêt **exactement** sur `to`, au plus tard à `durationMs` ; à la fin,
   position normalisée (§4) et `to` mis en évidence ; amplitude bornée (`≤ 4n`, §4) ; jamais de marche arrière.
-  - **Avec `periodMs`** (ROUE) — **vitesse continue** : le freinage part de `v0`, **la vitesse instantanée de la
-    roue à l'instant du passage `spin` → `land`** : `vc` si la croisière est atteinte, la vitesse atteinte sur la
-    rampe si le passage survient pendant la montée. **Aucun saut de vitesse** à cet instant, dans aucun des deux cas
-    (en particulier, jamais de saut à `vc` depuis la montée).
-    - Profil nominal : la roue continue à `v0`, puis **décélération constante** jusqu'à l'arrêt sur `to`. La
-      distance parcourue découle de `v0` et de `durationMs` : c'est la première occurrence de `to` vers l'avant,
-      plus le nombre de tours (0 à 3) qui permet ce profil ; la décélération dure au moins 500 ms. `minTurns` est
-      **ignoré** dans ce mode.
-    - `v0` trop faible pour atteindre `to` dans `durationMs` par ce profil (arrêt demandé au tout début de la
-      montée) : la roue **poursuit sa montée** (même accélération `vc / accelMs`, plafonnée à `vc`), puis décélère
-      à taux constant jusqu'à `to`. La vitesse reste continue ; elle n'excède jamais `vc`.
+  - **Avec `periodMs`** (ROUE) — **vitesse continue** : le freinage part de la vitesse de la roue à l'instant du
+    passage `spin` → `land`, **sans saut de vitesse**.
+    - **Cas normal — depuis la croisière** (`vc`) : la roue continue à `vc`, puis **décélération constante**
+      jusqu'à l'arrêt sur `to`. La distance découle de `vc` et de `durationMs` : première occurrence de `to` vers
+      l'avant, plus le nombre de tours (0 à 3) qui permet ce profil ; la décélération dure au moins 500 ms.
+      `minTurns` est **ignoré** dans ce mode. Dans la Roue de la Fortune, c'est le seul cas pour un arrêt des
+      joueurs, de l'animateur ou de la durée maximale (le serveur n'accepte ces arrêts qu'à pleine vitesse).
+    - **Cas d'exception — pendant la montée** (seulement « Forcer l'arrêt » de l'admin, `roue.md` §5.1) : même
+      profil avec, pour vitesse de départ, la vitesse atteinte sur la rampe — jamais un saut à `vc`. Si cette
+      vitesse est trop faible pour atteindre `to` dans `durationMs`, la roue **poursuit sa montée** (même
+      accélération, plafonnée à `vc`) puis décélère à taux constant jusqu'à `to`.
     - Arrêt avant `durationMs` admis quand aucun profil n'atterrit exactement à `durationMs` (le serveur applique
       l'effet de la case à `durationMs`, `roue.md` §6 : la roue est alors déjà sur `to`).
     - Aucun profil possible (fenêtre `durationMs` trop courte pour la vitesse) : repli sur le profil sans
@@ -110,19 +120,23 @@ profil ne la dépasse.
     placement immédiat sur `to`, sans animation (ni montée, ni freinage).
 - `motion` absent ou `null` : comportement v11.4.0 strictement inchangé (tests existants verts sans modification).
 
-**Fonctions pures** (`geometry.js`, testées sans DOM) : position et vitesse pendant la montée et la croisière ;
-plan de freinage à partir de `(from, to, n, durationMs, periodMs, v0, accelMs)` et position à l'instant `t`.
+**Fonctions pures** (`geometry.js`, testées sans DOM) : position et vitesse pendant la montée et la croisière, à
+partir de `(départ, t, periodMs, n, accelTurns)` ; plan de freinage à partir de
+`(from, to, n, durationMs, periodMs, vitesse de départ, accelTurns)` et position à l'instant `t`.
 
 **Critères d'acceptation** (tests unitaires sur les fonctions pures, plus un test du composant) :
-1. Montée : vitesse nulle à `t = 0`, égale à `vc` à `t = accelMs` (écart ≤ 1 %), croissante entre les deux ;
-   position continue à la jonction montée → croisière.
-2. Freinage : pour `v0` ∈ { `vc`, `0,5 vc`, `0,1 vc` } et un jeu de `(from, to, durationMs)`, la vitesse au début
-   du freinage vaut `v0` (écart ≤ 5 %), la position ne recule jamais, la vitesse ne dépasse jamais `vc`, l'arrêt
-   se fait exactement sur `to`, en `durationMs` au plus.
-3. Passage `spin` → `land` pendant la montée : aucun saut de position ni de vitesse entre la dernière image du
-   `spin` et la première du `land`.
-4. Montage direct en `spin` : vitesse `vc` dès la première image. `accelMs` absent : idem.
-5. Normalisation (§4) respectée après 100 enchaînements `spin` → `land`.
+1. Montée : vitesse nulle à `t = 0` ; à `t = 2 × accelTurns × periodMs`, vitesse égale à `vc` (écart ≤ 1 %) et
+   distance parcourue égale à `accelTurns × n` segments (écart ≤ 1 %) ; vitesse croissante entre les deux ;
+   position continue à la jonction montée → croisière. Vérifié pour `accelTurns = 2` et au moins deux `periodMs`.
+2. Freinage depuis la croisière : pour un jeu de `(from, to, durationMs)`, la vitesse au début du freinage vaut
+   `vc` (écart ≤ 5 %), la position ne recule jamais, la vitesse ne dépasse jamais `vc`, l'arrêt se fait exactement
+   sur `to`, en `durationMs` au plus.
+3. Freinage pendant la montée (arrêt forcé) : mêmes propriétés avec une vitesse de départ de `0,5 vc` et `0,1 vc` ;
+   aucun saut de position ni de vitesse entre la dernière image du `spin` et la première du `land`.
+4. `cruise: true` reçu avant la fin de la montée : vitesse `vc` dès l'image suivante, aucun saut de position ;
+   reçu après : aucun effet.
+5. Montage direct en `spin` : vitesse `vc` dès la première image. `accelTurns` absent : idem.
+6. Normalisation (§4) respectée après 100 enchaînements `spin` → `land`.
 
 ## 6. Accessibilité et performance
 
@@ -141,10 +155,12 @@ rotation : non prévus en v12.0.0.
 - `segments` : `KIND: value` → `{ kind: 'value', label: String(VALUE) }` ; `bankrupt` / `lose_turn` →
   `{ kind: 'special', label: … }` (libellés et couleurs : maquette `tv_roue_started`) ;
 - `layout` = `ROUE_WHEEL.LAYOUT` ; `accent` = `ROUE_CURRENT_TEAM_COLOR` ;
-- `ROUE_SUBPHASE = SPINNING` → `motion = { mode: 'spin', periodMs: SPIN_PERIOD_MS, accelMs: 1500 }` — `1500` est
-  la durée de montée fixée par `roue.md` §6, constante de l'adaptateur (ni champ `ROUE_WHEEL`, ni réglage) ;
+- `ROUE_SUBPHASE = SPINNING` → `motion = { mode: 'spin', periodMs: SPIN_PERIOD_MS, accelTurns: SPIN_UP_MS / (2 × SPIN_PERIOD_MS), cruise: FULL_SPEED }`
+  — soit `accelTurns = 2` : la durée de montée vient du serveur (`ROUE_WHEEL.SPIN_UP_MS`, `roue.md` §4), jamais
+  d'une constante du client ; `SPIN_UP_MS` absent ou nul : pas de montée ;
   `STOPPING` → `motion = { mode: 'land', to: STOP.TO, durationMs: STOP.DURATION_MS, periodMs: SPIN_PERIOD_MS, minTurns: 1 }` ;
   sinon `motion = null`, `current = CURRENT` (ou `null` si `-1`).
+- Barre de durée maximale : affichée seulement quand `FULL_SPEED = true`, décomptée localement depuis sa réception.
 - Même adaptateur et mêmes règles sur la TV et sur la tablette joueur (`roue.md` §6, §12).
 - Ajouts admis au composant, additifs : libellés longs (largeur de cellule du bandeau, taille de police de l'arc)
   et `aria-label` selon `kind`.

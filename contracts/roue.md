@@ -122,10 +122,12 @@ buzzers.
 {
   "LAYOUT": "strip",
   "SPIN_PERIOD_MS": 2500,
+  "SPIN_UP_MS": 10000,
   "SPIN_MAX_MS": 10000,
   "FLIP_INTERVAL_MS": 600,
   "SEGMENTS": [ { "ID": "s0", "KIND": "value", "VALUE": 100 }, { "ID": "s3", "KIND": "bankrupt", "VALUE": 0 } ],
   "CURRENT": -1,
+  "FULL_SPEED": false,
   "STOP": null
 }
 ```
@@ -134,6 +136,13 @@ buzzers.
 - `CURRENT` : index de la case sous le pointeur une fois la roue arrêtée ; conservé jusqu'au lancer suivant ;
   `-1` avant le premier lancer de la manche. La roue reste affichée en permanence.
 - `STOP` : `null`, ou `{ "TO": int, "DURATION_MS": int }` pendant `STOPPING` (case tirée et durée du freinage).
+- `SPIN_UP_MS` : durée de la **montée en vitesse**, calculée par le serveur au `START` : `4 × SPIN_PERIOD_MS`
+  (10 000 ms par défaut) — c'est la durée qu'il faut, à accélération constante depuis l'arrêt, pour parcourir
+  **2 tours** et atteindre la vitesse d'un tour en `SPIN_PERIOD_MS` (§6). Pas un réglage : toujours dérivée.
+- `FULL_SPEED` : `true` **seulement en `SPINNING`, une fois la montée terminée** ; `false` pendant la montée et
+  dans toute autre sous-phase. C'est le seul signal de « pleine vitesse » : le serveur le passe à `true` à
+  l'échéance de sa minuterie de montée et diffuse un `UPDATE` (sans horodatage, sans événement `ROUE_LAST_EVENT`,
+  `SEQ` inchangé). La roue n'est arrêtable par les joueurs et l'animateur que lorsque `FULL_SPEED = true` (§5.1).
 
 `ROUE_LAST_EVENT.KIND` ∈ `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | LETTER_REPEAT |
 FLIP | ANSWER_OK | TURN_END | PASS | REVEAL`.
@@ -161,18 +170,20 @@ Exemples `ROUE_BOARD` sur la phrase du §3.1, après `T`, `R`, `N`, quand l'équ
 | Étape (`ROUE_STEP`) | Nom affiché | `ROUE_SUBPHASE` | Qui agit |
 |---|---|---|---|
 | 1 | Lancer la roue | `TURN` | Admin ou animateur : `ROUE_SPIN` |
-| 2 | Arrêt de la roue | `SPINNING` | Équipe qui a la main : buzz (buzzer ou tablette) — ou admin / animateur : `ROUE_STOP` (« Forcer l'arrêt ») — ou durée maximale |
+| 2 | Arrêt de la roue | `SPINNING` | **Montée** (`FULL_SPEED = false`, 2 tours) : personne ne peut arrêter la roue, sauf l'admin (`ROUE_STOP`, « Forcer l'arrêt »). **Pleine vitesse** (`FULL_SPEED = true`) : équipe qui a la main : buzz (buzzer ou tablette) — ou admin / animateur : `ROUE_STOP` — ou durée maximale, comptée depuis la pleine vitesse |
 | 3 | Affichage de la case | `STOPPING` | Serveur : case tirée, freinage |
 | 3 bis | *(à voix haute)* | `LETTER` | 🗣 L'équipe annonce une consonne — aucun appareil, aucun changement d'état |
 | 4 | Sélection de la consonne | `LETTER` | Admin ou animateur : `ROUE_LETTER`. Consonne présente : passage à l'étape 5 (`LIT`). Aucun `*` dans `ROUE_BOARD` à cette étape |
 | 5 | Affichage des cases | `LIT` puis `REVEALING` | `LIT` : les cases de la consonne sont éclairées (`*` dans `ROUE_BOARD`, seule sous-phase où `*` apparaît). Admin ou animateur : `ROUE_FLIP` (« Retourner les cases ») → `REVEALING` : elles se retournent une à une |
+| 5 bis | *(à voix haute)* | `ANSWER` | 🗣 L'équipe propose une réponse (ou n'en propose pas) — aucun appareil, aucun changement d'état |
+| 6 | Réponse | `ANSWER` | Admin ou animateur : `ROUE_ANSWER` (« Réponse validée », **un seul bouton** — la réponse est un bonus) — sinon directement un des deux boutons de l'étape 7 |
+| 7 | Fin du tour | `TURN_END` | Gain ajouté à la cagnotte ; admin ou animateur, **deux boutons** : `ROUE_NEXT {HAND: SAME}` (« Tour suivant », la même équipe rejoue) ou `ROUE_NEXT {HAND: NEXT}` (« Équipe suivante », équipe suivante) |
 
 `ROUE_STEP` est fonction de `ROUE_SUBPHASE` seule : `TURN` = 1, `SPINNING` = 2, `STOPPING` = 3, `LETTER` = 4,
 `LIT` et `REVEALING` = 5, `ANSWER` = 6, `TURN_END` = 7, `""` et `SOLVED` = 0. L'éclairage des cases (`*`) relève donc
 de l'étape 5, pas de l'étape 4 : `ROUE_LETTER` est le geste de l'étape 4, son effet (`LIT`) ouvre l'étape 5.
-| 5 bis | *(à voix haute)* | `ANSWER` | 🗣 L'équipe propose une réponse (ou n'en propose pas) — aucun appareil, aucun changement d'état |
-| 6 | Réponse | `ANSWER` | Admin ou animateur : `ROUE_ANSWER` (« Réponse validée », **un seul bouton** — la réponse est un bonus) — sinon directement un des deux boutons de l'étape 7 |
-| 7 | Fin du tour | `TURN_END` | Gain ajouté à la cagnotte ; admin ou animateur, **deux boutons** : `ROUE_NEXT {HAND: SAME}` (« Tour suivant », la même équipe rejoue) ou `ROUE_NEXT {HAND: NEXT}` (« Équipe suivante », équipe suivante) |
+La montée et la pleine vitesse sont deux temps de la **même** sous-phase `SPINNING` (`ROUE_STEP = 2`), distingués
+par `ROUE_WHEEL.FULL_SPEED`.
 
 ```
 START ─► 1 TURN ─ROUE_SPIN─► 2 SPINNING ─buzz / ROUE_STOP / durée max─► 3 STOPPING ─fin du freinage─┐
@@ -190,10 +201,14 @@ START ─► 1 TURN ─ROUE_SPIN─► 2 SPINNING ─buzz / ROUE_STOP / durée m
 | Depuis | Déclencheur | Effet |
 |---|---|---|
 | `START` | — | Plateau construit, cagnottes à 0, `ROUE_WHEEL` figé, main à la première équipe de `ROUE_TEAMS`, `TURN` |
-| `TURN` | `ROUE_SPIN` (si `ROUE_CONSONANTS_LEFT`) | `SPINNING`, `STOP = null`, minuterie `SPIN_MAX_MS` armée |
+| `TURN` | `ROUE_SPIN` (si `ROUE_CONSONANTS_LEFT`) | `SPINNING`, `FULL_SPEED = false`, `STOP = null`, **minuterie de montée** `SPIN_UP_MS` armée (la durée maximale n'est pas encore armée) |
+| `SPINNING`, montée | Fin de `SPIN_UP_MS` (minuterie serveur) | `FULL_SPEED = true`, `UPDATE` ; **minuterie de durée maximale** `SPIN_MAX_MS` armée à cet instant. Aucun événement |
+| `SPINNING`, montée | Appui (`BUTTON`) de n'importe quel buzzer ou tablette | **Ignoré** : aucun effet, aucune diffusion, aucune erreur |
+| `SPINNING`, montée | `ROUE_STOP` de l'**animateur** (`/ws/anim`) | **Refusé** : `ROUE_ERROR` `NOT_FULL_SPEED` à l'émetteur, état inchangé |
+| `SPINNING`, montée | `ROUE_STOP` de l'**admin** (`/ws/admin`) | Accepté (« Forcer l'arrêt », commande de l'opérateur) : minuterie de montée annulée, tirage uniforme d'une case ; `STOPPING`, `FULL_SPEED = false`, `STOP = {TO, DURATION_MS}` |
 | `TURN` | `ROUE_ANSWER` ou `ROUE_NEXT {HAND}` (si `!ROUE_CONSONANTS_LEFT`) | Plus aucune consonne à trouver, l'équipe ne peut que proposer : `ROUE_ANSWER` = réponse validée (`SOLVED`) ; `ROUE_NEXT` = pas de réponse validée, main selon `HAND`, reste en `TURN` |
 | `TURN` | `ROUE_PASS` | Rotation immédiate, cagnotte conservée, reste en `TURN`. Refusé en `SOLO` |
-| `SPINNING` | Appui (`BUTTON`) d'un buzzer ou d'une tablette **de l'équipe qui a la main**, ou `ROUE_STOP`, ou fin de `SPIN_MAX_MS` | Tirage uniforme d'une case ; `STOPPING`, `STOP = {TO, DURATION_MS}` |
+| `SPINNING`, pleine vitesse | Appui (`BUTTON`) d'un buzzer ou d'une tablette **de l'équipe qui a la main**, ou `ROUE_STOP` (admin ou animateur), ou fin de `SPIN_MAX_MS` | Tirage uniforme d'une case ; `STOPPING`, `FULL_SPEED = false`, `STOP = {TO, DURATION_MS}` |
 | `STOPPING` | Fin de `DURATION_MS` (minuterie serveur) | `CURRENT = TO`, `STOP = null`. Valeur : `LETTER`. `bankrupt` : cagnotte de l'équipe à 0, `TURN_END` (pas de lettre trouvée). `lose_turn` : `TURN_END` (pas de lettre trouvée) |
 | `LETTER` | `ROUE_LETTER {LETTER}` | Voir §5.3 : présente → `LIT` ; absente ou déjà proposée → `TURN_END` (pas de lettre trouvée) ; voyelle / non-lettre → refus, reste en `LETTER` |
 | `LIT` | `ROUE_FLIP` (« Retourner les cases ») | `REVEALING` : les `*` deviennent la lettre ; événement `FLIP` avec `COUNT`. Aucun retournement automatique |
@@ -205,11 +220,39 @@ START ─► 1 TURN ─ROUE_SPIN─► 2 SPINNING ─buzz / ROUE_STOP / durée m
 | toute sous-phase non vide sauf `SOLVED` | `ROUE_REVEAL` | `SOLVED` sans gagnant, aucun crédit, plateau entièrement visible |
 | `SOLVED` | `STOP` existant | Fin de manche, nettoyage (`stopUnsafe`) |
 
-Appuis ignorés sans effet ni diffusion : buzzer d'une autre équipe, appui hors `SPINNING`, second appui pendant
-`STOPPING`. En mode `ROUE`, un appui ne pose jamais le statut `PAUSE` d'un buzzer et ne diffuse pas l'action
-`PAUSE`. `PAUSE` / reprise (actions admin existantes) : toutes les minuteries du mode (durée maximale, freinage,
-retournement) sont suspendues puis reprises ; toute action `ROUE_*` est refusée en phase `PAUSED`.
-Toutes les minuteries sont annulées à l'arrêt de manche, à `ROUE_REVEAL` et à `NEW_GAME`.
+Appuis ignorés sans effet ni diffusion : buzzer d'une autre équipe, appui hors `SPINNING`, **appui pendant la
+montée** (`FULL_SPEED = false`, y compris de l'équipe qui a la main), second appui pendant `STOPPING`.
+
+**Arrêt seulement à pleine vitesse** (décision utilisateur du 2026-11-17) — règle **imposée par le serveur**, quel
+que soit l'appareil : buzzer physique, tablette joueur, simulation d'appui depuis l'admin, animateur. Les écrans ne
+font que la refléter (roue non tapable, bouton grisé) ; un client modifié ou en retard n'y change rien.
+- **Appui (`BUTTON`) pendant la montée : ignoré en silence.** Même traitement qu'un appui hors `SPINNING` : un
+  buzzer physique ne peut afficher aucune erreur, et une réponse ou une diffusion par appui chargerait le réseau
+  pour rien (les joueurs appuient volontiers trop tôt). L'appui n'est pas mémorisé : il faut appuyer de nouveau
+  une fois la pleine vitesse atteinte.
+- **`ROUE_STOP` de l'animateur pendant la montée : refusé avec `ROUE_ERROR` `NOT_FULL_SPEED`.** C'est une commande
+  d'écran, comme les autres actions `ROUE_*` : l'émetteur doit savoir pourquoi rien ne se passe. L'écran de
+  l'animateur grise le bouton tant que `FULL_SPEED = false` ; l'erreur ne couvre que la course entre l'appui et
+  l'`UPDATE`.
+- **`ROUE_STOP` de l'admin : accepté à tout moment de `SPINNING`.** C'est la commande de l'opérateur, qui doit
+  pouvoir reprendre la main sans attendre la fin de la montée (jusqu'à 24 s avec un tour réglé à 6 s) : roue
+  lancée par erreur, incident en salle. Elle n'avantage personne — la case est tirée au hasard par le serveur.
+  C'est le **seul** cas où la roue freine avant d'avoir atteint sa pleine vitesse (§6).
+
+En mode `ROUE`, un appui ne pose jamais le statut `PAUSE` d'un buzzer et ne diffuse pas l'action
+`PAUSE`. `PAUSE` / reprise (actions admin existantes) : toutes les minuteries du mode (**montée**, durée maximale, freinage,
+retournement) sont suspendues puis reprises pour leur durée restante ; toute action `ROUE_*` est refusée en phase
+`PAUSED`. Toutes les minuteries sont annulées à l'arrêt de manche, à `ROUE_REVEAL` et à `NEW_GAME`.
+
+**Minuteries de `SPINNING`** — deux minuteries **successives**, jamais simultanées :
+1. **Montée** : armée à `ROUE_SPIN`, durée `SPIN_UP_MS`. À l'échéance : `FULL_SPEED = true`, `UPDATE`, puis
+   armement de la suivante.
+2. **Durée maximale** : armée **à la fin de la montée seulement**, durée `SPIN_MAX_MS`. À l'échéance : arrêt
+   automatique (tirage, `STOPPING`). L'arrêt automatique survient donc `SPIN_UP_MS + SPIN_MAX_MS` après le lancer
+   (20 s avec les réglages par défaut).
+Chaque armement porte un numéro de génération : une échéance dont la génération n'est plus la génération courante
+(arrêt demandé entre-temps, `PAUSE`, arrêt de manche, `ROUE_REVEAL`, `NEW_GAME`) est ignorée. Une pause pendant la
+montée la suspend : `FULL_SPEED` reste `false`, la montée reprend pour sa durée restante à la reprise.
 
 ### 5.2 Fin du tour : deux boutons, un bouton conseillé
 
@@ -246,19 +289,30 @@ reste toujours acquis à la cagnotte, quel que soit le bouton choisi.
   joueur** (§12), qui dessinent la même roue à partir de `ROUE_WHEEL` (même forme, mêmes cases, même composant).
   Chaque écran anime sa roue localement : la TV et les tablettes s'arrêtent sur la même case, au même moment à la
   latence réseau près, mais ne montrent pas forcément la même case pendant la rotation.
-- **`SPINNING` — lancement** (décision utilisateur du 2026-11-17) : la roue part **de l'arrêt**, depuis la case
-  affichée, et **accélère progressivement** jusqu'à la **vitesse de croisière** = un tour en `SPIN_PERIOD_MS`.
-  La montée dure `1 500 ms` (constante d'affichage du client : ni champ `ROUE_WHEEL`, ni réglage, ni minuterie
-  serveur), sans à-coup à l'arrivée en vitesse de croisière.
-- **`SPINNING` — croisière** : la roue défile ensuite en continu à la vitesse de croisière. La position affichée
-  n'a aucune valeur de jeu et n'est pas synchronisée entre écrans. Les écrans montrent le temps restant avant
-  l'arrêt automatique (`SPIN_MAX_MS`, compté localement depuis la réception de `SPINNING`, montée comprise).
-  Un client qui se connecte ou se reconnecte pendant `SPINNING` démarre directement à la vitesse de croisière.
+- **`SPINNING` — montée** (décisions utilisateur du 2026-11-17 ; `FULL_SPEED = false`) : la roue part **de
+  l'arrêt**, depuis la case affichée, et **accélère à taux constant** jusqu'à la **pleine vitesse** (vitesse de
+  croisière) = un tour en `SPIN_PERIOD_MS`. Elle l'atteint **en 2 tours exactement**, soit en `SPIN_UP_MS`
+  = `4 × SPIN_PERIOD_MS` (10 s par défaut), **de la même manière sur la TV et sur la tablette**, sans à-coup à
+  l'arrivée en pleine vitesse. Pendant la montée, la roue n'est **ni tapable ni arrêtable** (§5.1) ; les écrans le
+  disent (« La roue prend de la vitesse… ») et n'affichent pas la barre de durée maximale.
+- **`SPINNING` — pleine vitesse** (`FULL_SPEED = true`) : la roue défile en continu à la vitesse de croisière ;
+  elle devient tapable pour l'équipe qui a la main. La position affichée n'a aucune valeur de jeu et n'est pas
+  synchronisée entre écrans. Les écrans montrent le temps restant avant l'arrêt automatique : `SPIN_MAX_MS`,
+  **compté localement depuis la réception de `FULL_SPEED = true`** — la durée maximale ne commence qu'à la pleine
+  vitesse.
+- **Passage à la pleine vitesse** : c'est `FULL_SPEED = true`, reçu du serveur, qui fait foi — pas la fin de la
+  montée calculée par l'écran. Si l'`UPDATE` arrive alors que la montée locale n'est pas tout à fait terminée
+  (latence, onglet ralenti), l'écran passe aussitôt à la vitesse de croisière : l'écart est de l'ordre de la
+  latence sur `SPIN_UP_MS`, imperceptible. Si la montée locale se termine avant l'`UPDATE`, la roue tourne à la
+  vitesse de croisière mais reste non tapable jusqu'à sa réception.
+- **Client qui se connecte ou se reconnecte pendant `SPINNING`** : il affiche la roue **directement à la vitesse de
+  croisière**, sans montée (il ne sait pas depuis quand elle tourne : aucun horodatage). `FULL_SPEED` lui dit le
+  reste : `false` → roue non tapable et message de montée, jusqu'à l'`UPDATE` ; `true` → roue tapable, barre de
+  durée maximale comptée depuis sa connexion.
 - **`STOPPING`** : chaque écran freine depuis sa position jusqu'à la case `STOP.TO` et s'y arrête **exactement**,
-  **au plus tard à `STOP.DURATION_MS`** (`wheel-component.md` §5). Le freinage part de **la vitesse courante de la
-  roue à l'instant de l'arrêt**, sans saut de vitesse : la vitesse de croisière si elle est atteinte — la vitesse de
-  croisière est donc aussi celle du début du freinage — ou, si l'arrêt survient **pendant la montée**, la vitesse
-  atteinte à cet instant (jamais un saut à la vitesse de croisière).
+  **au plus tard à `STOP.DURATION_MS`** (`wheel-component.md` §5). Le freinage part de **la vitesse de croisière**,
+  sans saut de vitesse : un arrêt des joueurs, de l'animateur ou de la durée maximale n'est possible qu'à pleine
+  vitesse.
   - **Profil** (depuis le correctif `656067e5`, QUALIF 12.0.0.3) : la roue **continue à sa vitesse**, puis
     **décélère à taux constant** jusqu'à l'arrêt sur `TO` ; la décélération dure au moins 500 ms.
   - **Distance** : la première occurrence de `TO` vers l'avant, plus **0 à 3 tours** ajoutés — le nombre qui permet
@@ -266,14 +320,16 @@ reste toujours acquis à la cagnotte, quel que soit le bouton choisi.
     `DURATION_MS`, pas d'un minimum de tours.
   - Quand aucune distance n'atterrit exactement à `DURATION_MS`, la roue freine sans palier et s'arrête **avant**
     `DURATION_MS` ; elle reste alors sur `TO` jusqu'à la fin de la minuterie du serveur.
-  - **Repli** : à vitesse de croisière, ce profil existe toujours quand `DURATION_MS ≥ SPIN_PERIOD_MS + 250 ms`.
-    En deçà, il peut ne pas exister selon la position de la roue : l'écran retombe alors sur l'ancien profil
-    (ease-out cubique, au moins un tour, vitesse non continue). Réglages par défaut : 4 000 ms pour 2 500 ms,
-    donc jamais de repli ; un repli n'est possible qu'avec un freinage court et un tour lent (§10).
+  - **Repli** : ce profil existe toujours quand `DURATION_MS ≥ SPIN_PERIOD_MS + 250 ms`. En deçà, il peut ne pas
+    exister selon la position de la roue : l'écran retombe alors sur l'ancien profil (ease-out cubique, au moins
+    un tour, vitesse non continue). Réglages par défaut : 4 000 ms pour 2 500 ms, donc jamais de repli ; un repli
+    n'est possible qu'avec un freinage court et un tour lent (§10).
+  - **Seule exception — « Forcer l'arrêt » de l'admin pendant la montée** (§5.1) : le freinage part alors de la
+    vitesse atteinte à cet instant, sans saut de vitesse (jamais un saut à la vitesse de croisière) ; même profil,
+    avec cette vitesse de départ (`wheel-component.md` §5).
   - Un client qui se connecte ou se reconnecte pendant `STOPPING` se place directement sur `TO`.
-- L'accélération est purement visuelle : le tirage, les minuteries et les messages du serveur sont inchangés ; un
-  appui pendant la montée arrête la roue comme à tout autre moment de `SPINNING`.
-- `prefers-reduced-motion` : ni montée ni freinage animés, placement direct sur la case (`wheel-component.md` §5).
+- `prefers-reduced-motion` : ni montée ni freinage animés, placement direct sur la case (`wheel-component.md` §5) ;
+  la règle « arrêtable seulement quand `FULL_SPEED = true` » s'applique à l'identique.
 - **Arrêtée** : `CURRENT` sous le pointeur, accent = couleur de l'équipe qui a la main. La roue reste visible
   pendant toute la manche.
 - Le serveur applique l'effet de la case **à la fin** de `DURATION_MS`, jamais au moment de l'arrêt demandé.
@@ -302,7 +358,7 @@ reste toujours acquis à la cagnotte, quel que soit le bouton choisi.
 |---|---|---|
 | `ROUE_SET_TEAMS` | `{ "TEAMS": string[] }` | `PREPARE`, `READY` (patron `RAFALE_SET_TEAMS`) ; **aucun contrôle du nombre d'équipes** — voir ci-dessous |
 | `ROUE_SPIN` | `{}` | `STARTED` + `TURN` + `ROUE_CONSONANTS_LEFT` |
-| `ROUE_STOP` | `{}` | `STARTED` + `SPINNING` (« Forcer l'arrêt ») |
+| `ROUE_STOP` | `{}` | `STARTED` + `SPINNING` (« Forcer l'arrêt »). Admin : à tout moment de `SPINNING`. Animateur : seulement quand `ROUE_WHEEL.FULL_SPEED = true`, sinon `ROUE_ERROR` `NOT_FULL_SPEED` (§5.1) |
 | `ROUE_LETTER` | `{ "LETTER": "T" }` | `STARTED` + `LETTER` |
 | `ROUE_FLIP` | `{}` | `STARTED` + `LIT` (« Retourner les cases ») |
 | `ROUE_ANSWER` | `{}` | `STARTED` + `ANSWER` ; aussi `TURN` quand `!ROUE_CONSONANTS_LEFT` — « Réponse validée » |
@@ -341,7 +397,8 @@ sous-phase courante et refuse la suivante (`WRONG_SUBPHASE`), sans effet ni doub
 
 - `UPDATE` (`GameState`) après chaque transition — action existante.
 - `ROUE_ERROR` à l'émetteur seul : `{ "CODE": string, "MESSAGE": string }`, `CODE` ∈
-  `VOWEL_NOT_AVAILABLE | NOT_A_LETTER | WRONG_SUBPHASE | NOT_ALLOWED | INVALID_TEAMS`.
+  `VOWEL_NOT_AVAILABLE | NOT_A_LETTER | WRONG_SUBPHASE | NOT_ALLOWED | INVALID_TEAMS | NOT_FULL_SPEED`.
+  `NOT_FULL_SPEED` = `ROUE_STOP` de l'animateur pendant la montée de la roue (§5.1).
   `INVALID_TEAMS` = équipe inconnue ou en double dans `ROUE_SET_TEAMS` — jamais un nombre d'équipes (§8.1).
 
 ## 9. Confidentialité de la phrase — règle non négociable
@@ -382,8 +439,8 @@ La roue n'est pas une liste de cases saisie : elle est **générée par le serve
 | `lose_turn_count` | Nombre de cases TOUR PERDU. 0 ou plus, défaut 1 |
 | — | Nombre total de cases de la roue générée : **64 au plus** (limite du composant `Wheel`). Pas ≥ maximum, maximum supérieur à 1 000 000, valeur non entière ou négative, ou plus de 64 cases : `400` avec message, **rien n'est enregistré** |
 | — | **Pas corrigé** : la réponse de `POST /game-config.json` et de `POST /api/roue/wheel-preview` porte le pas retenu et `"step_adjusted_from": <pas saisi>` (absent sans correction) ; l'interface affiche « Pas ajusté à … » et remplace la valeur du champ |
-| `spin_period_ms` | Durée d'un tour de roue. 1000–6000, défaut 2500 ; hors bornes : ramené à la borne |
-| `spin_max_ms` | **Durée maximale de rotation** : sans arrêt demandé, la roue s'arrête d'elle-même. 3000–30000, défaut 10000 ; hors bornes : ramené à la borne |
+| `spin_period_ms` | Durée d'un tour de roue **à pleine vitesse**. 1000–6000, défaut 2500 ; hors bornes : ramené à la borne. Fixe aussi la durée de la montée : `4 × spin_period_ms` (2 tours, §6) — 4 à 24 s, 10 s par défaut ; aucun réglage séparé |
+| `spin_max_ms` | **Durée maximale de rotation à pleine vitesse** : comptée **à partir de la fin de la montée** ; sans arrêt demandé, la roue s'arrête d'elle-même. 3000–30000, défaut 10000 ; hors bornes : ramené à la borne |
 | `stop_duration_ms` | Durée du freinage. 1500–8000, défaut 4000 ; hors bornes : ramené à la borne |
 | `flip_interval_ms` | Intervalle entre deux cases retournées. 200–1500, défaut 600. Non exposé dans l'interface en v12.0 |
 
@@ -512,14 +569,14 @@ maximum n'est **pas** une erreur : il est corrigé (`step_adjusted_from`).
 | Buzzers (LED) | Équipe qui a la main allumée, autres atténuées (grille active / suivante existante, `led.go`) ; cas `ROUE` ajoutés aux règles par type (reconnexion, pause, révélation) |
 | Éclairage d'ambiance | `ActiveTeam` renvoie l'équipe qui a la main (scène « tour d'équipe » existante) |
 | Sons | Bruitages existants seulement : gain à la résolution (crédit), « mauvaise réponse » sur lettre absente / réponse fausse / Banqueroute. **Aucun nouveau bruitage** en v12.0 (son de rotation : hors périmètre) |
-| Tablettes | Affichage via `PlayerDisplay` (`isVPlayer`), maquette `vplayer_roue__wheel_tap_stop` (2026-11-17, remplace `vplayer_roue__buzz_turn`). **Indice** : catégorie et `ROUE_PRESENTATION` sur leur propre ligne au-dessus du plateau, comme sur la TV, jamais tronquées (2 lignes au plus) ; sans présentation, la catégorie seule. Plateau sur toute la largeur. **Roue** : la roue de la manche (`ROUE_WHEEL`, même forme que sur la TV) est affichée en permanence **à la place du bouton d'arrêt** — il n'y a plus de bouton STOP — et suit les règles d'animation du §6. **Arrêt** : en `SPINNING`, un joueur de l'équipe qui a la main **touche la roue** pour l'arrêter avant la durée maximale ; cet appui est l'action `BUTTON` existante (§8.1), aucune action nouvelle. Hors `SPINNING`, ou pour une autre équipe, la roue est visible mais non tapable (et le serveur ignore l'appui, §5.1) |
+| Tablettes | Affichage via `PlayerDisplay` (`isVPlayer`), maquette `vplayer_roue__wheel_tap_stop` (2026-11-17, remplace `vplayer_roue__buzz_turn`). **Indice** : catégorie et `ROUE_PRESENTATION` sur leur propre ligne au-dessus du plateau, comme sur la TV, jamais tronquées (2 lignes au plus) ; sans présentation, la catégorie seule. Plateau sur toute la largeur. **Roue** : la roue de la manche (`ROUE_WHEEL`, même forme que sur la TV) est affichée en permanence **à la place du bouton d'arrêt** — il n'y a plus de bouton STOP — et suit les règles d'animation du §6. **Arrêt** : en `SPINNING` **et à pleine vitesse seulement** (`ROUE_WHEEL.FULL_SPEED = true`), un joueur de l'équipe qui a la main **touche la roue** pour l'arrêter avant la durée maximale ; cet appui est l'action `BUTTON` existante (§8.1), aucune action nouvelle. Pendant la montée, la roue n'est pas tapable et l'écran l'annonce (« La roue prend de la vitesse… ») ; le cadre allumé et « Touchez la roue pour l'arrêter » n'apparaissent qu'à pleine vitesse. Hors `SPINNING`, pendant la montée, ou pour une autre équipe, la roue est visible mais non tapable (et le serveur ignore l'appui, §5.1) |
 
 ## 13. Checklist d'accroche backend
 
 1. `QuestionType` `ROUE` + `AllQuestionTypes()` + registre (`question_types.go`) + `TypedContent`.
 2. Champs `GameState` (§4) : init `NewEngine`, remise à zéro `Ready` / `stopUnsafe` / `InitGameWith`.
 3. Logique de manche dans un fichier dédié `internal/game/roue.go` (pas dans `engine.go`) : départ, lancer, arrêt
-   (trois déclencheurs), minuteries (durée maximale, freinage, retournement — annulation et pause),
+   (trois déclencheurs), minuteries (montée puis durée maximale, freinage, retournement — annulation, génération et pause),
    lettre, réponse, fin de tour, passe, dévoilement, crédit.
 4. Garde de départ (`participantsConform`, `PREPARE` → `READY` et `FORCE_READY`) : `ROUE_TEAMS` conforme au mode
    (`SOLO` : exactement 1 équipe ; autres modes : 2 au moins), phrase non vide. **Seul endroit** où le nombre

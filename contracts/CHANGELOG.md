@@ -1,6 +1,34 @@
 # Changelog des Contrats API
 
 ---
+## [20261117-b] — v12.0.0 — ROUE : montée en 2 tours, arrêt seulement à pleine vitesse (#144, LOT-1)
+
+`roue.md` §4, §5, §5.1, §6, §8, §10, §12, §13 ; `wheel-component.md` §5, §8. Décisions utilisateur du 2026-11-17
+(ordre `_work/tasks/planner-20261117-102000.md`). **Remplace** la montée de 1 500 ms de l'entrée `[20261117]`
+ci-dessous. Aucun changement de protocole BuzzClick. Les deux **[BREAKING]** ne concernent que le mode `ROUE`, jamais
+livré en production (v12.0.0 en cours) : aucun déploiement existant n'est touché.
+
+- **[CHANGED]** `GameState.ROUE_WHEEL` — deux champs ajoutés : `SPIN_UP_MS` (durée de la montée, `4 × SPIN_PERIOD_MS`,
+  calculée par le serveur) et `FULL_SPEED` (bool : pleine vitesse atteinte, `true` seulement en `SPINNING` après la
+  montée ; `UPDATE` à la fin de la montée) (§4). Additif.
+- **[BREAKING]** Action `BUTTON` en type `ROUE` — un appui de l'équipe qui a la main **pendant la montée** est
+  désormais ignoré (il arrêtait la roue) ; l'arrêt par les joueurs n'est accepté qu'à pleine vitesse (§5.1).
+- **[BREAKING]** Action `ROUE_STOP` — venant de l'animateur (`/ws/anim`) pendant la montée : refusée, `ROUE_ERROR`
+  `NOT_FULL_SPEED` (elle était acceptée dès `SPINNING`). Venant de l'admin : inchangée, acceptée à tout moment (§5.1).
+- **[NEW]** Code d'erreur `ROUE_ERROR` : `NOT_FULL_SPEED` (§8.3).
+- **[CHANGED]** Minuteries de `SPINNING` — minuterie de montée (`SPIN_UP_MS`), puis durée maximale (`SPIN_MAX_MS`)
+  armée seulement à la fin de la montée : l'arrêt automatique passe de `SPIN_MAX_MS` à `SPIN_UP_MS + SPIN_MAX_MS`
+  après le lancer (10 s → 20 s par défaut) (§5.1). Réglages `spin_period_ms` et `spin_max_ms` : mêmes bornes, sens
+  précisé (§10).
+- **[CHANGED]** Animation de la roue (TV et tablette) — pleine vitesse atteinte en 2 tours à accélération constante ;
+  roue non tapable pendant la montée ; client connecté en cours de rotation : vitesse de croisière directe ;
+  freinage depuis la croisière, sauf « Forcer l'arrêt » de l'admin pendant la montée (§6).
+- **[CHANGED]** `wheel-component.md` §5 — `spin` : `accelTurns` (montée par distance) remplace `accelMs` ; nouvelle
+  option `cruise` ; critères d'acceptation revus. §8 : l'adaptateur tire la montée de `ROUE_WHEEL.SPIN_UP_MS`.
+- Correction de forme : `roue.md` §5, le paragraphe « `ROUE_STEP` est fonction de… » coupait le tableau des étapes
+  depuis `8d91498a` ; replacé sous le tableau.
+
+---
 ## [20261117] — v12.0.0 — ROUE : roue et indice sur la tablette, accélération au lancement (#144, LOT-1)
 
 `roue.md` §6, §9, §12. Décisions utilisateur du 2026-11-17 après la QUALIF 12.0.0.2 (maquette
@@ -14,8 +42,8 @@ aucun changement côté serveur ni de protocole BuzzClick.
   publics à conserver (§9). Comportement déjà en place, désormais garanti par le contrat.
 - **[CHANGED]** Animation de la roue (TV et tablette) — au lancement la roue accélère depuis l'arrêt jusqu'à la
   vitesse de croisière (un tour en `SPIN_PERIOD_MS`) en 1 500 ms, constante d'affichage ; le freinage part de la
-  vitesse courante, y compris pendant la montée (§6). Purement visuel. `wheel-component.md` §5 reste à aligner
-  (`spin` y est encore décrit « à vitesse constante »).
+  vitesse courante, y compris pendant la montée (§6). Purement visuel. **Remplacé le jour même** par l'entrée
+  `[20261117-b]` (montée en 2 tours, arrêt seulement à pleine vitesse).
 - **[CHANGED]** `ROUE_SET_TEAMS` — ne contrôle plus le nombre d'équipes, seulement leur existence et l'absence de
   doublon ; liste vide = effacement ; le comptage n'est appliqué qu'à `PREPARE` → `READY` et `FORCE_READY` (§8.1,
   §13, commit `1d2f7f03`). Assouplissement.
