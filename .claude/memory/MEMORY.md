@@ -40,8 +40,8 @@
 ### Règles permanentes (adoptées par l'utilisateur)
 1. dev-* et test-writer ne lancent que les tests touchés ; `qa` et la CI seuls lancent les suites complètes.
 2. Jalon `EN COURS` au moins toutes les 10 min pendant toute attente.
-3. Maquettes ouvertes avec `cmd.exe /c start chrome <chemin Windows>`.
-4. Jamais d'amend ni de réécriture dans le dépôt principal.
+3. Maquettes ouvertes dans Chrome (extension claude-in-chrome) par l'URL du serveur web du launcher — `commands/context/MOCKUPS.md` 14.9.
+4. Jamais d'amend ni de réécriture dans le dépôt principal. (porté par `CLAUDE.md` « Branche courante et worktrees »)
 
 ## État précédent (2026-11-12) — v11.7.0 en PROD (archivé)
 
@@ -68,9 +68,7 @@
 #### Leçons conservées (v11.5.0)
 
 ##### Décisions techniques
-- Durées de test injectées **par instance** (`Engine.SetTickInterval`, `SetConnGreenMinDuration`, `watchdogDelay`, `flashPhases`), jamais par variable de paquet (`t.Parallel` les partagerait).
-- Barrière positive (`settle_barrier_291_test.go`) au lieu des fenêtres « aucun message » ; marge 250 ms après une action client (HELLO / PLAYER_CONNECT).
-- Cadences de test > 2 × le pacing du writer lumière (`MinInterval` 100 ms) ; ne pas comparer deux `Last()` successifs (cause des 2 CI rouges du LOT-4, corrigées `465a8590` et `0d2ca78b`).
+- Conventions de timing des tests Go (durées par instance, barrière positive, cadences > 2 × pacing) : migrées dans `docs/TEST_PROCEDURE.md` §10.
 - Cadences de production verrouillées par `TestFlashCadenceConstants_291`.
 - `version.txt` : chaque BUILD commite la valeur candidate `X.Y.Z.a` ; la PROD pose `X.Y.Z` dans un commit séparé.
 - Propriété de l'état : LED → l'`App` (partagé par pointeur) ; ambiance → le `Controller` (détails dans `docs/GO_SERVER.md`).

@@ -489,3 +489,12 @@ consommé par la validation (contrat §2 : `GET /models`, pas un appel de géné
 - [ ] `POST /config.json` sans les 2 nouveaux champs (`*_api_key_verified`) se comporte exactement comme avant (client qui ne les envoie pas)
 - [ ] Le sélecteur de fournisseur Claude/Groq (bugfix/config-api-key-help, #7) n'est pas affecté — aucune validation déclenchée au changement de fournisseur
 - [ ] `go test ./... -v -cover` — suite complète toujours verte (0 FAIL)
+
+---
+
+## 10. Conventions de timing des tests Go (v11.7.0)
+
+- Les durées de test sont injectées **par instance** (`Engine.SetTickInterval`, `SetConnGreenMinDuration`, `watchdogDelay`, `flashPhases`), jamais par une variable de paquet : `t.Parallel` la partagerait entre tests.
+- Attendre un état par une **barrière positive** (ex. `settle_barrier_291_test.go`) plutôt qu'une fenêtre « aucun message » ; marge de 250 ms après une action client (HELLO / PLAYER_CONNECT).
+- Les cadences de test restent **> 2 × le pacing du writer lumière** (`MinInterval` 100 ms) ; ne pas comparer deux `Last()` successifs (cause des 2 CI rouges du LOT-4 v11.7.0, corrigées `465a8590` et `0d2ca78b`).
+- Les cadences de production sont verrouillées par `TestFlashCadenceConstants_291`.

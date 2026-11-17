@@ -164,10 +164,12 @@ Règles portées par le template — il fait foi, rien n'est recopié ici :
 ## Branche courante et worktrees
 
 - La **branche courante du dépôt principal** est définie et changée **uniquement par le teamleader** (via l'utilisateur ou `/milestone`). Pendant un cycle, c'est `milestone/<version>`.
-- Les agents **commitent sur la branche courante**, avec des fichiers explicites (`git add <fichiers>`, jamais `git add -A`), et ne la changent **jamais**. Interdits dans le dépôt principal : `checkout`, `switch`, `reset --hard`, `clean`, `rebase`, `merge`, `stash`, détachement de HEAD.
+- Les agents **commitent sur la branche courante**, avec des fichiers explicites (`git add <fichiers>`, jamais `git add -A`) et un commit restreint à leurs chemins (`git commit -- <chemins>` : l'index est partagé entre agents), et ne la changent **jamais**. Interdits dans le dépôt principal : `checkout`, `switch`, `reset --hard`, `clean`, `rebase`, `merge`, `stash`, `commit --amend` et toute réécriture d'historique, détachement de HEAD.
 - Tout travail sur un autre état du code (red check, comparaison, reproduction) se fait dans un **`git worktree` jetable**, par **chemin absolu** (`git -C <worktree> …`, jamais `cd ../..`), supprimé ensuite. Avant chaque commande destructive, vérifier que le chemin n'est pas le dépôt principal.
 - Un agent qui constate que la branche courante a changé s'arrête et prévient le teamleader (`BLOQUE`).
 - Pendant une QA ou un BUILD exécuté dans le dépôt principal (`go test`, `scripts/ci.sh`), les devs ne modifient pas le dépôt principal : ils travaillent dans un **worktree jetable** sur une branche `tmp/*`, puis cherry-pick sur la branche courante après le verdict (leçon v11.2.3, correctif #278).
+- Ne jamais lier `node_modules` par lien symbolique dans un worktree jetable : `git worktree remove --force` suit le lien et vide `server-go/web/node_modules` du dépôt principal (leçon v11.5.0, restauré par `npm ci`).
+- Le partage `/share/MFS` a `core.fileMode=false` (bit exécutable perdu) : un nouveau script est marqué par `git update-index --chmod=+x` (vérifier `git ls-tree`) et appelé via `bash <script>`.
 - Incident de référence : QA #253, 2026-10-11 (HEAD détaché quelques minutes, aucun commit perdu).
 
 ## Agents Disponibles
