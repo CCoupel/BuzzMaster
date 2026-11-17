@@ -1,6 +1,26 @@
 # Changelog des Contrats API
 
 ---
+## [20261117] — v12.0.0 — ROUE : roue et indice sur la tablette, accélération au lancement (#144, LOT-1)
+
+`roue.md` §6, §9, §12. Décisions utilisateur du 2026-11-17 après la QUALIF 12.0.0.2 (maquette
+`vplayer_roue__wheel_tap_stop`). **Aucun BREAKING** : aucun champ, aucune action, aucun message ajouté ou modifié ;
+aucun changement côté serveur ni de protocole BuzzClick.
+
+- **[CHANGED]** Tablette joueur en type `ROUE` — la roue (`ROUE_WHEEL`, même forme que sur la TV) est affichée en
+  permanence à la place du bouton d'arrêt ; l'équipe qui a la main touche la roue pour l'arrêter (action `BUTTON`
+  existante) ; la catégorie et `ROUE_PRESENTATION` sont affichées sur leur propre ligne, jamais tronquées (§12).
+- **[CHANGED]** Sérialisation TV et tablette — `QUESTION.ROUE_PRESENTATION` et `QUESTION.CATEGORY` déclarés champs
+  publics à conserver (§9). Comportement déjà en place, désormais garanti par le contrat.
+- **[CHANGED]** Animation de la roue (TV et tablette) — au lancement la roue accélère depuis l'arrêt jusqu'à la
+  vitesse de croisière (un tour en `SPIN_PERIOD_MS`) en 1 500 ms, constante d'affichage ; le freinage part de la
+  vitesse courante, y compris pendant la montée (§6). Purement visuel. `wheel-component.md` §5 reste à aligner
+  (`spin` y est encore décrit « à vitesse constante »).
+- **[CHANGED]** `ROUE_SET_TEAMS` — ne contrôle plus le nombre d'équipes, seulement leur existence et l'absence de
+  doublon ; liste vide = effacement ; le comptage n'est appliqué qu'à `PREPARE` → `READY` et `FORCE_READY` (§8.1,
+  §13, commit `1d2f7f03`). Assouplissement.
+
+---
 ## [20261116] — v12.0.0 — mode de jeu ROUE « Roue de la Fortune » (#144, #145, LOT-1)
 
 Nouveau contrat `roue.md` ; `wheel-component.md` §5 révisé, §7 mis à jour, §8 ajouté ; ligne `ROUE` de

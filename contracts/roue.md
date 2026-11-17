@@ -242,12 +242,27 @@ reste toujours acquis à la cagnotte, quel que soit le bouton choisi.
 
 - **Tirage** : uniforme sur les cases de `ROUE_WHEEL.SEGMENTS` (une case = une chance). Source d'aléa injectable
   pour les tests. Le tirage a lieu **au moment de l'arrêt demandé**, quel que soit le déclencheur.
-- **`SPINNING`** : la roue défile en continu sur chaque écran, un tour en `SPIN_PERIOD_MS`. La position affichée
+- **Écrans concernés** : les règles d'animation ci-dessous valent à l'identique pour **la TV et la tablette
+  joueur** (§12), qui dessinent la même roue à partir de `ROUE_WHEEL` (même forme, mêmes cases, même composant).
+  Chaque écran anime sa roue localement : la TV et les tablettes s'arrêtent sur la même case, au même moment à la
+  latence réseau près, mais ne montrent pas forcément la même case pendant la rotation.
+- **`SPINNING` — lancement** (décision utilisateur du 2026-11-17) : la roue part **de l'arrêt**, depuis la case
+  affichée, et **accélère progressivement** jusqu'à la **vitesse de croisière** = un tour en `SPIN_PERIOD_MS`.
+  La montée dure `1 500 ms` (constante d'affichage du client : ni champ `ROUE_WHEEL`, ni réglage, ni minuterie
+  serveur), sans à-coup à l'arrivée en vitesse de croisière.
+- **`SPINNING` — croisière** : la roue défile ensuite en continu à la vitesse de croisière. La position affichée
   n'a aucune valeur de jeu et n'est pas synchronisée entre écrans. Les écrans montrent le temps restant avant
-  l'arrêt automatique (`SPIN_MAX_MS`, compté localement depuis la réception de `SPINNING`).
+  l'arrêt automatique (`SPIN_MAX_MS`, compté localement depuis la réception de `SPINNING`, montée comprise).
+  Un client qui se connecte ou se reconnecte pendant `SPINNING` démarre directement à la vitesse de croisière.
 - **`STOPPING`** : chaque écran freine depuis sa position jusqu'à la case `STOP.TO` en `STOP.DURATION_MS`, avec
-  au moins un tour complet (`wheel-component.md` §5). Un client qui se connecte ou se reconnecte pendant
-  `STOPPING` se place directement sur `TO`.
+  au moins un tour complet (`wheel-component.md` §5). Le freinage part de **la vitesse courante de la roue à
+  l'instant de l'arrêt**, sans saut de vitesse : la vitesse de croisière si elle est atteinte — la vitesse de
+  croisière est donc aussi celle du début du freinage — ou, si l'arrêt survient **pendant la montée**, la vitesse
+  atteinte à cet instant (jamais un saut à la vitesse de croisière). Un client qui se connecte ou se reconnecte
+  pendant `STOPPING` se place directement sur `TO`.
+- L'accélération est purement visuelle : le tirage, les minuteries et les messages du serveur sont inchangés ; un
+  appui pendant la montée arrête la roue comme à tout autre moment de `SPINNING`.
+- `prefers-reduced-motion` : ni montée ni freinage animés, placement direct sur la case (`wheel-component.md` §5).
 - **Arrêtée** : `CURRENT` sous le pointeur, accent = couleur de l'équipe qui a la main. La roue reste visible
   pendant toute la manche.
 - Le serveur applique l'effet de la case **à la fin** de `DURATION_MS`, jamais au moment de l'arrêt demandé.
@@ -324,6 +339,9 @@ sous-phase courante et refuse la suivante (`WRONG_SUBPHASE`), sans effet ni doub
   (le plateau entièrement visible suffit après résolution). Il reste présent pour `/ws/admin` et `/ws/anim`.
 - `ROUE_BOARD` ne contient jamais une lettre non révélée (`_` ou `*` seulement).
 - La présentation et le champ `question`, publics, ne peuvent pas contenir la phrase (§11.1).
+- `QUESTION.ROUE_PRESENTATION` et `QUESTION.CATEGORY` sont publics et **doivent rester présents** dans les messages
+  TV et tablette (la tablette affiche l'indice, §12) : les filtres ne retirent de `QUESTION` que la phrase et les
+  champs de réponse.
 - La phrase n'est jamais écrite dans `ANSWER`, dans un journal diffusé (`/ws/logs`) ni dans un message aux buzzers.
 - **Tests exigés** (modèle `internal/protocol/rafale_leak_test.go`) : pour chaque sous-phase avant `SOLVED`, la
   phrase et chacune de ses lettres non révélées sont absentes des messages sérialisés TV et tablette.
@@ -483,7 +501,7 @@ maximum n'est **pas** une erreur : il est corrigé (`step_adjusted_from`).
 | Buzzers (LED) | Équipe qui a la main allumée, autres atténuées (grille active / suivante existante, `led.go`) ; cas `ROUE` ajoutés aux règles par type (reconnexion, pause, révélation) |
 | Éclairage d'ambiance | `ActiveTeam` renvoie l'équipe qui a la main (scène « tour d'équipe » existante) |
 | Sons | Bruitages existants seulement : gain à la résolution (crédit), « mauvaise réponse » sur lettre absente / réponse fausse / Banqueroute. **Aucun nouveau bruitage** en v12.0 (son de rotation : hors périmètre) |
-| Tablettes | Affichage via `PlayerDisplay` (`isVPlayer`) ; l'appui d'une tablette de l'équipe qui a la main arrête la roue avant la durée maximale |
+| Tablettes | Affichage via `PlayerDisplay` (`isVPlayer`), maquette `vplayer_roue__wheel_tap_stop` (2026-11-17, remplace `vplayer_roue__buzz_turn`). **Indice** : catégorie et `ROUE_PRESENTATION` sur leur propre ligne au-dessus du plateau, comme sur la TV, jamais tronquées (2 lignes au plus) ; sans présentation, la catégorie seule. Plateau sur toute la largeur. **Roue** : la roue de la manche (`ROUE_WHEEL`, même forme que sur la TV) est affichée en permanence **à la place du bouton d'arrêt** — il n'y a plus de bouton STOP — et suit les règles d'animation du §6. **Arrêt** : en `SPINNING`, un joueur de l'équipe qui a la main **touche la roue** pour l'arrêter avant la durée maximale ; cet appui est l'action `BUTTON` existante (§8.1), aucune action nouvelle. Hors `SPINNING`, ou pour une autre équipe, la roue est visible mais non tapable (et le serveur ignore l'appui, §5.1) |
 
 ## 13. Checklist d'accroche backend
 
