@@ -124,7 +124,7 @@ export function roueGates(gs) {
     sub,
     canSpin: sub === 'TURN' && left,
     canStop: sub === 'SPINNING',
-    // « Forcer l'arrêt » : toujours actif pour l'admin ; l'animateur attend la pleine vitesse (le serveur refuse sinon : NOT_FULL_SPEED)
+    // « Forcer l'arrêt » (admin comme animateur) : actif seulement à pleine vitesse ; avant, le serveur refuse (NOT_FULL_SPEED) et les boutons sont grisés
     fullSpeed: gs?.ROUE_WHEEL?.FULL_SPEED === true,
     canLetter: sub === 'LETTER',
     canFlip: sub === 'LIT',
