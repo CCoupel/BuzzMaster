@@ -203,7 +203,7 @@ START ─► 1 TURN ─ROUE_SPIN─► 2 SPINNING ─buzz / ROUE_STOP / durée m
 | `START` | — | Plateau construit, cagnottes à 0, `ROUE_WHEEL` figé, main à la première équipe de `ROUE_TEAMS`, `TURN` |
 | `TURN` | `ROUE_SPIN` (si `ROUE_CONSONANTS_LEFT`) | `SPINNING`, `FULL_SPEED = false`, `STOP = null`, **minuterie de montée** `SPIN_UP_MS` armée (la durée maximale n'est pas encore armée) |
 | `SPINNING`, montée | Fin de `SPIN_UP_MS` (minuterie serveur) | `FULL_SPEED = true`, `UPDATE` ; **minuterie de durée maximale** `SPIN_MAX_MS` armée à cet instant. Aucun événement |
-| `SPINNING`, montée | Appui (`BUTTON`) de n'importe quel buzzer ou tablette | **Ignoré** : aucun effet, aucune diffusion, aucune erreur |
+| `SPINNING`, montée | Appui (`BUTTON`) de n'importe quel buzzer ou tablette | **Ignoré** : état inchangé, aucun `UPDATE` général, `SEQ` inchangé, aucune erreur. Seule trame possible : l'écho d'état ciblé à la tablette émettrice (#248, ci-dessous) |
 | `SPINNING`, montée | `ROUE_STOP` (« Forcer l'arrêt »), de l'**admin comme de l'animateur** | **Refusé** : `ROUE_ERROR` `NOT_FULL_SPEED` à l'émetteur, état inchangé, minuterie de montée inchangée |
 | `TURN` | `ROUE_ANSWER` ou `ROUE_NEXT {HAND}` (si `!ROUE_CONSONANTS_LEFT`) | Plus aucune consonne à trouver, l'équipe ne peut que proposer : `ROUE_ANSWER` = réponse validée (`SOLVED`) ; `ROUE_NEXT` = pas de réponse validée, main selon `HAND`, reste en `TURN` |
 | `TURN` | `ROUE_PASS` | Rotation immédiate, cagnotte conservée, reste en `TURN`. Refusé en `SOLO` |
@@ -220,16 +220,26 @@ START ─► 1 TURN ─ROUE_SPIN─► 2 SPINNING ─buzz / ROUE_STOP / durée m
 | `SOLVED` | `STOP` existant | Fin de manche, nettoyage (`stopUnsafe`) |
 
 Appuis ignorés sans effet ni diffusion : buzzer d'une autre équipe, appui hors `SPINNING`, **appui pendant la
-montée** (`FULL_SPEED = false`, y compris de l'équipe qui a la main), second appui pendant `STOPPING`.
+montée** (`FULL_SPEED = false`, y compris de l'équipe qui a la main), second appui pendant `STOPPING`. « Sans diffusion » s'entend de l'`UPDATE` général : l'écho d'état ciblé à la tablette
+émettrice (#248) reste possible pour tout appui de tablette, accepté ou ignoré.
 
 **Arrêt seulement à pleine vitesse** (décision utilisateur du 2026-11-17) — règle **imposée par le serveur**, quel
 que soit l'appareil ou l'émetteur : buzzer physique, tablette joueur, simulation d'appui depuis l'admin, animateur,
 **admin**. Il n'existe **aucune exception** : pendant la montée, rien ne peut arrêter la roue. Les écrans ne
 font que la refléter (roue non tapable, bouton grisé) ; un client modifié ou en retard n'y change rien.
 - **Appui (`BUTTON`) pendant la montée : ignoré en silence.** Même traitement qu'un appui hors `SPINNING` : un
-  buzzer physique ne peut afficher aucune erreur, et une réponse ou une diffusion par appui chargerait le réseau
-  pour rien (les joueurs appuient volontiers trop tôt). L'appui n'est pas mémorisé : il faut appuyer de nouveau
-  une fois la pleine vitesse atteinte.
+  buzzer physique ne peut afficher aucune erreur, et une diffusion générale par appui chargerait le réseau pour
+  rien (les joueurs appuient volontiers trop tôt). L'appui n'est pas mémorisé : il faut appuyer de nouveau une
+  fois la pleine vitesse atteinte. Précisément, l'appui :
+  - **ne change rien à l'état du jeu** (sous-phase, `FULL_SPEED`, minuteries, roue : inchangés) ;
+  - **n'émet aucun `UPDATE` général** : ni l'admin, ni l'animateur, ni la TV, ni les autres tablettes ne
+    reçoivent quoi que ce soit ;
+  - **n'émet aucun événement** : `ROUE_LAST_EVENT.SEQ` inchangé ; aucune `ROUE_ERROR` ; aucun message au buzzer ;
+  - **peut déclencher l'écho d'état ciblé à la seule tablette émettrice** — mécanisme existant de l'appui d'une
+    tablette joueur (#247 / #248, `handleSimulatedButton`), **conservé tel quel** (arbitrage du 2026-11-17 après le
+    rapport `qa-montee-20261117-1055`) : un `UPDATE` complet envoyé à cette tablette et à elle seule, qui porte
+    l'état inchangé (`SPINNING`, `FULL_SPEED = false`, même `SEQ`). Il ne vaut ni acceptation ni refus de l'appui,
+    et la tablette n'en déduit rien d'autre que l'état courant. Un buzzer physique ne reçoit aucun écho.
 - **`ROUE_STOP` pendant la montée, de l'admin comme de l'animateur : refusé avec `ROUE_ERROR` `NOT_FULL_SPEED`**
   (décision utilisateur du 2026-11-17 : « Forcer l'arrêt » n'a pas de passe-droit). C'est une commande d'écran,
   comme les autres actions `ROUE_*` : l'émetteur doit savoir pourquoi rien ne se passe. Les écrans de l'admin et de
