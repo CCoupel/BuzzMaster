@@ -1,5 +1,5 @@
 /**
- * #144 — montée en 2 tours (contracts/wheel-component.md §5, critères d'acceptation 1 à 6).
+ * #144 — montée par distance, 1 tour pour la Roue de la Fortune (contracts/wheel-component.md §5, critères d'acceptation 1 à 6).
  * Critère 1 : montée (vitesse 0 → vc, distance accelTurns×n, croissante, continue) — « critère 1 ».
  * Critère 2 : freinage depuis la croisière — « critère 2 ». Critère 3 (`land` reçu pendant la montée locale) : Wheel.accel.144.test.jsx.
  * Critère 5 (fonctions pures) : accelTurns absent = croisière immédiate — « critère 5 ». Critères 4 et 6 : Wheel.accel.144.test.jsx.
@@ -9,9 +9,10 @@ import { accelDurationMs, spinRampPosition, spinSpeed, spinPosition, brakePlan, 
 
 const wrap = (a, b, n) => ((b - a + n / 2) % n + n) % n - n / 2
 const speedOf = (f, t, n, dt = 0.5) => wrap(f(t - dt), f(t + dt), n) / (2 * dt)
-const TURNS = 2
 
-describe('critère 1 — montée sur accelTurns tours', () => {
+// Roue de la Fortune : 1 tour depuis dd637f92 (SPIN_UP_MS = 2 × période) ; le composant reste générique (2 tours vérifiés aussi).
+for (const TURNS of [1, 2]) {
+describe(`critère 1 — montée sur ${TURNS} tour(s) (accelTurns = ${TURNS})`, () => {
   for (const [n, per] of [[24, 2500], [24, 1000], [40, 4000], [8, 6000]]) {
     const vc = n / per, T = accelDurationMs(per, TURNS)
     const pos = t => spinRampPosition(0, t, per, n, TURNS)
@@ -35,7 +36,10 @@ describe('critère 1 — montée sur accelTurns tours', () => {
   }
 })
 
+}
+
 const PERS = [1000, 2500, 6000], DURS = [1500, 4000, 8000], SIZES = [8, 24, 64]
+
 describe('critère 2 — freinage depuis la croisière (le seul freinage : roue.md §5.1)', () => {
   it('vitesse au début = vc (≤ 5 %), jamais de recul, vitesse ≤ vc, arrêt exact sur `to`, en durationMs au plus', () => {
     let plans = 0

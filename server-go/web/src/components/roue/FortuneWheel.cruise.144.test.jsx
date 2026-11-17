@@ -51,3 +51,13 @@ describe('FortuneWheel — FULL_SPEED reçu en cours de rampe', () => {
     expect(wrap(before, pos(container))).toBeGreaterThan(VC_100MS * 0.8)
   })
 })
+
+import { fortuneMotion } from './FortuneWheel'
+
+describe('FortuneWheel — montée d\'un tour (SPIN_UP_MS = 2 × période, dd637f92)', () => {
+  it('accelTurns = SPIN_UP_MS / (2 × SPIN_PERIOD_MS) = 1 ; aucune durée recopiée', () => {
+    expect(fortuneMotion(wheel({ SPIN_UP_MS: 5000 }), 'SPINNING').accelTurns).toBeCloseTo(1, 9)
+    expect(fortuneMotion(wheel({ SPIN_PERIOD_MS: 1000, SPIN_UP_MS: 2000 }), 'SPINNING').accelTurns).toBeCloseTo(1, 9)
+    expect(fortuneMotion(wheel({ SPIN_PERIOD_MS: 6000, SPIN_UP_MS: 12000 }), 'SPINNING').accelTurns).toBeCloseTo(1, 9)
+  })
+})
