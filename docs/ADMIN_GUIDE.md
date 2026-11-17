@@ -1288,6 +1288,12 @@ La roue est **générée** à partir de 4 paramètres, dans `/admin/settings` (c
 - **Règle de réglage** : la durée du freinage doit être au moins égale à **la durée d'un tour + 250 ms**, pour un freinage
   sans à-coup. Avec le défaut (tour de 2,5 s, freinage de 4 s), la règle est respectée. En deçà, la roue peut ne pas
   trouver de freinage continu : son arrêt devient moins régulier.
+- La **montée** dure un tour : `2 × la durée d'un tour` (5 s avec le défaut). Elle n'a pas de réglage séparé.
+- **Tester** (carte « Roue ») : anime la roue avec les valeurs saisies, sans rien enregistrer,
+  pour régler la vitesse et les durées sans lancer de manche. Le déroulé suit le jeu : montée, pleine vitesse, puis
+  **Arrêter** (actif à pleine vitesse) ou arrêt automatique, freinage, arrêt sur une case tirée au hasard. Le bandeau
+  « Sur la TV » et la vue circulaire s'animent ensemble. Modifier un réglage ou quitter la page interrompt l'essai. Le
+  bouton est grisé si l'aperçu n'est pas valide.
 
 ### Conduire une manche
 
@@ -1296,7 +1302,7 @@ La roue est **générée** à partir de 4 paramètres, dans `/admin/settings` (c
 1. Choisir les équipes participantes (`SOLO` : une seule équipe ; les autres modes : deux au moins), puis **Démarrer**.
    Le nombre n'est vérifié qu'au passage en READY : pendant la sélection, toute combinaison d'équipes existantes est acceptée, et la manche ne peut démarrer qu'avec une sélection conforme au mode.
    Si la sélection ne convient pas, le motif d'attente affiché en `PREPARE` le dit : en `SOLO`, « sélectionnez une seule équipe » quand plus d'une équipe est cochée, « sélectionnez une équipe » sinon ; dans les autres modes, « sélectionnez au moins deux équipes participantes ». Une équipe inconnue ou cochée deux fois est refusée avec « Équipe inconnue ou en double ».
-2. **Lancer la roue** (étape 1). La roue tourne sur la TV et sur la tablette joueur. Elle accélère pendant **2 tours** :
+2. **Lancer la roue** (étape 1). La roue tourne sur la TV et sur la tablette joueur. Elle accélère pendant **1 tour** (5 s par défaut) :
    pendant cette montée, **personne ne peut l'arrêter**, ni l'équipe qui a la main, ni l'admin (« Forcer l'arrêt » est grisé),
    ni l'animateur. Un appui pendant la montée est ignoré. La roue s'arrête ensuite :
    - au **buzz** de l'équipe qui a la main (buzzer ou tablette), une fois la pleine vitesse atteinte ;

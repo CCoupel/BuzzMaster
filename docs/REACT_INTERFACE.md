@@ -1931,7 +1931,7 @@ Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-
 
 - `Wheel.jsx` reçoit une prop `motion` : `null` (comportement v11.4.0 inchangé, RAFALE), `spin` (défilement continu)
   ou `land` (freinage jusqu'à la case cible).
-- `spin` avec `accelTurns` (Roue de la Fortune : 2) : **montée** depuis l'arrêt, à accélération constante, jusqu'à la vitesse
+- `spin` avec `accelTurns` (Roue de la Fortune : 1, soit `SPIN_UP_MS = 2 × SPIN_PERIOD_MS`) : **montée** depuis l'arrêt, à accélération constante, jusqu'à la vitesse
   de croisière, atteinte après exactement `accelTurns` tours (durée `2 × accelTurns × periodMs`), puis croisière. Sans
   `accelTurns`, pas de montée : vitesse de croisière dès le départ. `cruise: true` (`FULL_SPEED` du serveur) passe
   aussitôt à la croisière depuis la position courante, sans saut ; il ne relance jamais la montée. Un montage direct en
@@ -1953,7 +1953,7 @@ Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-
 
 | Fichier | Rôle |
 |---|---|
-| `FortuneWheel.jsx` | Adaptateur : segments de la roue (`buildFortuneSegments`), mouvement `spin` / `land` (`fortuneMotion`) selon `ROUE_SUBPHASE` ; `spin` = `{ accelTurns: SPIN_UP_MS / (2 × SPIN_PERIOD_MS), cruise: FULL_SPEED }` ; barre de durée maximale décomptée localement (intervalle 100 ms) depuis `FULL_SPEED = true`, pas pendant la montée |
+| `FortuneWheel.jsx` | Adaptateur : segments de la roue (`buildFortuneSegments`), mouvement `spin` / `land` (`fortuneMotion`) selon `ROUE_SUBPHASE` ; `spin` = `{ accelTurns: SPIN_UP_MS / (2 × SPIN_PERIOD_MS) (= 1), cruise: FULL_SPEED }` ; barre de durée maximale décomptée localement (intervalle 100 ms) depuis `FULL_SPEED = true`, pas pendant la montée |
 | `RoueBoard.jsx` | Plateau de l'**éditeur** (aperçu de la phrase, sans état de jeu) |
 | `RoueGameBoard.jsx` | Plateau de **jeu** (TV, tablette, admin, animateur), distinct de `RoueBoard` |
 | `RoueTv.jsx` | Écran TV ROUE : équipes en haut, plateau plein écran, roue permanente (bandeau ou arc selon `ROUE_WHEEL.LAYOUT`). Rend aussi la zone roue de la **tablette joueur** (`.roue-vp-zone`) : la roue y remplace le bouton STOP (voir Règles d'interface) |
@@ -1962,7 +1962,7 @@ Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-
 | `RoueControls.jsx` | Boutons de l'étape courante, clavier de consonnes, boutons « Tour suivant » / « Équipe suivante », message de refus `ROUE_ERROR`, décompte local |
 | `AnimRoue.jsx` | Vue animateur (tablette) : les 7 étapes, réponse colorée par équipe, consonnes jouées |
 | `RoueEditor.jsx` | Éditeur de question ROUE (`QuestionsPage`) : phrase, présentation, mode, gains, forme, lettres ; aperçu par `POST /api/roue/preview` (debounce 300 ms) |
-| `WheelConfigCard.jsx` | Carte « Roue » des paramètres (`ConfigPage`) : 4 paramètres, durées, aperçu par `POST /api/roue/wheel-preview` (debounce 300 ms) |
+| `WheelConfigCard.jsx` | Carte « Roue » des paramètres (`ConfigPage`) : 4 paramètres, durées, aperçu par `POST /api/roue/wheel-preview` (debounce 300 ms), bouton « Tester » / « Arrêter » (essai, voir Règles d'interface) |
 | `roueState.js` | Helpers partagés : portes d'action par sous-phase et par rôle, libellés |
 
 Règles d'interface :
@@ -1970,6 +1970,14 @@ Règles d'interface :
 - **Aucune copie JavaScript** de la mise en lignes ni de la construction de la roue : l'aperçu vient toujours du serveur.
   Un pas corrigé est affiché « Pas ajusté à … » et remplace la valeur du champ.
 - La carte de réglage n'apparaît que si `GET /game-config.json` renvoie `wheel`. `wheel_default` est facultatif : sans lui, le bouton « Roue par défaut » n'a pas de valeurs à appliquer.
+- **Essai « Tester »** (carte de réglage) : anime les deux aperçus déjà présents (bandeau « Sur la TV » via `FortuneWheel`,
+  vue circulaire `Ring`) avec les valeurs saisies, non enregistrées, d'après `TIMING` de la réponse `wheel-preview`
+  (aucune règle de durée dans la page). Enchaîne repos → « Montée… » (« Tester » et « Arrêter » grisés) → « Pleine vitesse »
+  (« Arrêter » actif, arrêt automatique à `SPIN_MAX_MS`) → « Freinage » (`STOP_DURATION_MS`) → arrêt sur la case tirée au
+  hasard côté client. Les deux aperçus tournent ensemble et s'arrêtent sur la même case. Grisé si l'aperçu n'a pas de
+  `TIMING`. Aucun message WebSocket ; un réglage modifié, « Roue par défaut » ou le démontage de la page interrompt l'essai.
+- **Freinage de la tablette** (correctif `5689ebb5`) : la roue de la tablette freine à l'arrêt ; elle n'est plus remontée
+  au passage de tapable à non tapable.
 - Le plateau d'une phrase refusée n'est pas dessiné : le `400` ne renvoie pas de lignes.
 - Le champ générique `question` d'une question ROUE vaut la présentation, ou « Roue de la Fortune » si elle est vide.
   La phrase ne passe jamais par `question`.

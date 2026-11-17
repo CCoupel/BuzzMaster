@@ -337,7 +337,7 @@ STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulem
 - **Le serveur tire la case** au moment où l'arrêt est demandé (buzz de l'équipe qui a la main, `ROUE_STOP`, ou durée
   maximale `SPIN_MAX_MS` comptée après la montée). Les écrans n'ont aucune horloge à synchroniser : ils animent à réception.
 - **Montée** : `SPINNING` se déroule en deux temps, distingués par `ROUE_WHEEL.FULL_SPEED`. La montée dure
-  `SPIN_UP_MS` (2 tours) ; pendant ce temps, personne ne peut arrêter la roue (`ROUE_STOP` refusé `NOT_FULL_SPEED`,
+  `SPIN_UP_MS` (1 tour : `2 × SPIN_PERIOD_MS`, 5 s par défaut) ; pendant ce temps, personne ne peut arrêter la roue (`ROUE_STOP` refusé `NOT_FULL_SPEED`,
   appui ignoré). À la fin de la montée, `FULL_SPEED = true` : l'arrêt devient possible.
 
 ### Sous-phases (`ROUE_SUBPHASE`)
@@ -346,7 +346,7 @@ STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulem
 |---|---|---|
 | `""` | 0 | Hors tour (manche non démarrée ou `SOLVED`) |
 | `TURN` | 1 | Roue prête, en attente du lancer (ou, si plus aucune consonne, des boutons de fin) |
-| `SPINNING` | 2 | Roue qui tourne ; montée (`FULL_SPEED = false`, 2 tours) puis pleine vitesse (`FULL_SPEED = true`) ; arrêt au buzz, à `ROUE_STOP` ou après `SPIN_MAX_MS`, seulement en pleine vitesse |
+| `SPINNING` | 2 | Roue qui tourne ; montée (`FULL_SPEED = false`, 1 tour) puis pleine vitesse (`FULL_SPEED = true`) ; arrêt au buzz, à `ROUE_STOP` ou après `SPIN_MAX_MS`, seulement en pleine vitesse |
 | `STOPPING` | 3 | Case tirée (`STOP = {TO, DURATION_MS}`), freinage ; effet appliqué à la fin du freinage |
 | `LETTER` | 4 | Attente d'une consonne (`ROUE_LETTER`) — l'équipe l'annonce à voix haute avant |
 | `LIT` | 5 | Consonne présente : ses cases sont éclairées (`*`), retournement à l'admin / l'animateur |

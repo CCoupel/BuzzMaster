@@ -1842,7 +1842,7 @@ repliés. Mise en lignes : 4 lignes de 14 colonnes au plus, mots non coupés, ca
 | `ROUE_LETTERS` | `{ "LETTER", "TEAM", "HIT" }[]` | Consonnes proposées, dans l'ordre |
 | `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question |
 | `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |
-| `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE}`, `KIND` ∈ `value \| bankrupt \| lose_turn`), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`), `SPIN_UP_MS` (durée de la montée, posée au `START` = 4 × `SPIN_PERIOD_MS`, soit 2 tours), `FULL_SPEED` (`true` seulement en `SPINNING` une fois la montée terminée ; `false` pendant la montée et hors `SPINNING`) |
+| `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE}`, `KIND` ∈ `value \| bankrupt \| lose_turn`), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`), `SPIN_UP_MS` (durée de la montée, posée au `START` = 2 × `SPIN_PERIOD_MS`, soit 1 tour, 5 s par défaut), `FULL_SPEED` (`true` seulement en `SPINNING` une fois la montée terminée ; `false` pendant la montée et hors `SPINNING`) |
 | `ROUE_LAST_EVENT` | objet | `{ SEQ, KIND, TEAM, LETTER, COUNT, VALUE, GAIN }` — au plus un événement par action |
 | `ROUE_WINNER` | string | Équipe qui a résolu (`""` sinon) |
 | `ROUE_AWARDS` | map équipe → int | Points crédités à la résolution |
@@ -1874,7 +1874,7 @@ Struct Go `config.WheelConfig` (`internal/config/gameconfig.go`). Une section ab
 | `bankrupt_count` | 2 | ≥ 0 |
 | `lose_turn_count` | 1 | ≥ 0 |
 | — | — | 64 cases au plus, sinon `400` et rien n'est enregistré |
-| `spin_period_ms` | 2500 | 1000–6000 ; hors bornes ramené à la borne |
+| `spin_period_ms` | 2500 | 1000–6000 ; hors bornes ramené à la borne. Fixe aussi la durée de la montée : `2 × spin_period_ms` (1 tour, 2 à 12 s) |
 | `spin_max_ms` | 10000 | 3000–30000 |
 | `stop_duration_ms` | 4000 | 1500–8000 |
 | `flip_interval_ms` | 600 | 200–1500 ; non exposé dans l'interface en v12.0 |
