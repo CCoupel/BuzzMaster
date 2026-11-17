@@ -31,6 +31,8 @@ type roueRig struct {
 	lastN   atomic.Int64
 	changes atomic.Int64
 	notices []RoueNotice
+	// initialSpinUp / initialPeriod : SPIN_UP_MS et SPIN_PERIOD_MS tels que posés au START, avant raccourcissement.
+	initialSpinUp, initialPeriod int
 	nmu     sync.Mutex
 }
 
@@ -65,6 +67,8 @@ func newRoueRig(t *testing.T, phrase, mode, gains string, teams ...string) *roue
 	}
 	// Durées raccourcies (le contrat borne à 1,5 s / 200 ms / 3 s : on n'attend pas ça en test).
 	e.mu.Lock()
+	r.initialSpinUp, r.initialPeriod = e.state.RoueWheel.SpinUpMs, e.state.RoueWheel.SpinPeriodMs
+	e.state.RoueWheel.SpinUpMs = 40 // montée raccourcie (contrat : 4 × SPIN_PERIOD_MS)
 	e.roue.stopDuration = 15 * time.Millisecond
 	e.state.RoueWheel.FlipIntervalMs = 5
 	e.state.RoueWheel.SpinMaxMs = 60
@@ -668,7 +672,8 @@ func TestRoue144_Stop_BuzzOfTheTeamWithTheHand(t *testing.T) {
 	if r.st().RoueSubPhase != RoueSubSpinning || r.draws.Load() != 0 {
 		t.Fatalf("appui d'une autre équipe ignoré : sous-phase=%s tirages=%d", r.st().RoueSubPhase, r.draws.Load())
 	}
-	// appui de l'équipe qui a la main
+	// appui de l'équipe qui a la main — acceptée seulement à pleine vitesse (§5.1, montée en 2 tours)
+	r.waitClimbOver()
 	r.e.ProcessButtonPress("b-red", time.Now().UnixMicro(), "A")
 	s := r.st()
 	if s.RoueSubPhase != RoueSubStopping || s.RoueWheel.Stop == nil || s.RoueWheel.Stop.To != wIdx90 {

@@ -32,8 +32,8 @@ describe('AnimRoue — un seul bouton d\'étape actif à la fois', () => {
     const { container } = view()
     expect(enabled(container)).toEqual([expect.stringMatching(/Lancer/)])
   })
-  it('SPINNING : seul « Forcer l\'arrêt » est actif', () => {
-    const { container } = view({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2 })
+  it('SPINNING à pleine vitesse : seul « Forcer l\'arrêt » est actif', () => {
+    const { container } = view({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2, ROUE_WHEEL: { ...gs().ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: true } })
     expect(enabled(container)).toEqual([expect.stringMatching(/Forcer/)])
   })
   it('STOPPING : aucun bouton actif, « La roue ralentit… » affiché', () => {
@@ -70,7 +70,7 @@ describe('AnimRoue — un seul bouton d\'étape actif à la fois', () => {
 describe('AnimRoue — gestes', () => {
   it('Lancer → spin ; Forcer l\'arrêt → stop ; Retourner → flip ; Réponse validée → answer', () => {
     let r = view(); fireEvent.click(screen.getByRole('button', { name: /Lancer/ })); expect(r.a.spin).toHaveBeenCalledTimes(1); cleanup()
-    r = view({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2 }); fireEvent.click(screen.getByRole('button', { name: /Forcer/ })); expect(r.a.stop).toHaveBeenCalledTimes(1); cleanup()
+    r = view({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2, ROUE_WHEEL: { ...gs().ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: true } }); fireEvent.click(screen.getByRole('button', { name: /Forcer/ })); expect(r.a.stop).toHaveBeenCalledTimes(1); cleanup()
     r = view({ ROUE_SUBPHASE: 'LIT', ROUE_STEP: 5 }); fireEvent.click(screen.getByRole('button', { name: /Retourner/ })); expect(r.a.flip).toHaveBeenCalledTimes(1); cleanup()
     r = view({ ROUE_SUBPHASE: 'ANSWER', ROUE_STEP: 6 }); fireEvent.click(byText(r.container, /Réponse\s*validée/)); expect(r.a.answer).toHaveBeenCalledTimes(1)
   })
@@ -161,8 +161,8 @@ describe('AnimRoue — informations affichées', () => {
     expect(view(w(1)).container.querySelector('.anim-roue-case').textContent).toMatch(/BANQUEROUTE/); cleanup()
     expect(view(w(2)).container.querySelector('.anim-roue-case').textContent).toMatch(/TOUR PERDU/)
   })
-  it('SPINNING : « la roue tourne » avec décompte', () => {
-    expect(view({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2 }).container.querySelector('.anim-roue-case').textContent).toMatch(/la roue tourne/)
+  it('SPINNING à pleine vitesse : « la roue tourne » avec décompte', () => {
+    expect(view({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2, ROUE_WHEEL: { ...gs().ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: true } }).container.querySelector('.anim-roue-case').textContent).toMatch(/la roue tourne/)
   })
   it('cagnottes par équipe, l\'équipe qui a la main en avant', () => {
     const { container } = view()

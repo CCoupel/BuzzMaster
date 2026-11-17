@@ -40,7 +40,7 @@ describe('RouePanel — une action principale par étape', () => {
 
   it('étape 2 : « Forcer l\'arrêt » envoie ROUE_STOP ; décompte de la durée maximale affiché', () => {
     const a = actionsMock()
-    render(<RouePanel gameState={gs({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2 })} actions={a} />)
+    render(<RouePanel gameState={gs({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2, ROUE_WHEEL: { ...gs().ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: true } })} actions={a} />)
     expect(screen.getByText(/arrêt automatique dans/)).toBeTruthy()
     fireEvent.click(btn(/Forcer l'arrêt/))
     expect(a.stop).toHaveBeenCalledTimes(1)

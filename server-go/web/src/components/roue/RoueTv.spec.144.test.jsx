@@ -27,6 +27,9 @@ const gs = (over = {}) => ({
   ...over,
 })
 const teams = { Rouges: { COLOR: [239, 68, 68] }, Bleus: { COLOR: [59, 130, 246] } }
+// Pleine vitesse (montée terminée, ROUE_WHEEL.FULL_SPEED du serveur — roue.md §4, §5.1) ; sans cela, la roue monte en vitesse.
+const full = (over = {}) => ({ ROUE_SUBPHASE: 'SPINNING', ROUE_WHEEL: { ...gs().ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: true }, ...over })
+const climb = (over = {}) => ({ ROUE_SUBPHASE: 'SPINNING', ROUE_WHEEL: { ...gs().ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: false }, ...over })
 const text = (parts) => parts.map(p => p.strong ?? p.text).join('')
 
 describe('RoueTv — confidentialité (§9)', () => {
@@ -110,7 +113,7 @@ describe('roueAnnouncement — une annonce par sous-phase', () => {
   const seg = (kind, value = 0) => ({ ROUE_WHEEL: { ...gs().ROUE_WHEEL, CURRENT: 0, SEGMENTS: [{ ID: 's0', KIND: kind, VALUE: value }] } })
   it('TURN, SPINNING, STOPPING, ANSWER', () => {
     expect(text(roueAnnouncement(gs()))).toMatch(/ROUGES.*jouer/i)
-    expect(text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'SPINNING' })))).toMatch(/buzzez/i)
+    expect(text(roueAnnouncement(gs(full())))).toMatch(/buzzez/i)
     expect(text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'STOPPING' })))).toMatch(/ralentit/i)
     expect(text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'ANSWER' })))).toMatch(/réponse/i)
   })
@@ -140,8 +143,8 @@ describe('roueAnnouncement — une annonce par sous-phase', () => {
     expect(roueAnnouncement(undefined)).toEqual([])
   })
   it('tablette : la formulation dépend de « mine »', () => {
-    expect(text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'SPINNING' }), { mine: true }))).toMatch(/arrêtez/i)
-    expect(text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'SPINNING' }), { mine: false }))).toMatch(/vont arrêter/i)
+    expect(text(roueAnnouncement(gs(full()), { mine: true }))).toMatch(/arrêtez/i)
+    expect(text(roueAnnouncement(gs(full()), { mine: false }))).toMatch(/vont arrêter/i)
   })
 })
 
@@ -169,13 +172,13 @@ describe('RoueTv — tablette (M5)', () => {
     }
     // autre équipe en SPINNING : pas de bouton, un clic sur la roue n'envoie rien
     const other = vi.fn()
-    const o = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Bleus" onStop={other} />)
+    const o = render(<RoueTv gameState={gs(full())} teams={teams} isVPlayer teamName="Bleus" onStop={other} />)
     expect(o.queryByRole('button', TAP)).toBeNull()
     fireEvent.click(o.container.querySelector('[data-testid="fortune-wheel"]'))
     expect(other).not.toHaveBeenCalled()
     o.unmount()
     const onStop = vi.fn()
-    const { getByRole } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
+    const { getByRole } = render(<RoueTv gameState={gs(full())} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
     fireEvent.click(getByRole('button', TAP))
     expect(onStop).toHaveBeenCalledTimes(1)
   })
@@ -190,24 +193,24 @@ describe('RoueTv — tablette (M5)', () => {
   })
 
   it('SPINNING : un seul bouton (la roue), cadre à la couleur de l\'équipe, messages pour chaque équipe', () => {
-    const mine = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
+    const mine = render(<RoueTv gameState={gs(full())} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
     expect(mine.container.querySelectorAll('button').length).toBe(1)
     expect(mine.container.textContent).toMatch(/Touchez la roue pour l'arrêter/)
     mine.unmount()
-    const other = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Bleus" onStop={() => {}} />)
+    const other = render(<RoueTv gameState={gs(full())} teams={teams} isVPlayer teamName="Bleus" onStop={() => {}} />)
     expect(other.container.querySelectorAll('button').length).toBe(0)
     expect(other.container.textContent).toMatch(/Les Rouges vont arrêter la roue/)
     expect(other.container.textContent).not.toMatch(/Touchez la roue/)
   })
 
   it('tablette sans nom d\'équipe (non liée) : roue affichée mais jamais tapable', () => {
-    const { container, queryByRole } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName={null} onStop={() => {}} />)
+    const { container, queryByRole } = render(<RoueTv gameState={gs(full())} teams={teams} isVPlayer teamName={null} onStop={() => {}} />)
     expect(queryByRole('button', TAP)).toBeNull()
     expect(container.querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
   })
 
   it('onStop absent : jamais tapable (pas d\'erreur)', () => {
-    const { queryByRole } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" />)
+    const { queryByRole } = render(<RoueTv gameState={gs(full())} teams={teams} isVPlayer teamName="Rouges" />)
     expect(queryByRole('button', TAP)).toBeNull()
   })
 
@@ -237,6 +240,64 @@ describe('RoueTv — tablette (M5)', () => {
     const css = readFileSync(join(here, 'RoueTv.css'), 'utf8')
     const blocks = css.match(/\.roue-vp-(hint|pres|cat|clue)[^{]*\{[^}]*\}/g) || []
     for (const b of blocks) expect(b).not.toMatch(/text-overflow\s*:\s*ellipsis/)
+  })
+
+  it('MONTÉE (FULL_SPEED=false) : la roue est affichée mais jamais tapable, aucun BUTTON, quelle que soit l\'équipe', () => {
+    for (const team of ['Rouges', 'Bleus']) {
+      const onStop = vi.fn()
+      const { container, queryByRole, unmount } = render(<RoueTv gameState={gs(climb())} teams={teams} isVPlayer teamName={team} onStop={onStop} />)
+      expect(queryByRole('button', TAP), team).toBeNull()
+      expect(container.querySelectorAll('button').length, team).toBe(0)
+      fireEvent.click(container.querySelector('[data-testid="fortune-wheel"]'))
+      expect(onStop, team).not.toHaveBeenCalled()
+      expect(container.textContent, team).not.toMatch(/Touchez la roue/)
+      unmount()
+    }
+  })
+
+  it('MONTÉE : message « La roue prend de la vitesse », y compris pour l\'autre équipe', () => {
+    for (const team of ['Rouges', 'Bleus']) {
+      const { container, unmount } = render(<RoueTv gameState={gs(climb())} teams={teams} isVPlayer teamName={team} onStop={() => {}} />)
+      expect(container.textContent, team).toMatch(/prend de la vitesse/i)
+      unmount()
+    }
+  })
+
+  it('la roue devient tapable à FULL_SPEED=true (UPDATE du serveur), pour l\'équipe qui a la main seulement', () => {
+    const onStop = vi.fn()
+    const { rerender, getByRole, queryByRole, container } = render(<RoueTv gameState={gs(climb())} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
+    expect(queryByRole('button', TAP)).toBeNull()
+    rerender(<RoueTv gameState={gs(full())} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
+    expect(container.textContent).toMatch(/Touchez la roue pour l'arrêter/)
+    fireEvent.click(getByRole('button', TAP))
+    expect(onStop).toHaveBeenCalledTimes(1)
+    rerender(<RoueTv gameState={gs(full())} teams={teams} isVPlayer teamName="Bleus" onStop={onStop} />)
+    expect(queryByRole('button', TAP)).toBeNull()
+    expect(container.textContent).toMatch(/Les Rouges vont arrêter la roue/)
+  })
+
+  it('montage direct en SPINNING à pleine vitesse (client connecté en cours de rotation) : tapable tout de suite', () => {
+    const onStop = vi.fn()
+    const { getByRole } = render(<RoueTv gameState={gs(full())} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
+    fireEvent.click(getByRole('button', TAP))
+    expect(onStop).toHaveBeenCalledTimes(1)
+  })
+
+  it('montage direct en SPINNING pendant la montée : pas tapable (FULL_SPEED fait foi)', () => {
+    const { queryByRole } = render(<RoueTv gameState={gs(climb())} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
+    expect(queryByRole('button', TAP)).toBeNull()
+  })
+
+  it('FULL_SPEED absent (ancien serveur) : jamais tapable', () => {
+    const w = { ...gs().ROUE_WHEEL }
+    const { queryByRole } = render(<RoueTv gameState={gs({ ROUE_SUBPHASE: 'SPINNING', ROUE_WHEEL: w })} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
+    expect(queryByRole('button', TAP)).toBeNull()
+  })
+
+  it('TV (statique) : annonce de montée puis « buzzez » seulement à pleine vitesse', () => {
+    expect(text(roueAnnouncement(gs(climb())))).toMatch(/vitesse/i)
+    expect(text(roueAnnouncement(gs(climb())))).not.toMatch(/buzzez/i)
+    expect(text(roueAnnouncement(gs(full())))).toMatch(/buzzez/i)
   })
 
   it('cagnotte de son équipe uniquement', () => {

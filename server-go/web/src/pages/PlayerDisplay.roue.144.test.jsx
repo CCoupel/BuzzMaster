@@ -37,6 +37,9 @@ const BASE = {
 }
 const TEAMS = { Rouges: { NAME: 'Rouges', COLOR: [239, 68, 68] }, Bleus: { NAME: 'Bleus', COLOR: [59, 130, 246] } }
 
+const FULL = { ROUE_SUBPHASE: 'SPINNING', ROUE_WHEEL: { ...BASE.ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: true } }
+const CLIMB = { ROUE_SUBPHASE: 'SPINNING', ROUE_WHEEL: { ...BASE.ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: false } }
+
 function mockGame(overrides = {}) {
   useGame.mockReturnValue({
     gameState: { ...BASE, ...overrides }, teams: TEAMS, bumpers: {},
@@ -72,7 +75,7 @@ describe('PlayerDisplay — type ROUE (#144)', () => {
   })
 
   it('tablette (isVPlayer) : monte la vue tablette, la roue tapable quand elle tourne pour son équipe, sans bouton STOP', () => {
-    mockGame({ ROUE_SUBPHASE: 'SPINNING' })
+    mockGame(FULL)
     const { container, getByRole } = render(<PlayerDisplay isVPlayer teamName="Rouges" onMediaClick={vi.fn()} />)
     expect(container.querySelector('[data-testid="roue-vp"]')).not.toBeNull()
     expect(getByRole('button', { name: /Arrêter la roue/ }).querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
@@ -80,7 +83,7 @@ describe('PlayerDisplay — type ROUE (#144)', () => {
   })
 
   it('tablette : un tap sur la roue appelle onMediaClick une seule fois (envoi BUTTON)', () => {
-    mockGame({ ROUE_SUBPHASE: 'SPINNING' })
+    mockGame(FULL)
     const onMediaClick = vi.fn()
     const { getByRole } = render(<PlayerDisplay isVPlayer teamName="Rouges" onMediaClick={onMediaClick} />)
     getByRole('button', { name: /Arrêter la roue/ }).click()
@@ -88,13 +91,33 @@ describe('PlayerDisplay — type ROUE (#144)', () => {
   })
 
   it('tablette d\'une autre équipe : roue affichée, non tapable, aucun envoi', () => {
-    mockGame({ ROUE_SUBPHASE: 'SPINNING' })
+    mockGame(FULL)
     const onMediaClick = vi.fn()
     const { container, queryByRole } = render(<PlayerDisplay isVPlayer teamName="Bleus" onMediaClick={onMediaClick} />)
     expect(queryByRole('button', { name: /Arrêter la roue/ })).toBeNull()
     expect(container.querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
     container.querySelector('[data-testid="fortune-wheel"]').click()
     expect(onMediaClick).not.toHaveBeenCalled()
+  })
+
+  it('tablette pendant la montée (FULL_SPEED=false) : roue affichée, non tapable, aucun envoi', () => {
+    mockGame(CLIMB)
+    const onMediaClick = vi.fn()
+    const { container, queryByRole } = render(<PlayerDisplay isVPlayer teamName="Rouges" onMediaClick={onMediaClick} />)
+    expect(queryByRole('button', { name: /Arrêter la roue/ })).toBeNull()
+    expect(container.querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
+    container.querySelector('[data-testid="fortune-wheel"]').click()
+    expect(onMediaClick).not.toHaveBeenCalled()
+    expect(container.textContent).toMatch(/prend de la vitesse/i)
+  })
+
+  it('tablette : devient tapable quand l\'UPDATE apporte FULL_SPEED=true', () => {
+    mockGame(CLIMB)
+    const { queryByRole, rerender } = render(<PlayerDisplay isVPlayer teamName="Rouges" onMediaClick={vi.fn()} />)
+    expect(queryByRole('button', { name: /Arrêter la roue/ })).toBeNull()
+    mockGame(FULL)
+    rerender(<PlayerDisplay isVPlayer teamName="Rouges" onMediaClick={vi.fn()} />)
+    expect(queryByRole('button', { name: /Arrêter la roue/ })).not.toBeNull()
   })
 
   it('tablette hors SPINNING : roue affichée, non tapable, y compris SOLVED', () => {
@@ -108,7 +131,7 @@ describe('PlayerDisplay — type ROUE (#144)', () => {
   })
 
   it('tablette : la présentation est affichée et la phrase jamais', () => {
-    mockGame({ ROUE_SUBPHASE: 'SPINNING', question: { ...BASE.question, ROUE_PHRASE: 'COMBIEN POUR CE CHIEN' } })
+    mockGame({ ...FULL, question: { ...BASE.question, ROUE_PHRASE: 'COMBIEN POUR CE CHIEN' } })
     const { container } = render(<PlayerDisplay isVPlayer teamName="Rouges" onMediaClick={vi.fn()} />)
     expect(container.textContent).toMatch(/Chanson de Line Renaud/)
     expect(container.textContent).not.toMatch(/COMBIEN POUR CE CHIEN/)

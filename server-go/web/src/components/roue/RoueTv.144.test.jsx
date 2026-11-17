@@ -19,6 +19,7 @@ const base = (over = {}) => ({
   ROUE_WINNER: '', ROUE_AWARDS: {},
   ...over,
 })
+const full = () => ({ ROUE_SUBPHASE: 'SPINNING', ROUE_WHEEL: { ...base().ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: true } })
 const teams = { Rouges: { COLOR: [239, 68, 68] }, Bleus: { COLOR: [59, 130, 246] } }
 
 describe('RoueTv — TV (#144, M1)', () => {
@@ -47,22 +48,22 @@ describe('RoueTv — TV (#144, M1)', () => {
 describe('RoueTv — tablette (#144, M5)', () => {
   it('la roue est tapable seulement pour l\'équipe qui a la main pendant SPINNING (plus de bouton STOP)', () => {
     const onStop = vi.fn()
-    const { container, rerender, getByRole, queryByRole } = render(<RoueTv gameState={base({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
+    const { container, rerender, getByRole, queryByRole } = render(<RoueTv gameState={base(full())} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
     const tap = getByRole('button', { name: /Arrêter la roue/ })
     expect(tap.querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
     fireEvent.click(tap)
     expect(onStop).toHaveBeenCalledTimes(1)
     expect(container.querySelector('.roue-vp-stop')).toBeNull()
-    rerender(<RoueTv gameState={base({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Bleus" onStop={onStop} />)
+    rerender(<RoueTv gameState={base(full())} teams={teams} isVPlayer teamName="Bleus" onStop={onStop} />)
     expect(queryByRole('button', { name: /Arrêter la roue/ })).toBeNull()
     expect(container.querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
     expect(onStop).toHaveBeenCalledTimes(1)
   })
   it('messages : « Touchez la roue pour l\'arrêter » pour l\'équipe qui a la main, « vont arrêter la roue » pour l\'autre', () => {
-    const mine = render(<RoueTv gameState={base({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
+    const mine = render(<RoueTv gameState={base(full())} teams={teams} isVPlayer teamName="Rouges" onStop={() => {}} />)
     expect(mine.container.textContent).toMatch(/Touchez la roue pour l'arrêter/)
     mine.unmount()
-    const other = render(<RoueTv gameState={base({ ROUE_SUBPHASE: 'SPINNING' })} teams={teams} isVPlayer teamName="Bleus" onStop={() => {}} />)
+    const other = render(<RoueTv gameState={base(full())} teams={teams} isVPlayer teamName="Bleus" onStop={() => {}} />)
     expect(other.container.textContent).toMatch(/Les Rouges vont arrêter la roue/)
     expect(other.container.textContent).not.toMatch(/Touchez la roue/)
   })
