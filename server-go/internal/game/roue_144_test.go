@@ -1107,13 +1107,14 @@ func TestRoue144_SetTeams_Rules(t *testing.T) {
 	if err := solo.RoueSetTeams([]string{"red"}); err != nil {
 		t.Errorf("SOLO : 1 équipe acceptée : %v", err)
 	}
-	if code(solo.RoueSetTeams([]string{"red", "blue"})) != RoueErrInvalidTeams {
-		t.Errorf("SOLO : 2 équipes refusées (INVALID_TEAMS)")
+	// Le comptage n'est plus contrôlé à la sélection (correctif 12.0.0.2) : il l'est au passage à READY.
+	if err := solo.RoueSetTeams([]string{"red", "blue"}); err != nil {
+		t.Errorf("SOLO : 2 équipes acceptées à la sélection (le comptage est porté par la garde de départ) : %v", err)
 	}
 	for _, mode := range []string{RoueModeChacunSonTour, RoueModeTantQueJeGagne} {
 		e := mk(mode)
-		if code(e.RoueSetTeams([]string{"red"})) != RoueErrInvalidTeams {
-			t.Errorf("%s : 1 équipe refusée", mode)
+		if err := e.RoueSetTeams([]string{"red"}); err != nil {
+			t.Errorf("%s : 1 équipe acceptée à la sélection (clic incrémental) : %v", mode, err)
 		}
 		if err := e.RoueSetTeams([]string{"blue", "red"}); err != nil {
 			t.Errorf("%s : 2 équipes acceptées : %v", mode, err)
@@ -1129,6 +1130,63 @@ func TestRoue144_SetTeams_Rules(t *testing.T) {
 		}
 		if err := e.RoueSetTeams(nil); err != nil || len(e.GetState().RoueTeams) != 0 || e.GetState().RoueCurrentTeam != "" {
 			t.Errorf("%s : une liste vide efface la sélection : %v", mode, err)
+		}
+	}
+}
+
+// Clics incrémentaux du sélecteur : 1 puis 2 équipes hors SOLO. READY et FORCE_READY restent refusés tant que le
+// compte n'est pas conforme, acceptés ensuite (comme RAFALE).
+func TestRoue144_SetTeams_IncrementalClicksThenStartGuard(t *testing.T) {
+	for _, mode := range []string{RoueModeChacunSonTour, RoueModeTantQueJeGagne, RoueModeSolo} {
+		mk := func() *Engine {
+			e := NewEngine()
+			e.SetTeams(map[string]*Team{"red": {Name: "red", Ready: true}, "blue": {Name: "blue", Ready: true}})
+			e.SetBumpers(map[string]*Bumper{
+				"b-red":  {Name: "P-red", Team: "red", Connected: true, Ready: true},
+				"b-blue": {Name: "P-blue", Team: "blue", Connected: true, Ready: true},
+			})
+			e.Ready("rq", &Question{ID: "rq", Question: "R", Type: QuestionTypeRoue,
+				TypedContent: TypedContent{RouePhrase: "BONJOUR", RoueMode: mode}})
+			return e
+		}
+		// Sans équipe : READY et FORCE_READY refusés.
+		e := mk()
+		e.ForceReady()
+		if ph := e.GetState().Phase; ph != PhasePrepare {
+			t.Errorf("%s : FORCE_READY sans équipe doit rester en PREPARE, got %s", mode, ph)
+		}
+		if mode == RoueModeSolo {
+			// SOLO : 1 équipe conforme ; 2 équipes acceptées mais non conformes.
+			if err := e.RoueSetTeams([]string{"red", "blue"}); err != nil {
+				t.Fatalf("%s : %v", mode, err)
+			}
+			e.ForceReady()
+			if ph := e.GetState().Phase; ph != PhasePrepare {
+				t.Errorf("SOLO avec 2 équipes : reste en PREPARE, got %s", ph)
+			}
+			if err := e.RoueSetTeams([]string{"red"}); err != nil {
+				t.Fatalf("SOLO : %v", err)
+			}
+			if ph := e.GetState().Phase; ph != PhaseReady {
+				t.Errorf("SOLO avec 1 équipe : READY, got %s", ph)
+			}
+			continue
+		}
+		if err := e.RoueSetTeams([]string{"red"}); err != nil {
+			t.Fatalf("%s : 1 équipe acceptée : %v", mode, err)
+		}
+		e.ForceReady()
+		if ph := e.GetState().Phase; ph != PhasePrepare {
+			t.Errorf("%s : 1 équipe non conforme, FORCE_READY refusé (PREPARE), got %s", mode, ph)
+		}
+		if err := e.RoueSetTeams([]string{"red", "blue"}); err != nil {
+			t.Fatalf("%s : 2 équipes acceptées : %v", mode, err)
+		}
+		if ph := e.GetState().Phase; ph != PhaseReady {
+			t.Errorf("%s : 2 équipes, tous prêts : READY, got %s", mode, ph)
+		}
+		if got := e.GetState().RoueTeams; len(got) != 2 {
+			t.Errorf("%s : RoueTeams = %v", mode, got)
 		}
 	}
 }

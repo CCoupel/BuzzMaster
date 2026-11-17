@@ -856,8 +856,11 @@ func (e *Engine) RoueReveal() error {
 }
 
 // RoueSetTeams — ROUE_SET_TEAMS (PREPARE / READY): participating teams in
-// rotation order. SOLO = exactly one team, the other modes at least two; an
-// empty list clears the selection.
+// rotation order; an empty list clears the selection. Only existence and
+// duplicates are checked here: the picker sends the list at every click, so a
+// count rule (SOLO = 1, others >= 2) would make two teams unreachable. The count
+// is carried by participantsConform / roueTeamsConform alone (PREPARE→READY and
+// FORCE_READY), like RAFALE_SET_TEAMS.
 func (e *Engine) RoueSetTeams(teams []string) error {
 	e.mu.Lock()
 	if e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady {
@@ -875,16 +878,6 @@ func (e *Engine) RoueSetTeams(teams []string) error {
 			return roueErr(RoueErrInvalidTeams, "équipe inconnue ou en double")
 		}
 		seen[t] = true
-	}
-	if len(teams) > 0 {
-		mode := e.state.Question.RoueMode
-		if mode == "" {
-			mode = RoueModeTantQueJeGagne
-		}
-		if !participantsCountConform(mode, len(teams)) {
-			e.mu.Unlock()
-			return roueErr(RoueErrInvalidTeams, "SOLO : exactement 1 équipe ; autres modes : 2 au moins")
-		}
 	}
 	e.state.RoueTeams = append([]string{}, teams...)
 	if len(teams) > 0 {
