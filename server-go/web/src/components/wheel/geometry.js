@@ -77,3 +77,49 @@ export function landPosition(from, to, total, p, n) {
   if (p >= 1) return offsetToIndex(to, n)
   return offsetToIndex(from + total * easeOutCubic(p), n)
 }
+
+// ---------------------------------------------------------------------------
+// `land` à vitesse continue (ROUE, #144, correctif 12.0.0.3) : le freinage part de la vitesse de croisière du
+// `spin` (n/periodMs) au lieu d'un ease-out cubique à vitesse initiale imposée (saut ×1,9 à ×4,4).
+// Profil : croisière (tc) puis décélération constante (tb) jusqu'à l'arrêt exactement sur `to`.
+// Sans `periodMs`, `land` garde l'ancien profil (`landPosition`).
+// ---------------------------------------------------------------------------
+
+/** Durée minimale (ms) de la décélération — en deçà elle serait perçue comme un arrêt sec. */
+export const BRAKE_MIN_MS = 500
+
+/**
+ * Plan de freinage continu : `{ D, v0, tc, tb }` (D = amplitude en segments, v0 en segments/ms) ou `null` si la
+ * fenêtre d'arrêt est trop courte pour la vitesse (l'appelant retombe alors sur l'ancien profil).
+ * Cherche d'abord un freinage qui atterrit exactement à `durationMs` (tc + tb = durationMs, tb ≥ BRAKE_MIN_MS),
+ * avec 0 à MAX_LAND_TURNS tours ajoutés ; sinon une décélération constante pure qui s'arrête avant `durationMs`.
+ */
+export function brakePlan(from, to, n, durationMs, periodMs) {
+  if (!(n > 0) || !(durationMs > 0) || !(periodMs > 0)) return null
+  const v0 = n / periodMs
+  const d = forwardDistance(from, to, n)
+  const cands = []
+  for (let k = 0; k <= MAX_LAND_TURNS; k++) {
+    const D = d + k * n
+    if (D >= 1) cands.push(D) // moins d'un segment : pas de freinage perceptible, on ajoute un tour
+  }
+  // A : atterrissage exact à durationMs (croisière puis décélération), tb ≥ BRAKE_MIN_MS, tc ≥ 0.
+  for (const D of cands) {
+    const tb = 2 * (durationMs - D / v0)
+    if (tb >= BRAKE_MIN_MS && tb <= (2 * D) / v0) return { D, v0, tc: durationMs - tb, tb }
+  }
+  // B : décélération constante pure (vitesse continue), arrêt avant la fin de la fenêtre.
+  let best = null
+  for (const D of cands) if ((2 * D) / v0 <= durationMs) best = D
+  if (best != null) return { D: best, v0, tc: 0, tb: (2 * best) / v0 }
+  return null
+}
+
+/** Position normalisée à l'instant `t` (ms depuis le début du freinage) selon un `brakePlan` ; `to` exact à la fin. */
+export function brakePosition(plan, from, to, t, n) {
+  const { v0, tc, tb } = plan
+  if (t >= tc + tb) return offsetToIndex(to, n)
+  if (t <= tc) return offsetToIndex(from + v0 * Math.max(0, t), n)
+  const u = (t - tc) / tb
+  return offsetToIndex(from + v0 * tc + v0 * tb * (u - (u * u) / 2), n)
+}

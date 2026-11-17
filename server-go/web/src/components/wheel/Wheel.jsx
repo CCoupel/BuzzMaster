@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { REP, angleFor, forwardDistance, landPosition, landTotal, offsetToIndex, spinPosition } from './geometry'
+import { REP, angleFor, forwardDistance, brakePlan, brakePosition, landPosition, landTotal, offsetToIndex, spinPosition } from './geometry'
 import './Wheel.css'
 
 /**
@@ -16,7 +16,7 @@ import './Wheel.css'
  * @param {'tv'|'compact'} [props.size='tv']
  * @param {string} [props.accent] - couleur du pointeur / du halo
  * @param {Object|null} [props.motion] - null = bascule courte vers `current` ; `{mode:'spin', periodMs}` défilement continu ;
- *   `{mode:'land', to, durationMs, minTurns}` freinage jusqu'à l'index `to` (v12.0.0, §5). Sans horloge serveur.
+ *   `{mode:'land', to, durationMs, minTurns[, periodMs]}` freinage jusqu'à l'index `to` (avec `periodMs` : vitesse continue depuis la croisière du `spin`, sans `minTurns`) (v12.0.0, §5). Sans horloge serveur.
  * @param {number} [props.stepMs=600] - durée de la bascule courte
  */
 const PALETTE = ['#e5e7eb', '#dbeafe', '#fef3c7', '#dcfce7', '#fce7f3', '#ede9fe']
@@ -157,13 +157,16 @@ export default function Wheel({
         finish(to)
         return undefined
       }
-      const total = landTotal(from, to, n, motionTurns ?? 1)
+      // Avec `periodMs` (ROUE) : freinage à vitesse continue depuis la croisière du `spin` ; sinon (RAFALE, tests) ancien profil.
+      const plan = motionPeriod > 0 ? brakePlan(from, to, n, motionDuration, motionPeriod) : null
+      const total = plan ? 0 : landTotal(from, to, n, motionTurns ?? 1)
       const t0 = frameNow()
       const tick = () => {
         if (cancelled) return
-        const p = (frameNow() - t0) / motionDuration
+        const elapsed = frameNow() - t0
+        const p = elapsed / motionDuration
         if (p >= 1) { finish(to); return }
-        apply.current(landPosition(from, to, total, p, n))
+        apply.current(plan ? brakePosition(plan, from, to, elapsed, n) : landPosition(from, to, total, p, n))
         raf = requestFrame(tick)
       }
       raf = requestFrame(tick)

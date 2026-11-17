@@ -28,7 +28,7 @@ export function buildFortuneSegments(rawSegments = []) {
 export function fortuneMotion(wheel, subphase) {
   if (subphase === 'SPINNING') return { mode: 'spin', periodMs: wheel?.SPIN_PERIOD_MS || 2500 }
   if (subphase === 'STOPPING' && wheel?.STOP) {
-    return { mode: 'land', to: wheel.STOP.TO, durationMs: wheel.STOP.DURATION_MS, minTurns: 1 }
+    return { mode: 'land', to: wheel.STOP.TO, durationMs: wheel.STOP.DURATION_MS, minTurns: 1, periodMs: wheel?.SPIN_PERIOD_MS || 2500 }
   }
   return null
 }
@@ -40,7 +40,7 @@ export default function FortuneWheel({ wheel, subphase = '', teamColor, size = '
     ? `rgb(${teamColor.join(',')})`
     : (typeof teamColor === 'string' && teamColor ? teamColor : undefined)
   const motionKey = subphase === 'SPINNING' ? `spin:${wheel?.SPIN_PERIOD_MS}`
-    : subphase === 'STOPPING' && wheel?.STOP ? `land:${wheel.STOP.TO}:${wheel.STOP.DURATION_MS}` : ''
+    : subphase === 'STOPPING' && wheel?.STOP ? `land:${wheel.STOP.TO}:${wheel.STOP.DURATION_MS}:${wheel?.SPIN_PERIOD_MS}` : ''
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const motion = useMemo(() => fortuneMotion(wheel, subphase), [motionKey])
   const current = wheel && wheel.CURRENT >= 0 ? wheel.CURRENT : null

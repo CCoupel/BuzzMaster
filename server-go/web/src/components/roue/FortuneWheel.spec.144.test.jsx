@@ -42,7 +42,7 @@ describe('FortuneWheel — spécification', () => {
 
   it('STOPPING : freinage vers STOP.TO avec au moins un tour', () => {
     const m = fortuneMotion(wheel({ STOP: { TO: 2, DURATION_MS: 4000 } }), 'STOPPING')
-    expect(m).toEqual({ mode: 'land', to: 2, durationMs: 4000, minTurns: 1 })
+    expect(m).toEqual({ mode: 'land', to: 2, durationMs: 4000, minTurns: 1, periodMs: 2500 })
   })
 
   it('SPINNING : défilement à la période du serveur', () => {
