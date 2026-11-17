@@ -9,9 +9,9 @@ import (
 	"buzzcontrol/internal/protocol"
 )
 
-// #144 (v12.0.0) — montée en 2 tours par le vrai chemin WebSocket (contracts/roue.md §5.1, §8) : l'origine de
+// #144 (v12.0.0) — montée d'un tour par le vrai chemin WebSocket (contracts/roue.md §5.1, §8) : l'origine de
 // ROUE_STOP (admin / animateur) est transmise au moteur, le refus NOT_FULL_SPEED va à l'émetteur seul, et la
-// TV comme la tablette reçoivent SPIN_UP_MS et FULL_SPEED. La montée par défaut dure 10 s : on reste dedans.
+// TV comme la tablette reçoivent SPIN_UP_MS et FULL_SPEED. La montée par défaut dure 5 s : on reste dedans.
 
 func TestRoueWire144_SpinUp_StopRefusedDuringClimb_AdminAndAnim_ErrorToTheEmitterOnly(t *testing.T) {
 	for _, who := range []string{"admin", "anim"} {

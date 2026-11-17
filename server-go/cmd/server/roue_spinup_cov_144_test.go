@@ -29,7 +29,7 @@ func updatesOf(frames []string) int {
 func TestRoueWire144_SpinUp_TabletPressDuringClimb_NoUpdateNoSeq(t *testing.T) {
 	w := newRoueWire(t, game.RoueModeTantQueJeGagne)
 	w.bindTabletTo("b-red")
-	w.send(w.admin, protocol.ActionRoueSpin, struct{}{}) // montée de 10 s par défaut : on reste dedans
+	w.send(w.admin, protocol.ActionRoueSpin, struct{}{}) // montée de 5 s par défaut : on reste dedans
 	seq := w.app.engine.GetState().RoueLastEvent.Seq
 	for _, tp := range []*tap{w.adminTap, w.animTap, w.tvTap, w.vpTap} {
 		tp.take(50 * time.Millisecond)

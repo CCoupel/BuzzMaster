@@ -3,7 +3,7 @@ import { render, cleanup, act } from '@testing-library/react'
 import Wheel from './Wheel'
 
 /**
- * #144 — montée en 2 tours, composant `Wheel` (contracts/wheel-component.md §5). Critères d'acceptation :
+ * #144 — montée par distance (1 tour pour la Roue de la Fortune ; composant générique), composant `Wheel` (contracts/wheel-component.md §5). Critères d'acceptation :
  *   4 `cruise: true` reçu avant la fin de la montée / après ;  5 montage direct en `spin`, `accelTurns` absent ;
  *   6 normalisation après 100 enchaînements ; + arrêt pendant la montée, pas de nouvelle montée au re-rendu, sans accelTurns inchangé.
  * (Critères 1 à 3 et 5 pur : geometry.accel.144.test.js.)

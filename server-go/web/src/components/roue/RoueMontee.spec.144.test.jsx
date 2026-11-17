@@ -1,5 +1,5 @@
 /**
- * #144 (v12.0.0) — commandes admin et animateur pendant la montée en 2 tours (contracts/roue.md §5.1, §8).
+ * #144 (v12.0.0) — commandes admin et animateur pendant la montée d'un tour (contracts/roue.md §5.1, §8).
  * Admin et animateur : « Forcer l'arrêt » grisé tant que
  * FULL_SPEED=false, actif à pleine vitesse ; libellé clair pour ROUE_ERROR NOT_FULL_SPEED. Le serveur reste juge.
  */

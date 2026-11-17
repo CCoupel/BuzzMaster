@@ -9,7 +9,7 @@ import FortuneWheel, { buildFortuneSegments, fortuneMotion } from './FortuneWhee
 afterEach(() => cleanup())
 
 const wheel = (over = {}) => ({
-  LAYOUT: 'strip', SPIN_PERIOD_MS: 2500, SPIN_MAX_MS: 10000, SPIN_UP_MS: 10000, FULL_SPEED: false, FLIP_INTERVAL_MS: 600, CURRENT: -1, STOP: null,
+  LAYOUT: 'strip', SPIN_PERIOD_MS: 2500, SPIN_MAX_MS: 10000, SPIN_UP_MS: 5000, FULL_SPEED: false, FLIP_INTERVAL_MS: 600, CURRENT: -1, STOP: null,
   SEGMENTS: [
     { ID: 's0', KIND: 'value', VALUE: 100 }, { ID: 's1', KIND: 'bankrupt', VALUE: 0 },
     { ID: 's2', KIND: 'value', VALUE: 90 }, { ID: 's3', KIND: 'lose_turn', VALUE: 0 },
@@ -46,13 +46,13 @@ describe('FortuneWheel — spécification', () => {
   })
 
   it('SPINNING : défilement à la période du serveur', () => {
-    expect(fortuneMotion(wheel({ SPIN_PERIOD_MS: 3000, SPIN_UP_MS: 12000 }), 'SPINNING')).toMatchObject({ mode: 'spin', periodMs: 3000, accelTurns: 2 })
+    expect(fortuneMotion(wheel({ SPIN_PERIOD_MS: 3000, SPIN_UP_MS: 6000 }), 'SPINNING')).toMatchObject({ mode: 'spin', periodMs: 3000, accelTurns: 1 })
   })
 
   it('SPINNING : accelTurns = SPIN_UP_MS / (2 × SPIN_PERIOD_MS) (le serveur fait foi), plus aucune durée fixe', () => {
-    const m = fortuneMotion(wheel({ SPIN_PERIOD_MS: 1000, SPIN_UP_MS: 4000 }), 'SPINNING')
-    expect(m.accelTurns).toBeCloseTo(2, 9)
-    expect(fortuneMotion(wheel({ SPIN_PERIOD_MS: 6000, SPIN_UP_MS: 24000 }), 'SPINNING').accelTurns).toBeCloseTo(2, 9)
+    const m = fortuneMotion(wheel({ SPIN_PERIOD_MS: 1000, SPIN_UP_MS: 2000 }), 'SPINNING')
+    expect(m.accelTurns).toBeCloseTo(1, 9)
+    expect(fortuneMotion(wheel({ SPIN_PERIOD_MS: 6000, SPIN_UP_MS: 12000 }), 'SPINNING').accelTurns).toBeCloseTo(1, 9)
   })
 
   it('SPINNING : cruise = FULL_SPEED (signal du serveur, pas la fin de montée calculée localement)', () => {
