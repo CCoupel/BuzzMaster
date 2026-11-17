@@ -1,5 +1,5 @@
 /**
- * #144 (12.0.0.4) — lancement de la roue ROUE : montée en vitesse 0 → v0 (accélération constante sur rampMs), jonction
+ * #144 (12.0.0.4) — lancement de la roue ROUE : montée en vitesse 0 → v0 (accélération constante sur accelMs), jonction
  * continue avec la croisière, arrêt PENDANT la montée : le freinage part de la vitesse courante, sans saut de vitesse ni
  * d'angle, et atterrit exactement sur `to` sans dépasser `durationMs`.
  */
@@ -8,13 +8,13 @@ import { spinRampPosition, spinSpeed, spinPosition, brakePlan, brakePosition } f
 
 const wrap = (a, b, n) => ((b - a + n / 2) % n + n) % n - n / 2
 const speedOf = (f, t, n, dt = 0.5) => wrap(f(t - dt), f(t + dt), n) / (2 * dt)
-const RAMP = 800
+const RAMP = 1500
 
 describe('spin avec montée', () => {
   const n = 24, per = 2500, v0 = n / per
   const pos = t => spinRampPosition(5, t, per, n, RAMP)
 
-  it('part de l\'arrêt (vitesse 0), monte linéairement, atteint v0 à rampMs', () => {
+  it('part de l\'arrêt (vitesse 0), monte linéairement, atteint v0 à accelMs', () => {
     expect(spinSpeed(0, per, n, RAMP)).toBe(0)
     expect(spinSpeed(RAMP / 2, per, n, RAMP)).toBeCloseTo(v0 / 2, 9)
     expect(spinSpeed(RAMP, per, n, RAMP)).toBeCloseTo(v0, 9)
@@ -36,7 +36,7 @@ describe('spin avec montée', () => {
       prev = p
     }
   })
-  it('sans rampMs : profil d\'origine (uniforme), inchangé', () => {
+  it('sans accelMs : profil d\'origine (uniforme), inchangé', () => {
     expect(spinRampPosition(5, 1000, per, n, 0)).toBeCloseTo(spinPosition(5, 1000, per, n), 9)
     expect(spinSpeed(0, per, n, 0)).toBeCloseTo(v0, 9)
   })

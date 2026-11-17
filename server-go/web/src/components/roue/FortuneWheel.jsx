@@ -15,9 +15,9 @@ import './FortuneWheel.css'
 const PALETTE = ['#fca5a5', '#93c5fd', '#86efac', '#fde68a', '#d8b4fe', '#fdba74']
 const SPECIAL_COLOR = '#0f172a'
 
-/** Durée de la montée en vitesse au lancement (ms) : ~⅓ de la période de croisière par défaut (2500 ms), la roue parcourt
- *  alors ~0,16 tour pendant la montée — franche sans être brutale ; accélération constante, vitesse continue. */
-export const SPIN_RAMP_MS = 800
+/** Durée de la montée en vitesse au lancement (ms), fixée par contracts/roue.md §6 (constante de l'adaptateur, ni champ
+ *  ROUE_WHEEL ni réglage) : accélération constante de l'arrêt à la croisière, la roue parcourt ~0,3 tour (période 2500 ms). */
+export const SPIN_ACCEL_MS = 1500
 
 export function buildFortuneSegments(rawSegments = []) {
   let k = 0
@@ -30,9 +30,9 @@ export function buildFortuneSegments(rawSegments = []) {
 }
 
 export function fortuneMotion(wheel, subphase) {
-  if (subphase === 'SPINNING') return { mode: 'spin', periodMs: wheel?.SPIN_PERIOD_MS || 2500, rampMs: SPIN_RAMP_MS }
+  if (subphase === 'SPINNING') return { mode: 'spin', periodMs: wheel?.SPIN_PERIOD_MS || 2500, accelMs: SPIN_ACCEL_MS }
   if (subphase === 'STOPPING' && wheel?.STOP) {
-    return { mode: 'land', to: wheel.STOP.TO, durationMs: wheel.STOP.DURATION_MS, minTurns: 1, periodMs: wheel?.SPIN_PERIOD_MS || 2500, rampMs: SPIN_RAMP_MS }
+    return { mode: 'land', to: wheel.STOP.TO, durationMs: wheel.STOP.DURATION_MS, minTurns: 1, periodMs: wheel?.SPIN_PERIOD_MS || 2500, accelMs: SPIN_ACCEL_MS }
   }
   return null
 }

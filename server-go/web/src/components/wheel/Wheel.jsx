@@ -16,7 +16,7 @@ import './Wheel.css'
  * @param {'tv'|'compact'} [props.size='tv']
  * @param {string} [props.accent] - couleur du pointeur / du halo
  * @param {Object|null} [props.motion] - null = bascule courte vers `current` ; `{mode:'spin', periodMs}` défilement continu ;
- *   `{mode:'spin', periodMs[, rampMs]}` (avec `rampMs` : départ à l'arrêt, montée linéaire jusqu'à la croisière) ; `{mode:'land', to, durationMs, minTurns[, periodMs, rampMs]}` freinage jusqu'à l'index `to` (avec `periodMs` : vitesse continue depuis la croisière du `spin`, sans `minTurns`) (v12.0.0, §5). Sans horloge serveur.
+ *   `{mode:'spin', periodMs[, accelMs]}` (avec `accelMs` : départ à l'arrêt, montée linéaire jusqu'à la croisière) ; `{mode:'land', to, durationMs, minTurns[, periodMs, accelMs]}` freinage jusqu'à l'index `to` (avec `periodMs` : vitesse continue depuis la croisière du `spin`, sans `minTurns`) (v12.0.0, §5). Sans horloge serveur.
  * @param {number} [props.stepMs=600] - durée de la bascule courte
  */
 const PALETTE = ['#e5e7eb', '#dbeafe', '#fef3c7', '#dcfce7', '#fce7f3', '#ede9fe']
@@ -78,7 +78,7 @@ export default function Wheel({
   const motionPeriod = motion?.periodMs
   const motionDuration = motion?.durationMs
   const motionTurns = motion?.minTurns
-  const motionRamp = motion?.rampMs
+  const motionAccel = motion?.accelMs
   const speedRef = useRef(null) // vitesse (segments/ms) au moment où un `spin` à montée s'interrompt — reprise par le `land` suivant
   const hasMotion = motionMode !== null
   const layoutKey = layout === 'arc' ? 'arc' : 'strip'
@@ -146,6 +146,7 @@ export default function Wheel({
     let raf = null
     let cancelled = false
     let spinT0 = null
+    let accel = 0
     const finish = (to) => {
       const end = offsetToIndex(to, n)
       settledRef.current = end
@@ -163,7 +164,7 @@ export default function Wheel({
       // Avec `periodMs` (ROUE) : freinage à vitesse continue depuis la croisière du `spin` ; sinon (RAFALE, tests) ancien profil.
       const vStart = speedRef.current // vitesse réelle à l'interruption du `spin` (montée en cours incluse), sinon croisière
       speedRef.current = null
-      const plan = motionPeriod > 0 ? brakePlan(from, to, n, motionDuration, motionPeriod, vStart ?? undefined, motionRamp) : null
+      const plan = motionPeriod > 0 ? brakePlan(from, to, n, motionDuration, motionPeriod, vStart ?? undefined, motionAccel) : null
       const total = plan ? 0 : landTotal(from, to, n, motionTurns ?? 1)
       const t0 = frameNow()
       const tick = () => {
@@ -179,11 +180,13 @@ export default function Wheel({
       if (reducedMotion()) return undefined // pas de défilement : la roue reste en place
       const t0 = frameNow()
       speedRef.current = null
+      // Montage direct en `spin` (client connecté en cours de rotation) : pas de montée, croisière immédiate (roue.md §6).
+      accel = first ? 0 : motionAccel
       const tick = () => {
         if (cancelled) return
         const elapsed = frameNow() - t0
-        // Avec `rampMs` (ROUE) : la roue part de l'arrêt et accélère jusqu'à la croisière ; sinon défilement uniforme.
-        apply.current(motionRamp > 0 ? spinRampPosition(from, elapsed, motionPeriod, n, motionRamp) : spinPosition(from, elapsed, motionPeriod, n))
+        // Avec `accelMs` (ROUE) : la roue part de l'arrêt et accélère jusqu'à la croisière ; sinon défilement uniforme.
+        apply.current(accel > 0 ? spinRampPosition(from, elapsed, motionPeriod, n, accel) : spinPosition(from, elapsed, motionPeriod, n))
         raf = requestFrame(tick)
       }
       raf = requestFrame(tick)
@@ -192,10 +195,10 @@ export default function Wheel({
     return () => {
       cancelled = true
       if (raf != null) cancelFrame(raf)
-      if (spinT0 != null && motionRamp > 0) speedRef.current = spinSpeed(frameNow() - spinT0, motionPeriod, n, motionRamp)
+      if (spinT0 != null) speedRef.current = spinSpeed(frameNow() - spinT0, motionPeriod, n, accel)
       settledRef.current = posRef.current // reprise sans saut (spin → land, ou retour à la bascule courte)
     }
-  }, [hasMotion, motionMode, motionTo, motionPeriod, motionDuration, motionTurns, motionRamp, n, layoutKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasMotion, motionMode, motionTo, motionPeriod, motionDuration, motionTurns, motionAccel, n, layoutKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { firstRenderRef.current = false }, [])
 

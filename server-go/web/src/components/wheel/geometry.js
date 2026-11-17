@@ -80,25 +80,25 @@ export function landPosition(from, to, total, p, n) {
 
 // ---------------------------------------------------------------------------
 // ROUE (#144) : lancement avec montée en vitesse, puis freinage à vitesse continue (correctifs 12.0.0.3 / 12.0.0.4).
-// Vitesses en segments/ms. Sans `rampMs` / `periodMs`, `spin` et `land` gardent leurs profils d'origine.
+// Vitesses en segments/ms. Sans `accelMs` / `periodMs`, `spin` et `land` gardent leurs profils d'origine.
 // ---------------------------------------------------------------------------
 
-/** Vitesse (segments/ms) du `spin` à l'instant `elapsedMs` : montée linéaire 0 → n/periodMs sur `rampMs`, puis croisière. */
-export function spinSpeed(elapsedMs, periodMs, n, rampMs = 0) {
+/** Vitesse (segments/ms) du `spin` à l'instant `elapsedMs` : montée linéaire 0 → n/periodMs sur `accelMs`, puis croisière. */
+export function spinSpeed(elapsedMs, periodMs, n, accelMs = 0) {
   if (!(n > 0) || !(periodMs > 0)) return 0
   const v0 = n / periodMs
-  if (!(rampMs > 0)) return v0
-  return v0 * Math.min(1, Math.max(0, elapsedMs) / rampMs)
+  if (!(accelMs > 0)) return v0
+  return v0 * Math.min(1, Math.max(0, elapsedMs) / accelMs)
 }
 
-/** `spin` avec montée : position après `elapsedMs` depuis l'arrêt (accélération constante sur `rampMs`, puis croisière). */
-export function spinRampPosition(from, elapsedMs, periodMs, n, rampMs) {
+/** `spin` avec montée : position après `elapsedMs` depuis l'arrêt (accélération constante sur `accelMs`, puis croisière). */
+export function spinRampPosition(from, elapsedMs, periodMs, n, accelMs) {
   if (!(n > 0)) return 0
   if (!(periodMs > 0)) return offsetToIndex(from, n)
-  if (!(rampMs > 0)) return spinPosition(from, elapsedMs, periodMs, n)
+  if (!(accelMs > 0)) return spinPosition(from, elapsedMs, periodMs, n)
   const v0 = n / periodMs
   const t = Math.max(0, elapsedMs)
-  const dist = t < rampMs ? (v0 * t * t) / (2 * rampMs) : v0 * (t - rampMs / 2)
+  const dist = t < accelMs ? (v0 * t * t) / (2 * accelMs) : v0 * (t - accelMs / 2)
   return offsetToIndex(from + dist, n)
 }
 
@@ -113,14 +113,14 @@ const EPS = 1e-9
  * jusqu'à l'arrêt (tb) ; D = amplitude totale (segments), toujours ≡ distance vers `to` modulo n. `null` si la fenêtre
  * `durationMs` est trop courte (l'appelant retombe alors sur l'ancien profil).
  * Ordre : (A) croisière à vs puis décélération, atterrissage exact à durationMs (tb ≥ BRAKE_MIN_MS) ; (A') si la roue
- * monte encore (`rampMs`), poursuite de la montée jusqu'à vp ≤ v0 puis décélération, exact à durationMs ; (B) décélération
+ * monte encore (`accelMs`), poursuite de la montée jusqu'à vp ≤ v0 puis décélération, exact à durationMs ; (B) décélération
  * pure, arrêt avant durationMs. 0 à MAX_LAND_TURNS tours ajoutés (A/A' : premier k valide).
  */
-export function brakePlan(from, to, n, durationMs, periodMs, vStart, rampMs = 0) {
+export function brakePlan(from, to, n, durationMs, periodMs, vStart, accelMs = 0) {
   if (!(n > 0) || !(durationMs > 0) || !(periodMs > 0)) return null
   const v0 = n / periodMs
   const vs = Number.isFinite(vStart) ? Math.min(v0, Math.max(0, vStart)) : v0
-  const a = rampMs > 0 ? v0 / rampMs : 0
+  const a = accelMs > 0 ? v0 / accelMs : 0
   const d = forwardDistance(from, to, n)
   const cands = []
   for (let k = 0; k <= MAX_LAND_TURNS; k++) {
