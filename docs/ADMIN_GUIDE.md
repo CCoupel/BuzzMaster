@@ -1288,6 +1288,7 @@ La roue est **générée** à partir de 4 paramètres, dans `/admin/settings` (c
 
 1. Choisir les équipes participantes (`SOLO` : une seule équipe ; les autres modes : deux au moins), puis **Démarrer**.
    Le nombre n'est vérifié qu'au passage en READY : pendant la sélection, toute combinaison d'équipes existantes est acceptée, et la manche ne peut démarrer qu'avec une sélection conforme au mode.
+   Si la sélection ne convient pas, le motif d'attente affiché en `PREPARE` le dit : en `SOLO`, « sélectionnez une seule équipe » quand plus d'une équipe est cochée, « sélectionnez une équipe » sinon ; dans les autres modes, « sélectionnez au moins deux équipes participantes ». Une équipe inconnue ou cochée deux fois est refusée avec « Équipe inconnue ou en double ».
 2. **Lancer la roue** (étape 1). La roue tourne sur la TV. Elle s'arrête :
    - au **buzz** de l'équipe qui a la main (buzzer ou tablette) ;
    - sur **Forcer l'arrêt** ;
