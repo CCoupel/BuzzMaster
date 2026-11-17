@@ -1,95 +1,16 @@
 {
   "type": "FEATURE",
-  "description": "v11.8.0 — éditeur d'effets pas à pas (#210) + import/export des effets (#305), simulateur multi-configurations, maquette",
+  "version": "12.0.0",
+  "branch": "milestone/v12.0.0",
   "status": "completed",
-  "branch": "milestone/v11.8.0",
-  "version": "11.8.0",
-  "started_at": "2026-11-12T09:48:00Z",
-  "updated_at": "2026-11-12T13:45:00Z",
-  "cycles": 1,
+  "milestone_num": 21,
   "issue_nums": [
-    210,
-    305
+    144,
+    145
   ],
-  "milestone_num": 46,
-  "start_sha": "4a2cd00d",
-  "intensite_depart": "complet — minor, défaut projet ; QUALIF disponible",
-  "plan": ".claude/workflow/plan-v11.8.0.md",
-  "phases": {
-    "clarification": {
-      "status": "completed",
-      "skipped": false
-    },
-    "plan": {
-      "status": "completed",
-      "report": "_work/reports/planner-20261112-101000.md",
-      "sha": "c81c51bf",
-      "timestamp": "2026-11-12T11:20:00Z"
-    },
-    "dev-backend": {
-      "status": "completed",
-      "sha": "dff77d1d",
-      "handoff": "_work/handoff/dev-backend-20261112-112247.md"
-    },
-    "dev-frontend": {
-      "status": "completed",
-      "sha": "8c8ff9e2",
-      "handoff": "_work/handoff/dev-frontend-20261112-113500.md"
-    },
-    "test-writer": {
-      "status": "completed",
-      "sha": "2bc22a66",
-      "handoff": "_work/handoff/test-writer-20261112-112457.md"
-    },
-    "review": {
-      "status": "completed",
-      "report": "_work/reports/code-reviewer-lot1-20261112-113000.md"
-    },
-    "qa": {
-      "status": "completed",
-      "report": "_work/reports/qa-lot1-20261112-113826.md"
-    },
-    "doc": {
-      "status": "completed",
-      "sha": "1ade4123",
-      "report": "_work/reports/code-reviewer-docs-lot1-20261112-120000.md"
-    },
-    "deploy-qualif": {
-      "status": "completed",
-      "steps": {
-        "build": {
-          "status": "pending"
-        },
-        "publish": {
-          "status": "pending"
-        },
-        "deploy": {
-          "status": "pending"
-        }
-      },
-      "version": "11.8.0.1"
-    },
-    "deploy-prod": {
-      "status": "completed",
-      "version_sha": "7d495d9b",
-      "merge_sha": "f681ed0b",
-      "tag": "v11.8.0",
-      "release_run": "43226962934",
-      "steps": {
-        "publish": {
-          "status": "completed"
-        },
-        "deploy": {
-          "status": "completed"
-        }
-      }
-    },
-    "marketing": {
-      "status": "completed",
-      "gh_pages": "c33232f8",
-      "notes": "6b6e4165"
-    }
-  },
+  "phase": "dev",
+  "cycles": 3,
+  "plan": ".claude/workflow/plan-12.0.0.md",
   "cadrage": {
     "intensite": "complet",
     "test_writer": true,
@@ -104,33 +25,164 @@
       "doc-updater",
       "qa"
     ],
-    "valide": "GATE 2"
+    "validated_at": "2026-11-16T16:10:00Z"
   },
   "lots": {
-    "current": "LOT-2",
-    "items": {
-      "LOT-1": {
-        "status": "completed",
-        "issues": [
-          305
-        ],
-        "phase": "validated",
-        "qualif": "11.8.0.1",
-        "ci_sha": "64e23283"
-      },
-      "LOT-2": {
-        "status": "completed",
-        "issues": [
-          210
-        ],
-        "phase": "validated",
-        "dev_sha": "fe5004fc",
-        "review": "_work/reports/code-reviewer-lot2-20261112-133000.md",
-        "qa": "_work/reports/qa-lot2-delta-20261112-124428.md",
-        "ci_sha": "15cf3523",
-        "qualif": "11.8.0.2"
-      }
+    "current": null,
+    "LOT-1": {
+      "status": "completed",
+      "issues": [
+        144,
+        145
+      ],
+      "valid_humaine": true,
+      "sublots": [
+        "LOT-1.1",
+        "LOT-1.2"
+      ],
+      "gate": "validated 2026-11-17 (QUALIF 12.0.0.11, 29f7b8db)"
+    },
+    "LOT-1.1": {
+      "status": "completed",
+      "issues": [
+        145
+      ],
+      "qa_parallelizable": true,
+      "commits": [
+        "dfaa1d5d",
+        "66426dbe",
+        "2307f2cf",
+        "fa4b8724",
+        "46d7fefc",
+        "c1ae2998",
+        "1f167c83"
+      ],
+      "review": "_work/reports/code-reviewer-lot11-20261116-161934.md (APPROUVE)",
+      "qa": "_work/reports/qa-lot11-addendum-20261116-163124.md (VALIDATED, HEAD 1f167c83)",
+      "manual_user": "tests/procedures/roue/editeur/roue-editeur-145.md scénarios 1 et 4"
+    },
+    "LOT-1.2": {
+      "status": "completed",
+      "issues": [
+        144
+      ],
+      "qa_parallelizable": false,
+      "batch": 1,
+      "orders": [
+        "_work/tasks/dev-backend-20261116-164000.md",
+        "_work/tasks/dev-frontend-20261116-164000.md",
+        "_work/tasks/test-writer-20261116-164000.md"
+      ],
+      "review": "_work/reports/code-reviewer-lot12-20261116-165733.md (APPROUVE AVEC RESERVES, MAJEUR corrigé ce4552b4)",
+      "qa": "_work/reports/qa-lot12-20261116-170704.md (VALIDATED, HEAD 12aff62c)"
     }
   },
-  "prod_notes": "Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.8.0 ; milestone #46 fermé ; marketing GATE 4d en cours"
+  "phases": {
+    "init": {
+      "status": "completed",
+      "sha": "4e50056f"
+    },
+    "clarification": {
+      "status": "completed"
+    },
+    "plan": {
+      "status": "completed",
+      "report": "_work/reports/planner-plan-v1200-20261116-160950.md",
+      "gate2": "validated 2026-11-16"
+    },
+    "dev": {
+      "status": "completed"
+    },
+    "doc": {
+      "status": "completed",
+      "draft": "98332508",
+      "review": "_work/reports/code-reviewer-doc-lot1-20261116-174837.md (4 erreurs)",
+      "fix_order": "_work/tasks/doc-updater-20261116-180200.md",
+      "fixes": [
+        "ec71dabf",
+        "82b3534e",
+        "8d91498a (contrat)"
+      ],
+      "review_r2": "_work/reports/code-reviewer-doc-lot1-r2-20261116-180120.md (OK)"
+    },
+    "qualif": {
+      "status": "completed",
+      "version": "12.0.0.11",
+      "sha": "29f7b8db"
+    },
+    "fix": {
+      "status": "completed",
+      "step": "integration",
+      "issues": [
+        "lenteur >4s au clic question",
+        "selection equipe changee + refus 0 buzzers en attente (tablette prete)"
+      ],
+      "orders": [
+        "_work/tasks/dev-backend-20261117-fix-roue-set-teams.md",
+        "planner: contrat roue.md l.277"
+      ],
+      "root_cause": "RoueSetTeams refuse 1 équipe hors SOLO (contrat roue.md l.277) ; question 9 = ROUE ; pas de régression Quiz",
+      "decision": "correctif seul (sans instrumentation handleReady)",
+      "commits": [
+        "1d2f7f03 (contrat)",
+        "f2662fac (code, 12.0.0.2)",
+        "a424edb2 (libellés)",
+        "f241c6cc+98b5fb16 (doc)"
+      ],
+      "review": "_work/reports/code-reviewer-fix-setteams-20261117-083927.md (APPROUVE AVEC RESERVES)",
+      "qa": "_work/reports/qa-fix-setteams-20261117-0850.md (VALIDATED, HEAD f2662fac)"
+    },
+    "fix2": {
+      "status": "completed",
+      "items": [
+        "freinage sans saut 656067e5 (revue OK réserves, R1 → guide seulement)",
+        "accélération au lancement",
+        "roue + indice sur tablette (maquette vplayer_roue__wheel_tap_stop.html retenue)"
+      ],
+      "orders": [
+        "_work/tasks/dev-frontend-20261117-tablette-roue.md",
+        "_work/tasks/test-writer-20261117-tablette-roue.md",
+        "planner: contrat §6/§12",
+        "_work/tasks/planner-20261117-102000.md"
+      ],
+      "mockup_artifact": "https://claude.ai/artifact/CfYveqb4jtcsCSjocWMmAC",
+      "decisions": [
+        "montée en 2 tours (4×période), même animation TV/tablette",
+        "tapable/arrêtable seulement à pleine vitesse, imposé par le serveur (buzzer, tablette, anim)",
+        "durée max démarre après la montée"
+      ],
+      "commits": [
+        "656067e5 freinage",
+        "d25ef6a1 montée 800ms (à reprendre)",
+        "407bdce1+c76bc045 tests tablette",
+        "4e6f78b2+ce2a7583 contrats (à amender)"
+      ],
+      "review": "_work/reports/code-reviewer-montee-20261117-103627.md (APPROUVE AVEC RESERVES)",
+      "qa": "_work/reports/qa-montee-20261117-1055.md (NOT VALIDATED 1 écart → contrat amendé c62fcaab, écho ciblé #248 toléré)"
+    },
+    "fix3": {
+      "status": "completed",
+      "items": [
+        "freinage tablette 5689ebb5",
+        "montée 1 tour acc468cf+fe8eef51",
+        "bouton Tester"
+      ],
+      "qa": "_work/reports/qa-montee1tour-20261117-1130.md (VALIDATED, HEAD 29f7b8db)"
+    },
+    "prod": {
+      "status": "completed",
+      "tag": "v12.0.0",
+      "main": "7f09de4d",
+      "report": "_work/reports/deployer-prod-v1200-20261117-160000.md"
+    },
+    "marketing": {
+      "status": "completed",
+      "site": "5c6576ac (gh-pages)",
+      "notes": "15af0564 (main)"
+    }
+  },
+  "mockups": "docs/mockup/v12.0.0/ (7 retenues, commit dfaa1d5d)",
+  "updated_at": "2026-11-17T13:40:00Z",
+  "resume": "_work/reports/deployer-resume-v1200-20261116-181500.md",
+  "backlog_note": "StartImmediate sans garde participantsConform (tous types, test-only) — à proposer au backlog"
 }
