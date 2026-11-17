@@ -44,7 +44,7 @@ consonnes et tentent la réponse. Les gains sont crédités en points d'équipe 
 
 ### Security
 
-- **Phrase secrète (#145)** — `ROUE_PHRASE` n'est envoyé ni à la TV ni aux tablettes, dans aucune phase. Le serveur
+- **Phrase secrète (#145)** — `ROUE_PHRASE` n'est envoyé ni à la TV ni aux tablettes joueurs (l'admin et la tablette de l'animateur la reçoivent), dans aucune phase. Le serveur
   refuse une présentation qui contient la phrase.
 
 ### Notes
