@@ -47,6 +47,7 @@
 /* Zone de la roue : occupe la place de l'ancien bouton ; toute la zone est la cible du doigt quand elle est tapable */
 .roue-vp-zone { flex: 1 1 0; min-height: 0; position: relative; overflow: hidden; border-radius: 1rem; border: 3px solid rgba(255, 255, 255, 0.15); background: rgba(0, 0, 0, 0.35); padding: 0; font: inherit; color: inherit; display: flex; flex-direction: column; justify-content: center; width: 100%; box-sizing: border-box; container-type: size; --wheel-accent: var(--roue-accent); }
 .roue-vp-zone .fortune-wheel { flex: 1 1 auto; min-height: 0; }
+.roue-vp-tap { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; background: transparent; cursor: pointer; z-index: 6; -webkit-tap-highlight-color: transparent; }
 .roue-vp-zone.tap { border-color: var(--roue-accent); cursor: pointer; animation: roue-vp-ring 1s ease-in-out infinite alternate; }
 .roue-vp-zone.tap:active { transform: scale(0.985); }
 @keyframes roue-vp-ring { from { box-shadow: inset 0 0 0 0 var(--roue-accent); } to { box-shadow: inset 0 0 0 5px var(--roue-accent), inset 0 0 26px var(--roue-accent); } }

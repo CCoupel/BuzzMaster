@@ -78,7 +78,7 @@ describe('PlayerDisplay — type ROUE (#144)', () => {
     mockGame(FULL)
     const { container, getByRole } = render(<PlayerDisplay isVPlayer teamName="Rouges" onMediaClick={vi.fn()} />)
     expect(container.querySelector('[data-testid="roue-vp"]')).not.toBeNull()
-    expect(getByRole('button', { name: /Arrêter la roue/ }).querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
+    expect(getByRole('button', { name: /Arrêter la roue/ }).closest('.roue-vp-zone').querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
     expect(container.querySelector('.roue-vp-stop')).toBeNull()
   })
 

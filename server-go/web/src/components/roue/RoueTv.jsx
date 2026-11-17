@@ -55,7 +55,7 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
     const canStop = mine && sub === 'SPINNING' && wheel?.FULL_SPEED === true && typeof onStop === 'function'
     const aw = solved && gs.ROUE_WINNER ? gs.ROUE_AWARDS?.[teamName] : 0
     // Zone de la roue (M5 révisée) : à la place de l'ancien bouton STOP, affichée dans toutes les sous-phases (SOLVED
-    // comprise) ; c'est un bouton seulement quand l'équipe a la main en SPINNING à pleine vitesse (le serveur reste seul juge).
+    // comprise) ; un bouton (calque sur toute la zone) n'existe que quand l'équipe a la main en SPINNING à pleine vitesse (le serveur reste seul juge).
     const wheelEl = <FortuneWheel wheel={wheel} subphase={sub} teamColor={gs.ROUE_CURRENT_TEAM_COLOR} />
     return (
       <div className={`roue-vp roue-vp-${layout}`} data-testid="roue-vp" style={{ '--roue-accent': accent }}>
@@ -83,14 +83,14 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
           )}
           {!solved && showLetters && <Letters letters={gs.ROUE_LETTERS} />}
         </div>
-        {canStop ? (
-          <button type="button" className="roue-vp-zone tap" aria-label="Arrêter la roue" onClick={onStop}>
-            {wheelEl}
-            <span className="roue-vp-glyph" aria-hidden="true">👆 Touchez la roue</span>
-          </button>
-        ) : (
-          <div className="roue-vp-zone">{wheelEl}</div>
-        )}
+        {/* Structure STABLE : la roue ne change jamais de parent (sinon React la démonte au passage tapable → non tapable, et
+            `Wheel` remonté directement en `land` se placerait d'un coup sur la case : plus de freinage). Le bouton d'arrêt est un
+            calque transparent posé sur toute la zone, seulement quand `canStop`. */}
+        <div className={`roue-vp-zone${canStop ? ' tap' : ''}`}>
+          {wheelEl}
+          {canStop && <span className="roue-vp-glyph" aria-hidden="true">👆 Touchez la roue</span>}
+          {canStop && <button type="button" className="roue-vp-tap" aria-label="Arrêter la roue" onClick={onStop} />}
+        </div>
       </div>
     )
   }

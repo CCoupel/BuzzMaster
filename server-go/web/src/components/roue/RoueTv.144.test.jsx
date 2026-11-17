@@ -50,7 +50,7 @@ describe('RoueTv — tablette (#144, M5)', () => {
     const onStop = vi.fn()
     const { container, rerender, getByRole, queryByRole } = render(<RoueTv gameState={base(full())} teams={teams} isVPlayer teamName="Rouges" onStop={onStop} />)
     const tap = getByRole('button', { name: /Arrêter la roue/ })
-    expect(tap.querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
+    expect(tap.closest('.roue-vp-zone').querySelector('[data-testid="fortune-wheel"]')).not.toBeNull()
     fireEvent.click(tap)
     expect(onStop).toHaveBeenCalledTimes(1)
     expect(container.querySelector('.roue-vp-stop')).toBeNull()
