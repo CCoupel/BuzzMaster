@@ -46,3 +46,13 @@ describe('prepareWaitReasons — ROUE', () => {
     expect(prepareWaitReasons('READY', q('SOLO'), ready, { ROUE_TEAMS: [] })).toEqual([])
   })
 })
+
+describe('motif ROUE SOLO — libellé selon le nombre d\'équipes cochées', () => {
+  const ready = [{ READY: true }, { READY: true }]
+  it('aucune équipe : « sélectionnez une équipe »', () => {
+    expect(prepareWaitReasons('PREPARE', q('SOLO'), ready, { ROUE_TEAMS: [] })).toEqual(['sélectionnez une équipe'])
+  })
+  it('plus d\'une équipe : « sélectionnez une seule équipe »', () => {
+    expect(prepareWaitReasons('PREPARE', q('SOLO'), ready, { ROUE_TEAMS: ['a', 'b'] })).toEqual(['sélectionnez une seule équipe'])
+  })
+})

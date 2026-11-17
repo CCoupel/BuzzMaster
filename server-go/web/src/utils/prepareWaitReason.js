@@ -106,7 +106,7 @@ const SOUND_UNAVAILABLE_REASON_LABELS = {
 // Libellés courts (#166, style "à suivre"/"attendu"/"optionnel" —
 // AnimConductPanel.anim-conduct-btn-sub, tablette, place limitée) et
 // libellés complets (régie, memory-selector-label, plus de place).
-function participantsReasonLabel(question, { short } = {}) {
+function participantsReasonLabel(question, { short, count = 0 } = {}) {
   const type = question?.TYPE
   if (type === 'MEMORY') {
     const isSolo = !question.MEMORY_MODE || question.MEMORY_MODE === 'SOLO'
@@ -126,7 +126,7 @@ function participantsReasonLabel(question, { short } = {}) {
   if (type === 'ROUE') {
     const isSolo = question.ROUE_MODE === 'SOLO'
     if (short) return isSolo ? '1 équipe' : '2 équipes'
-    return isSolo ? 'sélectionnez une équipe' : 'sélectionnez au moins deux équipes participantes'
+    return isSolo ? (count > 1 ? 'sélectionnez une seule équipe' : 'sélectionnez une équipe') : 'sélectionnez au moins deux équipes participantes'
   }
   return null
 }
@@ -188,7 +188,7 @@ export function prepareWaitReasons(phase, question, activeTeams, gameState, opts
         : (gameState?.MEMORY_PARTICIPATING_TEAMS || [])
 
   if (!participantsConform(question, participating)) {
-    const label = participantsReasonLabel(question, opts)
+    const label = participantsReasonLabel(question, { ...opts, count: participating.length })
     if (label) reasons.push(label)
   }
 

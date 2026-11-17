@@ -11,7 +11,7 @@ const ERROR_TEXT = {
   NOT_A_LETTER: "Ce n'est pas une lettre",
   WRONG_SUBPHASE: "Action déjà prise en compte ou indisponible à cette étape",
   NOT_ALLOWED: 'Action non autorisée',
-  INVALID_TEAMS: "Sélection d'équipes non conforme au mode",
+  INVALID_TEAMS: 'Équipe inconnue ou en double',
 }
 
 /** Message du dernier refus serveur (`ROUE_ERROR`), masqué après 4 s. `error` = { CODE, MESSAGE, SEQ }. */

@@ -295,7 +295,7 @@ describe('RoueErrorLine — refus du serveur', () => {
 
   it.each([
     ['VOWEL_NOT_AVAILABLE', /Voyelle non disponible/], ['NOT_A_LETTER', /pas une lettre/], ['WRONG_SUBPHASE', /déjà prise en compte/],
-    ['NOT_ALLOWED', /non autorisée/], ['INVALID_TEAMS', /non conforme/],
+    ['NOT_ALLOWED', /non autorisée/], ['INVALID_TEAMS', /inconnue ou en double/],
   ])('%s : message lisible', (code, re) => {
     render(<RoueErrorLine error={{ CODE: code, MESSAGE: 'x', SEQ: 1 }} />)
     expect(screen.getByRole('alert').textContent).toMatch(re)
