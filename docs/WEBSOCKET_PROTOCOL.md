@@ -710,7 +710,7 @@ Contrat : `contracts/roue.md` §8 et §9. Les actions sont dans la liste blanche
 
 | Action | Payload | Sous-phases acceptées | Émetteurs |
 |---|---|---|---|
-| `ROUE_SET_TEAMS` | `{ "TEAMS": string[] }` | `PREPARE`, `READY` ; `SOLO` : 1 équipe exactement, autres modes : 2 au moins | admin |
+| `ROUE_SET_TEAMS` | `{ "TEAMS": string[] }` | `PREPARE`, `READY` ; aucun contrôle du nombre (existence et doublon seulement ; liste vide = effacement). Comptage `SOLO` : 1 équipe exactement, autres modes : 2 au moins, appliqué au passage `PREPARE`→`READY` et `FORCE_READY` | admin |
 | `ROUE_SPIN` | `{}` | `STARTED` + `TURN` + consonnes restantes | admin, anim |
 | `ROUE_STOP` | `{}` | `STARTED` + `SPINNING` (« Forcer l'arrêt ») | admin, anim |
 | `ROUE_LETTER` | `{ "LETTER": "T" }` | `STARTED` + `LETTER` | admin, anim |
@@ -743,7 +743,7 @@ Exemple (admin, étape 4) :
   { "ACTION": "ROUE_ERROR", "MSG": { "CODE": "NOT_A_LETTER", "MESSAGE": "…" } }
   ```
   `CODE` ∈ `VOWEL_NOT_AVAILABLE` (voyelle, non disponible en v12.0) | `NOT_A_LETTER` | `WRONG_SUBPHASE` |
-  `NOT_ALLOWED` | `INVALID_TEAMS`.
+  `NOT_ALLOWED` | `INVALID_TEAMS` (équipe inconnue ou en double dans `ROUE_SET_TEAMS` ; jamais un nombre d'équipes).
 
 ### Confidentialité de la phrase
 

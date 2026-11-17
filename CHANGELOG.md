@@ -26,6 +26,7 @@ seront complétées à la fin du milestone.
   de la manche, tablette animateur (sept étapes).
 - **Actions WebSocket `ROUE_*` (#144)** — `ROUE_SET_TEAMS`, `ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_FLIP`,
   `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL` ; refus à l'émetteur seul par `ROUE_ERROR`.
+- **Sélection des équipes ROUE** : plus de contrôle du nombre à chaque clic, comptage au passage en READY (12.0.0.2).
 - **Composant `Wheel` : mouvement long (#144)** — prop `motion` (`spin`, `land`), roue de RAFALE inchangée sans prop.
 
 ### Security
