@@ -48,6 +48,7 @@ func TestRoueEngine144_FullTurnAndCredit(t *testing.T) {
 		want string
 	}{
 		{e.RoueSpin, RoueSubSpinning},
+		{func() error { fireRoueTimer144(e); return nil }, RoueSubSpinning}, // fin de la montée (FULL_SPEED)
 		{e.RoueStop, RoueSubStopping},
 	}
 	for _, s := range steps {
@@ -108,6 +109,7 @@ func TestRoueEngine144_FullTurnAndCredit(t *testing.T) {
 func TestRoueEngine144_MissEndsTurnAndAdvisesNext(t *testing.T) {
 	e := roueEngine144(t, RoueModeTantQueJeGagne, "red", "blue")
 	_ = e.RoueSpin()
+	fireRoueTimer144(e) // fin de la montée : personne ne peut arrêter avant (contrat §5.1)
 	_ = e.RoueStop()
 	fireRoueTimer144(e)
 	if err := e.RoueLetter("Z"); err != nil {
@@ -135,6 +137,7 @@ func TestRoueEngine144_SoloRefusesNextAndPass(t *testing.T) {
 		t.Fatal("pass accepted in SOLO")
 	}
 	_ = e.RoueSpin()
+	fireRoueTimer144(e) // fin de la montée : personne ne peut arrêter avant (contrat §5.1)
 	_ = e.RoueStop()
 	fireRoueTimer144(e)
 	_ = e.RoueLetter("Z")
@@ -150,6 +153,7 @@ func TestRoueEngine144_BuzzOfOtherTeamIgnoredAndPauseSuspendsTimer(t *testing.T)
 	e := roueEngine144(t, RoueModeTantQueJeGagne, "red", "blue")
 	e.SetBumpers(map[string]*Bumper{"b1": {Team: "red"}, "b2": {Team: "blue"}})
 	_ = e.RoueSpin()
+	fireRoueTimer144(e) // end of the climb: FULL_SPEED (a press before it is ignored, contract §5.1)
 	if e.ProcessButtonPress("b2", 1, "A") || e.GetState().RoueSubPhase != RoueSubSpinning {
 		t.Fatal("buzz of the other team must be ignored")
 	}
@@ -206,6 +210,7 @@ func TestRoueEngine144_VPlayerBuzzStopsTheWheel(t *testing.T) {
 	changed := make(chan struct{}, 4)
 	e.OnRoueChange = func() { changed <- struct{}{} }
 	_ = e.RoueSpin()
+	fireRoueTimer144(e) // end of the climb: FULL_SPEED
 	if e.ProcessButtonPress("p2", 1, "A") || e.GetState().RoueSubPhase != RoueSubSpinning {
 		t.Fatal("tablet of the other team ignored")
 	}

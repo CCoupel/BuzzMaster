@@ -69,6 +69,19 @@ type roueWire struct {
 
 // newRoueWire monte une partie ROUE démarrée (STARTED, TURN), 2 équipes, tirage de roue figé sur la
 // case 0 (100 points) — la roue par défaut est 1000/50/2/1, la case 0 = 1000.
+// waitFullSpeed attend la fin de la montée (FULL_SPEED=true).
+func (w *roueWire) waitFullSpeed(d time.Duration) {
+	w.t.Helper()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if w.app.engine.GetState().RoueWheel.FullSpeed {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	w.t.Fatalf("FULL_SPEED non atteint")
+}
+
 func newRoueWire(t *testing.T, mode string) *roueWire {
 	t.Helper()
 	app := newBroadcast127TestApp(t)
@@ -140,10 +153,12 @@ func TestRoueWire144_FullRound_ThroughRealWebSockets(t *testing.T) {
 	w := newRoueWire(t, game.RoueModeTantQueJeGagne)
 	step := func() int { return w.app.engine.GetState().RoueStep }
 
+	w.app.engine.SetRoueSpinUpMs(30)
 	w.send(w.admin, protocol.ActionRoueSpin, struct{}{})
 	if w.sub() != game.RoueSubSpinning || step() != 2 {
 		t.Fatalf("après ROUE_SPIN : %q step %d", w.sub(), step())
 	}
+	w.waitFullSpeed(5 * time.Second)
 	w.send(w.admin, protocol.ActionRoueStop, struct{}{})
 	if w.sub() != game.RoueSubStopping || step() != 3 {
 		t.Fatalf("après ROUE_STOP : %q step %d", w.sub(), step())
@@ -185,8 +200,11 @@ func TestRoueWire144_PhraseNeverReachesTVOrTablet_AdminAndAnimKeepIt(t *testing.
 		frames["anim"] = append(frames["anim"], w.animTap.take(0)...)
 	}
 	collect()
+	w.app.engine.SetRoueSpinUpMs(30)
 	w.send(w.admin, protocol.ActionRoueSpin, struct{}{})
 	collect()
+	// Personne ne peut arrêter avant la pleine vitesse (§5.1) : l'attente est raccourcie, puis l'animateur arrête.
+	w.waitFullSpeed(5 * time.Second)
 	w.send(w.anim, protocol.ActionRoueStop, struct{}{})
 	collect()
 	w.waitSub(game.RoueSubLetter, 5*time.Second)
@@ -240,7 +258,9 @@ func TestRoueWire144_PhraseNeverReachesTVOrTablet_AdminAndAnimKeepIt(t *testing.
 // Le plateau diffusé à la TV est fidèle à l'avancement : lettre révélée visible, les autres cachées.
 func TestRoueWire144_TVBoardShowsOnlyRevealedLetters(t *testing.T) {
 	w2 := newRoueWire(t, game.RoueModeTantQueJeGagne)
+	w2.app.engine.SetRoueSpinUpMs(30)
 	w2.send(w2.admin, protocol.ActionRoueSpin, struct{}{})
+	w2.waitFullSpeed(5 * time.Second)
 	w2.send(w2.admin, protocol.ActionRoueStop, struct{}{})
 	w2.waitSub(game.RoueSubLetter, 5*time.Second)
 	w2.send(w2.admin, protocol.ActionRoueLetter, protocol.RoueLetterPayload{Letter: "N"})
@@ -282,10 +302,13 @@ func TestRoueWire144_TVBoardShowsOnlyRevealedLetters(t *testing.T) {
 // L'animateur conduit les 6 boutons d'étape ; jamais ROUE_SET_TEAMS / ROUE_PASS / ROUE_REVEAL.
 func TestRoueWire144_Anim_CanSendStepButtons(t *testing.T) {
 	w := newRoueWire(t, game.RoueModeTantQueJeGagne)
+	w.app.engine.SetRoueSpinUpMs(30)
 	w.send(w.anim, protocol.ActionRoueSpin, struct{}{})
 	if w.sub() != game.RoueSubSpinning {
 		t.Fatalf("ROUE_SPIN de l'animateur doit s'exécuter : %q", w.sub())
 	}
+	// Pendant la montée l'arrêt est refusé (§5.1) : montée raccourcie, puis l'animateur arrête.
+	w.waitFullSpeed(5 * time.Second)
 	w.send(w.anim, protocol.ActionRoueStop, struct{}{})
 	w.waitSub(game.RoueSubLetter, 5*time.Second)
 	w.send(w.anim, protocol.ActionRoueLetter, protocol.RoueLetterPayload{Letter: "N"})
@@ -341,7 +364,9 @@ func roueErrorOf(frames []string) (code string, found bool) {
 
 func TestRoueWire144_RefusalAnswersROUE_ERROR_ToTheEmitterOnly(t *testing.T) {
 	w := newRoueWire(t, game.RoueModeTantQueJeGagne)
+	w.app.engine.SetRoueSpinUpMs(30)
 	w.send(w.admin, protocol.ActionRoueSpin, struct{}{})
+	w.waitFullSpeed(5 * time.Second)
 	w.send(w.admin, protocol.ActionRoueStop, struct{}{})
 	w.waitSub(game.RoueSubLetter, 5*time.Second)
 	w.adminTap.take(30 * time.Millisecond)
