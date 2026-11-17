@@ -122,7 +122,7 @@ buzzers.
 {
   "LAYOUT": "strip",
   "SPIN_PERIOD_MS": 2500,
-  "SPIN_UP_MS": 10000,
+  "SPIN_UP_MS": 5000,
   "SPIN_MAX_MS": 10000,
   "FLIP_INTERVAL_MS": 600,
   "SEGMENTS": [ { "ID": "s0", "KIND": "value", "VALUE": 100 }, { "ID": "s3", "KIND": "bankrupt", "VALUE": 0 } ],
@@ -136,9 +136,9 @@ buzzers.
 - `CURRENT` : index de la case sous le pointeur une fois la roue arrêtée ; conservé jusqu'au lancer suivant ;
   `-1` avant le premier lancer de la manche. La roue reste affichée en permanence.
 - `STOP` : `null`, ou `{ "TO": int, "DURATION_MS": int }` pendant `STOPPING` (case tirée et durée du freinage).
-- `SPIN_UP_MS` : durée de la **montée en vitesse**, calculée par le serveur au `START` : `4 × SPIN_PERIOD_MS`
-  (10 000 ms par défaut) — c'est la durée qu'il faut, à accélération constante depuis l'arrêt, pour parcourir
-  **2 tours** et atteindre la vitesse d'un tour en `SPIN_PERIOD_MS` (§6). Pas un réglage : toujours dérivée.
+- `SPIN_UP_MS` : durée de la **montée en vitesse**, calculée par le serveur au `START` : `2 × SPIN_PERIOD_MS`
+  (5 000 ms par défaut) — c'est la durée qu'il faut, à accélération constante depuis l'arrêt, pour parcourir
+  **1 tour** (décision utilisateur, QUALIF 12.0.0.8 ; 2 tours auparavant) et atteindre la vitesse d'un tour en `SPIN_PERIOD_MS` (§6). Pas un réglage : toujours dérivée.
 - `FULL_SPEED` : `true` **seulement en `SPINNING`, une fois la montée terminée** ; `false` pendant la montée et
   dans toute autre sous-phase. C'est le seul signal de « pleine vitesse » : le serveur le passe à `true` à
   l'échéance de sa minuterie de montée et diffuse un `UPDATE` (sans horodatage, sans événement `ROUE_LAST_EVENT`,
@@ -170,7 +170,7 @@ Exemples `ROUE_BOARD` sur la phrase du §3.1, après `T`, `R`, `N`, quand l'équ
 | Étape (`ROUE_STEP`) | Nom affiché | `ROUE_SUBPHASE` | Qui agit |
 |---|---|---|---|
 | 1 | Lancer la roue | `TURN` | Admin ou animateur : `ROUE_SPIN` |
-| 2 | Arrêt de la roue | `SPINNING` | **Montée** (`FULL_SPEED = false`, 2 tours) : **personne** ne peut arrêter la roue, pas même l'admin. **Pleine vitesse** (`FULL_SPEED = true`) : équipe qui a la main : buzz (buzzer ou tablette) — ou admin / animateur : `ROUE_STOP` — ou durée maximale, comptée depuis la pleine vitesse |
+| 2 | Arrêt de la roue | `SPINNING` | **Montée** (`FULL_SPEED = false`, 1 tour) : **personne** ne peut arrêter la roue, pas même l'admin. **Pleine vitesse** (`FULL_SPEED = true`) : équipe qui a la main : buzz (buzzer ou tablette) — ou admin / animateur : `ROUE_STOP` — ou durée maximale, comptée depuis la pleine vitesse |
 | 3 | Affichage de la case | `STOPPING` | Serveur : case tirée, freinage |
 | 3 bis | *(à voix haute)* | `LETTER` | 🗣 L'équipe annonce une consonne — aucun appareil, aucun changement d'état |
 | 4 | Sélection de la consonne | `LETTER` | Admin ou animateur : `ROUE_LETTER`. Consonne présente : passage à l'étape 5 (`LIT`). Aucun `*` dans `ROUE_BOARD` à cette étape |
@@ -259,7 +259,7 @@ retournement) sont suspendues puis reprises pour leur durée restante ; toute ac
    armement de la suivante.
 2. **Durée maximale** : armée **à la fin de la montée seulement**, durée `SPIN_MAX_MS`. À l'échéance : arrêt
    automatique (tirage, `STOPPING`). L'arrêt automatique survient donc `SPIN_UP_MS + SPIN_MAX_MS` après le lancer
-   (20 s avec les réglages par défaut).
+   (15 s avec les réglages par défaut).
 Chaque armement porte un numéro de génération : une échéance dont la génération n'est plus la génération courante
 (arrêt demandé entre-temps, `PAUSE`, arrêt de manche, `ROUE_REVEAL`, `NEW_GAME`) est ignorée. Une pause pendant la
 montée la suspend : `FULL_SPEED` reste `false`, la montée reprend pour sa durée restante à la reprise.
@@ -301,8 +301,8 @@ reste toujours acquis à la cagnotte, quel que soit le bouton choisi.
   latence réseau près, mais ne montrent pas forcément la même case pendant la rotation.
 - **`SPINNING` — montée** (décisions utilisateur du 2026-11-17 ; `FULL_SPEED = false`) : la roue part **de
   l'arrêt**, depuis la case affichée, et **accélère à taux constant** jusqu'à la **pleine vitesse** (vitesse de
-  croisière) = un tour en `SPIN_PERIOD_MS`. Elle l'atteint **en 2 tours exactement**, soit en `SPIN_UP_MS`
-  = `4 × SPIN_PERIOD_MS` (10 s par défaut), **de la même manière sur la TV et sur la tablette**, sans à-coup à
+  croisière) = un tour en `SPIN_PERIOD_MS`. Elle l'atteint **en 1 tour exactement**, soit en `SPIN_UP_MS`
+  = `2 × SPIN_PERIOD_MS` (5 s par défaut), **de la même manière sur la TV et sur la tablette**, sans à-coup à
   l'arrivée en pleine vitesse. Pendant la montée, la roue n'est **ni tapable ni arrêtable** (§5.1) ; les écrans le
   disent (« La roue prend de la vitesse… ») et n'affichent pas la barre de durée maximale.
 - **`SPINNING` — pleine vitesse** (`FULL_SPEED = true`) : la roue défile en continu à la vitesse de croisière ;
@@ -336,7 +336,10 @@ reste toujours acquis à la cagnotte, quel que soit le bouton choisi.
     n'est possible qu'avec un freinage court et un tour lent (§10).
   - Écran en retard (sa montée locale n'est pas terminée quand `STOPPING` arrive) : il freine comme s'il était à
     la vitesse de croisière ; l'écart, de l'ordre de la latence, est imperceptible.
-  - Un client qui se connecte ou se reconnecte pendant `STOPPING` se place directement sur `TO`.
+  - Un client qui se connecte ou se reconnecte pendant `STOPPING` se place directement sur `TO`. Cette règle ne
+    vaut **que** pour un écran qui n'affichait pas la roue en rotation : un écran déjà affiché — TV **ou
+    tablette** — garde la même roue de `SPINNING` à `STOPPING` et **freine** ; il ne doit jamais recréer la roue
+    au changement de sous-phase (ce qui la placerait d'un coup sur `TO`).
 - `prefers-reduced-motion` : ni montée ni freinage animés, placement direct sur la case (`wheel-component.md` §5) ;
   la règle « arrêtable seulement quand `FULL_SPEED = true` » s'applique à l'identique.
 - **Arrêtée** : `CURRENT` sous le pointeur, accent = couleur de l'équipe qui a la main. La roue reste visible
@@ -448,7 +451,7 @@ La roue n'est pas une liste de cases saisie : elle est **générée par le serve
 | `lose_turn_count` | Nombre de cases TOUR PERDU. 0 ou plus, défaut 1 |
 | — | Nombre total de cases de la roue générée : **64 au plus** (limite du composant `Wheel`). Pas ≥ maximum, maximum supérieur à 1 000 000, valeur non entière ou négative, ou plus de 64 cases : `400` avec message, **rien n'est enregistré** |
 | — | **Pas corrigé** : la réponse de `POST /game-config.json` et de `POST /api/roue/wheel-preview` porte le pas retenu et `"step_adjusted_from": <pas saisi>` (absent sans correction) ; l'interface affiche « Pas ajusté à … » et remplace la valeur du champ |
-| `spin_period_ms` | Durée d'un tour de roue **à pleine vitesse**. 1000–6000, défaut 2500 ; hors bornes : ramené à la borne. Fixe aussi la durée de la montée : `4 × spin_period_ms` (2 tours, §6) — 4 à 24 s, 10 s par défaut ; aucun réglage séparé |
+| `spin_period_ms` | Durée d'un tour de roue **à pleine vitesse** : c'est le réglage de la **vitesse**. 1000–6000, défaut 2500 (inchangé) ; hors bornes : ramené à la borne. Fixe aussi la durée de la montée : `2 × spin_period_ms` (1 tour, §6) — 2 à 12 s, 5 s par défaut ; aucun réglage séparé |
 | `spin_max_ms` | **Durée maximale de rotation à pleine vitesse** : comptée **à partir de la fin de la montée** ; sans arrêt demandé, la roue s'arrête d'elle-même. 3000–30000, défaut 10000 ; hors bornes : ramené à la borne |
 | `stop_duration_ms` | Durée du freinage. 1500–8000, défaut 4000 ; hors bornes : ramené à la borne |
 | `flip_interval_ms` | Intervalle entre deux cases retournées. 200–1500, défaut 600. Non exposé dans l'interface en v12.0 |
@@ -505,10 +508,43 @@ Ces exemples sont des **cas de test exigés** (résultat identique, case pour ca
   `neon_effect`).
 - `POST /api/roue/wheel-preview` (§11.3) renvoie la roue générée pour des paramètres non enregistrés — l'aperçu
   de la carte de réglage n'a **aucune copie JavaScript** de la règle.
+- La carte de réglage propose un **essai** de la roue avec les valeurs en cours de saisie (§10.2).
 - La roue est générée au `START` de la manche et figée dans `ROUE_WHEEL.SEGMENTS` ; une modification pendant une
   manche ROUE ne touche pas la manche en cours.
 - La **forme de la roue** n'est pas dans la configuration : c'est un réglage de la question (`ROUE_WHEEL_LAYOUT`).
 - Sauvegarde, restauration, réinitialisation : acquises (fichier `game-config.json`, drapeau `ambiance`).
+
+### 10.2 Essai de la roue — bouton « Tester » de la carte de réglage
+
+Décision utilisateur (QUALIF 12.0.0.8) : régler la vitesse et les durées sans lancer de manche.
+
+- **Où** : carte « Roue de la Fortune » de la page des réglages (`WheelConfigCard`). L'essai **anime les deux
+  aperçus déjà présents** — le bandeau « Sur la TV » et la vue d'ensemble circulaire de la roue ; **aucun aperçu
+  n'est ajouté**. La liste des cases « dans l'ordre » reste fixe.
+- **Avec quoi** : les valeurs **en cours de saisie, non enregistrées** — les cases et les durées renvoyées par
+  `POST /api/roue/wheel-preview` (§11.3) pour ces valeurs. Disponible seulement quand l'aperçu est valide.
+- **Sans effet sur le jeu** : aucun message WebSocket, aucune action `ROUE_*`, aucune écriture ; l'état du jeu,
+  la configuration enregistrée et les autres écrans ne sont pas touchés. Utilisable dans n'importe quelle phase.
+  Seul appel réseau : l'aperçu `wheel-preview` déjà émis par la carte.
+- **Déroulement** — les mêmes temps et les mêmes règles d'animation qu'en jeu (§6, `wheel-component.md` §5) :
+
+| Temps | Libellé d'état | « Tester » | « Arrêter » | Roue |
+|---|---|---|---|---|
+| Repos | *(aucun, ou case de l'arrêt précédent)* | actif | grisé | Fixe |
+| Montée | « Montée… » | grisé | **grisé** | Part de l'arrêt, pleine vitesse au bout d'un tour (`SPIN_UP_MS`) |
+| Pleine vitesse | « Pleine vitesse » | grisé | **actif** | Vitesse de croisière ; temps restant avant l'arrêt automatique (`SPIN_MAX_MS`, compté depuis la pleine vitesse) |
+| Freinage | « Freinage » | grisé | grisé | Freine jusqu'à la case tirée, en `STOP_DURATION_MS` au plus |
+| Arrêt | Case obtenue (« Arrêt sur 500 ») | actif | grisé | Fixe sur la case tirée |
+
+- « Arrêter », ou la fin de la durée maximale sans clic, tire **une case au hasard côté client** (tirage uniforme,
+  une case = une chance) et déclenche le freinage. Ce tirage n'a aucune valeur de jeu.
+- Les deux aperçus partent de la même case, tournent ensemble et s'arrêtent **sur la même case, au même instant** ;
+  le pointeur de chacun reste fixe.
+- Modifier un réglage pendant un essai, ou quitter la page, **interrompt l'essai** : minuteries annulées, aperçus
+  de nouveau fixes. « Enregistrer » et « Roue par défaut » restent indépendants de l'essai.
+- `prefers-reduced-motion` : les temps s'enchaînent, la roue est placée directement sur la case tirée.
+- **Aucune copie de règle dans le client** : la durée de la montée et les durées ramenées à leurs bornes viennent
+  de `TIMING` (§11.3), jamais d'un calcul de la page.
 
 ## 11. HTTP
 
@@ -560,14 +596,19 @@ Tous les champs `ROUE_*` sont relus à chaque enregistrement (un champ non lu se
 
 **Request body** :
 ```json
-{ "max_points": 100, "step": 10, "bankrupt_count": 1, "lose_turn_count": 1 }
+{ "max_points": 100, "step": 10, "bankrupt_count": 1, "lose_turn_count": 1,
+  "spin_period_ms": 2500, "spin_max_ms": 10000, "stop_duration_ms": 4000 }
 ```
+Les trois durées sont **facultatives** (ajout du 2026-11-17, pour l'essai §10.2) ; absentes : valeurs par défaut.
 **Response 200** :
 ```json
 { "COUNT": 11, "step": 10,
   "SEGMENTS": [ { "ID": "s0", "KIND": "value", "VALUE": 100 }, { "ID": "s1", "KIND": "bankrupt", "VALUE": 0 },
-                { "ID": "s2", "KIND": "value", "VALUE": 90 } ] }
+                { "ID": "s2", "KIND": "value", "VALUE": 90 } ],
+  "TIMING": { "SPIN_PERIOD_MS": 2500, "SPIN_UP_MS": 5000, "SPIN_MAX_MS": 10000, "STOP_DURATION_MS": 4000 } }
 ```
+`TIMING` : les durées **telles que le jeu les utiliserait** pour ces réglages — ramenées à leurs bornes comme à
+l'enregistrement (§10), et `SPIN_UP_MS` calculé par la même règle qu'au `START` (§4). Toujours présent.
 **Errors** : `400` `{ "CODE": "ROUE_WHEEL_INVALID", "MESSAGE": "…" }` (pas ≥ maximum, maximum supérieur à 1 000 000, valeur invalide ou plus de 64 cases, §10). Un pas qui ne divise pas le
 maximum n'est **pas** une erreur : il est corrigé (`step_adjusted_from`).
 

@@ -66,14 +66,14 @@ courant présent dans le cadre, aucune `translateX` au-delà de `REP × n` cellu
 
 ```js
 motion = null                                          // bascule courte vers `current` (RAFALE, inchangé)
-motion = { mode: 'spin', periodMs: 2500, accelTurns: 2 }   // défilement : montée sur 2 tours puis croisière ; `current` ignoré
-motion = { mode: 'spin', periodMs: 2500, accelTurns: 2, cruise: true }   // idem, vitesse de croisière imposée (voir `cruise`)
+motion = { mode: 'spin', periodMs: 2500, accelTurns: 1 }   // défilement : montée sur 1 tour puis croisière ; `current` ignoré
+motion = { mode: 'spin', periodMs: 2500, accelTurns: 1, cruise: true }   // idem, vitesse de croisière imposée (voir `cruise`)
 motion = { mode: 'land', to: 7, durationMs: 4000, periodMs: 2500, minTurns: 1 }   // freinage jusqu'à l'index `to`
 ```
 
 > **Révision du 2026-11-17** (décisions utilisateur après les QUALIF 12.0.0.2 et 12.0.0.3, `contracts/roue.md` §6) :
-> montée en vitesse **par distance** — la pleine vitesse est atteinte en `accelTurns` tours (2 pour la Roue de la
-> Fortune) ; freinage à **vitesse continue**. `accelTurns` remplace `accelMs` (durée fixe de 1 500 ms, abandonnée).
+> montée en vitesse **par distance** — la pleine vitesse est atteinte en `accelTurns` tours (**1** pour la Roue de la
+> Fortune, QUALIF 12.0.0.8 ; 2 dans la rédaction précédente) ; freinage à **vitesse continue**. `accelTurns` remplace `accelMs` (durée fixe de 1 500 ms, abandonnée).
 > La vitesse est une grandeur interne du composant (segments par milliseconde), jamais une prop.
 
 **Vitesse de croisière** : `vc = n / periodMs` (un tour en `periodMs`). C'est la vitesse maximale de la roue : aucun
@@ -84,7 +84,7 @@ profil ne la dépasse.
   du disque le permettent).
   - **Montée** (`accelTurns > 0`) : la roue part **de l'arrêt**, depuis sa position courante, et accélère **à taux
     constant** jusqu'à `vc`, atteinte après **exactement `accelTurns` tours** (`accelTurns × n` segments). Il en
-    découle : durée de la montée `= 2 × accelTurns × periodMs` (10 s pour 2 tours à 2 500 ms), accélération
+    découle : durée de la montée `= 2 × accelTurns × periodMs` (5 s pour 1 tour à 2 500 ms), accélération
     `= vc / (2 × accelTurns × periodMs)`, position à l'instant `t` de la montée
     `= départ + vc × t² / (4 × accelTurns × periodMs)`. Aucun à-coup à la jonction : la vitesse en fin de montée
     vaut exactement `vc`, et la roue se retrouve sur le segment de départ.
@@ -124,7 +124,7 @@ partir de `(départ, t, periodMs, n, accelTurns)` ; plan de freinage à partir d
 **Critères d'acceptation** (tests unitaires sur les fonctions pures, plus un test du composant) :
 1. Montée : vitesse nulle à `t = 0` ; à `t = 2 × accelTurns × periodMs`, vitesse égale à `vc` (écart ≤ 1 %) et
    distance parcourue égale à `accelTurns × n` segments (écart ≤ 1 %) ; vitesse croissante entre les deux ;
-   position continue à la jonction montée → croisière. Vérifié pour `accelTurns = 2` et au moins deux `periodMs`.
+   position continue à la jonction montée → croisière. Vérifié pour `accelTurns = 1` et `2`, et au moins deux `periodMs`.
 2. Freinage depuis la croisière : pour un jeu de `(from, to, durationMs)`, la vitesse au début du freinage vaut
    `vc` (écart ≤ 5 %), la position ne recule jamais, la vitesse ne dépasse jamais `vc`, l'arrêt se fait exactement
    sur `to`, en `durationMs` au plus.
@@ -153,11 +153,16 @@ rotation : non prévus en v12.0.0.
   `{ kind: 'special', label: … }` (libellés et couleurs : maquette `tv_roue_started`) ;
 - `layout` = `ROUE_WHEEL.LAYOUT` ; `accent` = `ROUE_CURRENT_TEAM_COLOR` ;
 - `ROUE_SUBPHASE = SPINNING` → `motion = { mode: 'spin', periodMs: SPIN_PERIOD_MS, accelTurns: SPIN_UP_MS / (2 × SPIN_PERIOD_MS), cruise: FULL_SPEED }`
-  — soit `accelTurns = 2` : la durée de montée vient du serveur (`ROUE_WHEEL.SPIN_UP_MS`, `roue.md` §4), jamais
+  — soit `accelTurns = 1` : la durée de montée vient du serveur (`ROUE_WHEEL.SPIN_UP_MS`, `roue.md` §4), jamais
   d'une constante du client ; `SPIN_UP_MS` absent ou nul : pas de montée ;
   `STOPPING` → `motion = { mode: 'land', to: STOP.TO, durationMs: STOP.DURATION_MS, periodMs: SPIN_PERIOD_MS, minTurns: 1 }` ;
   sinon `motion = null`, `current = CURRENT` (ou `null` si `-1`).
 - Barre de durée maximale : affichée seulement quand `FULL_SPEED = true`, décomptée localement depuis sa réception.
-- Même adaptateur et mêmes règles sur la TV et sur la tablette joueur (`roue.md` §6, §12).
+- Même adaptateur et mêmes règles sur la TV et sur la tablette joueur (`roue.md` §6, §12). L'adaptateur ne doit
+  pas être recréé entre `SPINNING` et `STOPPING` : une roue recréée en `land` se place d'un coup sur `to` (§5,
+  montage direct) au lieu de freiner.
+- Essai de la carte de réglage (`roue.md` §10.2) : même adaptateur, alimenté par un état simulé dans la page
+  (`SPIN_PERIOD_MS`, `SPIN_UP_MS`, `SPIN_MAX_MS`, `FULL_SPEED`, `STOP`, `CURRENT`) — aucun autre chemin d'animation.
+  La vue d'ensemble circulaire de la carte suit la même position, calculée avec les fonctions pures du §5.
 - Ajouts admis au composant, additifs : libellés longs (largeur de cellule du bandeau, taille de police de l'arc)
   et `aria-label` selon `kind`.

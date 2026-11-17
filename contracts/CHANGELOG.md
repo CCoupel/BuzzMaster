@@ -1,6 +1,26 @@
 # Changelog des Contrats API
 
 ---
+## [20261117-c] — v12.0.0 — ROUE : montée en 1 tour, essai « Tester » des réglages (#144, LOT-1)
+
+`roue.md` §4, §5, §5.1, §6, §10, §10.2 (nouveau), §11.3 ; `wheel-component.md` §5, §8. Décisions utilisateur de la
+QUALIF 12.0.0.8 (ordre `_work/tasks/planner-20261117-111500.md`). **Aucun BREAKING.**
+
+- **[CHANGED]** `ROUE_WHEEL.SPIN_UP_MS` — `2 × SPIN_PERIOD_MS` au lieu de `4 ×` : pleine vitesse atteinte en **1 tour**
+  (5 s par défaut au lieu de 10 s) ; arrêt automatique 15 s après le lancer par défaut (§4, §5.1, §6). Les autres
+  règles de `[20261117-b]` sont inchangées : arrêt seulement à pleine vitesse pour tous, durée maximale comptée
+  après la montée, appui ignoré. `spin_period_ms` : même défaut (2500), mêmes bornes.
+- **[CHANGED]** `POST /api/roue/wheel-preview` — accepte trois durées facultatives (`spin_period_ms`, `spin_max_ms`,
+  `stop_duration_ms`) et renvoie toujours `TIMING` (`SPIN_PERIOD_MS`, `SPIN_UP_MS`, `SPIN_MAX_MS`,
+  `STOP_DURATION_MS`), durées effectives pour ces réglages (§11.3). Additif.
+- **[NEW]** Essai de la roue — bouton « Tester » de la carte de réglage : anime les deux aperçus existants avec les
+  valeurs non enregistrées, tirage côté client, aucune action serveur ni effet sur le jeu (§10.2).
+- **[CHANGED]** `wheel-component.md` §5, §8 — `accelTurns = 1` ; l'adaptateur n'est pas recréé entre `SPINNING` et
+  `STOPPING` ; l'essai réutilise l'adaptateur.
+- Précision (§6) : le placement direct sur la case ne vaut que pour un écran qui se connecte pendant le freinage ;
+  une tablette déjà affichée freine comme la TV.
+
+---
 ## [20261117-b] — v12.0.0 — ROUE : montée en 2 tours, arrêt seulement à pleine vitesse (#144, LOT-1)
 
 `roue.md` §4, §5, §5.1, §6, §8, §10, §12, §13 ; `wheel-component.md` §5, §8. Décisions utilisateur du 2026-11-17
