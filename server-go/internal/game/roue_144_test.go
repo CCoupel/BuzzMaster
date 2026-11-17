@@ -678,7 +678,7 @@ func TestRoue144_Stop_BuzzOfTheTeamWithTheHand(t *testing.T) {
 	if r.st().RoueSubPhase != RoueSubSpinning || r.draws.Load() != 0 {
 		t.Fatalf("appui d'une autre équipe ignoré : sous-phase=%s tirages=%d", r.st().RoueSubPhase, r.draws.Load())
 	}
-	// appui de l'équipe qui a la main — acceptée seulement à pleine vitesse (§5.1, montée en 2 tours)
+	// appui de l'équipe qui a la main — acceptée seulement à pleine vitesse (§5.1, montée d'un tour)
 	r.waitClimbOver()
 	r.e.ProcessButtonPress("b-red", time.Now().UnixMicro(), "A")
 	s := r.st()

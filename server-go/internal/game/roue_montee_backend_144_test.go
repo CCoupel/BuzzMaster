@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Montée en 2 tours et arrêt seulement à pleine vitesse (contrat roue.md §4, §5.1) — tests moteur du lot serveur.
+// Montée d'un tour et arrêt seulement à pleine vitesse (contrat roue.md §4, §5.1) — tests moteur du lot serveur.
 
 func bkClimbRig(t *testing.T, upMs, maxMs int) *roueRig {
 	t.Helper()
