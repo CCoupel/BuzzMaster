@@ -47,8 +47,8 @@ func TestRoue144Montee_StartPoseSpinUpMs(t *testing.T) {
 	r.mustOK(r.e.RoueSetTeams([]string{"red", "blue"}))
 	r.e.StartImmediate(0)
 	t.Cleanup(func() { r.e.Stop() })
-	if w := r.st().RoueWheel; w.SpinUpMs != 10000 || w.FullSpeed {
-		t.Errorf("SPIN_UP_MS = 4 × SPIN_PERIOD_MS (10000) et FULL_SPEED=false au START : %+v", w)
+	if w := r.st().RoueWheel; w.SpinUpMs != 5000 || w.FullSpeed {
+		t.Errorf("SPIN_UP_MS = 2 × SPIN_PERIOD_MS (5000) et FULL_SPEED=false au START : %+v", w)
 	}
 }
 

@@ -139,7 +139,7 @@ func (e *Engine) SetRoueWheelParams(p RoueWheelParams) {
 	e.mu.Unlock()
 }
 
-// SetRoueSpinUpMs shortens the climb of the CURRENT round (tests only: the real value is 4 × SPIN_PERIOD_MS, computed
+// SetRoueSpinUpMs shortens the climb of the CURRENT round (tests only: the real value is 2 × SPIN_PERIOD_MS, computed
 // at START, and the period is clamped to 1 000 ms at least). It takes effect at the next ROUE_SPIN.
 func (e *Engine) SetRoueSpinUpMs(ms int) {
 	e.mu.Lock()
@@ -418,7 +418,7 @@ func (e *Engine) startRoueRoundUnsafe() {
 	st.RoueWinner = ""
 	st.RoueAwards = map[string]int{}
 	st.RoueWheel = RoueWheel{
-		Layout: wl, SpinPeriodMs: params.SpinPeriodMs, SpinMaxMs: params.SpinMaxMs, SpinUpMs: 4 * params.SpinPeriodMs,
+		Layout: wl, SpinPeriodMs: params.SpinPeriodMs, SpinMaxMs: params.SpinMaxMs, SpinUpMs: RoueSpinUpMs(params.SpinPeriodMs),
 		FlipIntervalMs: params.FlipIntervalMs, Segments: segs, Current: -1,
 	}
 	first := ""

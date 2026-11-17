@@ -68,7 +68,7 @@ func newRoueRig(t *testing.T, phrase, mode, gains string, teams ...string) *roue
 	// Durées raccourcies (le contrat borne à 1,5 s / 200 ms / 3 s : on n'attend pas ça en test).
 	e.mu.Lock()
 	r.initialSpinUp, r.initialPeriod = e.state.RoueWheel.SpinUpMs, e.state.RoueWheel.SpinPeriodMs
-	e.state.RoueWheel.SpinUpMs = 40 // montée raccourcie (contrat : 4 × SPIN_PERIOD_MS)
+	e.state.RoueWheel.SpinUpMs = 40 // montée raccourcie (contrat : 2 × SPIN_PERIOD_MS)
 	e.roue.stopDuration = 15 * time.Millisecond
 	e.state.RoueWheel.FlipIntervalMs = 5
 	e.state.RoueWheel.SpinMaxMs = 60

@@ -43,6 +43,10 @@ type RoueWheelParams struct {
 	FlipIntervalMs int
 }
 
+// RoueSpinUpMs is THE rule of the climb to full speed (contract roue.md §4): one turn, accelerating at a constant
+// rate, so 2 × SPIN_PERIOD_MS (5 s by default). Shared by the START of a round and by wheel-preview (TIMING).
+func RoueSpinUpMs(spinPeriodMs int) int { return 2 * spinPeriodMs }
+
 // DefaultRoueWheelParams returns the default wheel: 1000 / 50 / 2 / 1 (22 cases).
 func DefaultRoueWheelParams() RoueWheelParams {
 	return RoueWheelParams{

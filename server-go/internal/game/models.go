@@ -1353,7 +1353,7 @@ type RoueWheel struct {
 	Layout       string `json:"LAYOUT"`
 	SpinPeriodMs int    `json:"SPIN_PERIOD_MS"`
 	SpinMaxMs    int    `json:"SPIN_MAX_MS"`
-	// SpinUpMs is the duration of the 2-turn climb to full speed (4 × SpinPeriodMs, computed at START, not a
+	// SpinUpMs is the duration of the 1-turn climb to full speed (2 × SpinPeriodMs, computed at START, not a
 	// setting — contract roue.md §4). FullSpeed is true ONLY in SPINNING once the climb is over (§5.1).
 	SpinUpMs       int           `json:"SPIN_UP_MS"`
 	FullSpeed      bool          `json:"FULL_SPEED"`

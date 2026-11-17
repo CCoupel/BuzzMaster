@@ -1,4 +1,4 @@
-// #144 (v12.0.0) — montée en 2 tours et arrêt seulement à pleine vitesse (contracts/roue.md §4, §5, §5.1, §6, §8).
+// #144 (v12.0.0) — montée en 1 tour et arrêt seulement à pleine vitesse (contracts/roue.md §4, §5, §5.1, §6, §8).
 // Le harnais de roue_144_test.go raccourcit la montée (SpinUpMs = 40 ms) et la durée maximale (60 ms) ; les tests
 // qui ont besoin d'une montée plus longue la fixent eux-mêmes.
 package game
@@ -22,8 +22,8 @@ func (r *roueRig) fullSpeed() bool { return r.st().RoueWheel.FullSpeed }
 
 func TestRoueSpinUp144_SpinUpMsIs4TimesThePeriod_AndFullSpeedStartsFalse(t *testing.T) {
 	r := newRoueRig(t, roueTestPhrase, RoueModeSolo, "", "red")
-	if r.initialPeriod <= 0 || r.initialSpinUp != 4*r.initialPeriod {
-		t.Errorf("SPIN_UP_MS doit valoir 4 × SPIN_PERIOD_MS au START : %d / %d", r.initialSpinUp, r.initialPeriod)
+	if r.initialPeriod <= 0 || r.initialSpinUp != 2*r.initialPeriod {
+		t.Errorf("SPIN_UP_MS doit valoir 2 × SPIN_PERIOD_MS au START : %d / %d", r.initialSpinUp, r.initialPeriod)
 	}
 	if r.fullSpeed() {
 		t.Errorf("FULL_SPEED est false avant le lancer")

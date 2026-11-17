@@ -178,7 +178,13 @@ func (h *HTTPServer) handleRoueWheelPreview(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	segs := game.BuildRoueWheel(np)
-	resp := map[string]interface{}{"COUNT": len(segs), "step": np.Step, "SEGMENTS": segs}
+	// TIMING (§11.3): the durations as the game would use them (clamped like at save time), SPIN_UP_MS by the
+	// very rule of the START — the card keeps no copy of it.
+	timing := map[string]int{
+		"SPIN_PERIOD_MS": np.SpinPeriodMs, "SPIN_UP_MS": game.RoueSpinUpMs(np.SpinPeriodMs),
+		"SPIN_MAX_MS": np.SpinMaxMs, "STOP_DURATION_MS": np.StopDurationMs,
+	}
+	resp := map[string]interface{}{"COUNT": len(segs), "step": np.Step, "SEGMENTS": segs, "TIMING": timing}
 	if adjusted > 0 {
 		resp["step_adjusted_from"] = adjusted
 	}
