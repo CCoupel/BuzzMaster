@@ -1802,7 +1802,7 @@ type RafaleCurrent struct {
 
 ## Modèles v12.0.0 — Roue de la Fortune (#144, #145)
 
-Contrat : `contracts/roue.md` §3, §4, §10. Statut : LOT-1 en cours.
+Contrat : `contracts/roue.md` §3, §4, §10. Livré dans la v12.0.0.
 
 ### Question de type `ROUE` (`TypedContent`, tous `omitempty`)
 

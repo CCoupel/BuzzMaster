@@ -2,11 +2,10 @@
 
 Historique des versions du projet BuzzControl.
 
-## [12.0.0] - non publiée — Roue de la Fortune (#144, #145) — entrée partielle LOT-1
+## [12.0.0] - [date de PROD à compléter par deployer] — Roue de la Fortune (#144, #145)
 
-Nouveau type de question **Roue** : une phrase à deviner, des équipes qui tournent la roue, proposent des consonnes et
-la réponse. Entrée partielle : elle couvre le LOT-1 (mécanique, configuration, éditeur, écrans). Les entrées finales
-seront complétées à la fin du milestone.
+Nouveau type de question **Roue de la Fortune** : une phrase à deviner, des équipes qui tournent la roue, proposent des
+consonnes et tentent la réponse. Les gains sont crédités en points d'équipe à la résolution.
 
 ### Added
 
@@ -26,7 +25,10 @@ seront complétées à la fin du milestone.
   de la manche, tablette animateur (sept étapes).
 - **Actions WebSocket `ROUE_*` (#144)** — `ROUE_SET_TEAMS`, `ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_FLIP`,
   `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL` ; refus à l'émetteur seul par `ROUE_ERROR`.
-- **Sélection des équipes ROUE** : plus de contrôle du nombre à chaque clic, comptage au passage en READY (12.0.0.2).
+- **Sélection des équipes ROUE (#144)** — la sélection ne contrôle que l'existence et l'absence de doublon des équipes
+  (`INVALID_TEAMS` : « Équipe inconnue ou en double ») ; le nombre d'équipes est contrôlé au passage en READY (`SOLO` :
+  1 équipe ; autres modes : 2 au moins), et le libellé indique « sélectionnez une seule équipe » en `SOLO` si plusieurs
+  équipes sont cochées.
 - **Composant `Wheel` : mouvement long (#144)** — prop `motion` (`spin`, `land`), roue de RAFALE inchangée sans prop.
 - **Roue : freinage sans saut (#144)** — le freinage part toujours de la vitesse de croisière, à vitesse continue.
 - **Roue : montée en 1 tour (#144)** — la roue accélère pendant 1 tour (`SPIN_UP_MS` = 2 × `SPIN_PERIOD_MS`, 5 s par
@@ -37,7 +39,8 @@ seront complétées à la fin du milestone.
   passage de tapable à non tapable.
 - **Roue : arrêt seulement à pleine vitesse (#144)** — pendant la montée, personne ne peut arrêter la roue (admin,
   animateur, équipe qui a la main) : `ROUE_STOP` est refusé `NOT_FULL_SPEED`, un appui est ignoré.
-- **Roue sur la tablette (#144)** — la roue et l'indice remplacent le bouton STOP ; la roue n'est tapable qu'à pleine vitesse.
+- **Roue sur la tablette (#144)** — la roue remplace le bouton STOP, et l'indice s'affiche sur sa propre ligne ; la roue
+  n'est tapable qu'à pleine vitesse.
 
 ### Security
 

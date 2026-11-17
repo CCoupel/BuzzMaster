@@ -1243,7 +1243,7 @@ Le champ SSID2/Mot de passe 2 permet de configurer un reseau WiFi de secours :
 
 ## Roue de la Fortune (v12.0.0, #144, #145)
 
-> Statut : LOT-1 en cours (fonctionnalité non encore validée de bout en bout sur serveur réel).
+> Fonctionnalité livrée dans la v12.0.0.
 
 Une question **Roue** fait jouer une phrase à deviner. Les équipes tournent la roue, proposent une consonne, puis
 proposent la réponse. Une phrase = une manche.

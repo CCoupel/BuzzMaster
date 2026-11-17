@@ -1925,7 +1925,7 @@ Fichier CSS partagé déclarant :
 
 ## Roue de la Fortune — composants et branchements (v12.0.0, #144, #145)
 
-Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-component.md`. Statut : LOT-1 en cours.
+Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-component.md`. Livré dans la v12.0.0.
 
 ### Composant `Wheel` — mouvement long (`web/src/components/wheel/`)
 

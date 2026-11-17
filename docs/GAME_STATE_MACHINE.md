@@ -322,8 +322,8 @@ if e.state.Phase != PhaseReady {
 
 ## Type de jeu ROUE — Roue de la Fortune (v12.0.0, #144, #145)
 
-Contrat de référence : `contracts/roue.md`. Statut : **LOT-1 en cours** (moteur, actions, configuration, éditeur et
-écrans livrés ; partie complète non encore validée sur serveur réel, voir `tests/procedures/roue/partie/`).
+Contrat de référence : `contracts/roue.md`. Livré dans la v12.0.0 (moteur, actions, configuration, éditeur et écrans) ;
+procédure de partie complète : `tests/procedures/roue/partie/`.
 
 ### Vue d'ensemble
 
@@ -356,7 +356,7 @@ STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulem
 | `SOLVED` | 0 | Phrase résolue ou dévoilée (`ROUE_REVEAL`) ; fin de manche, action `STOP` existante |
 
 > **Numérotation de `ROUE_STEP`** : le contrat fixe les étapes 1 à 7 sans chiffrer `LETTER`, `LIT` et `SOLVED`. Le
-> backend (LOT-1.2) affecte `LETTER` = 4, `LIT` et `REVEALING` = 5, `SOLVED` = 0 (fonction `roueStepOf`,
+> backend affecte `LETTER` = 4, `LIT` et `REVEALING` = 5, `SOLVED` = 0 (fonction `roueStepOf`,
 > `internal/game/roue.go`). Ces valeurs sont les valeurs livrées.
 
 ### Les 7 étapes et le bandeau
