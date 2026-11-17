@@ -72,12 +72,14 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Lancer la roue, regarder la TV | La roue part de l'arrêt et **accélère** (≈ 0,8 s) jusqu'à la vitesse de croisière, sans à-coup | | |
+| 1 | Lancer la roue, regarder la TV | La roue part de l'arrêt et **accélère** (1,5 s, contrat §6) jusqu'à la vitesse de croisière, sans à-coup | | |
 | 2 | Idem sur la tablette | Même comportement | | |
 | 3 | Laisser tourner puis arrêter | Le freinage démarre à la vitesse de croisière, sans saut de vitesse ni d'angle | | |
-| 4 | Relancer et arrêter **pendant** la montée (tap < 0,5 s) | Le freinage part de la vitesse courante, sans saut, et atterrit sur la case tirée | | |
+| 4 | Relancer et arrêter **pendant** la montée (tap < 1 s) | Le freinage part de la vitesse courante, sans saut, et atterrit sur la case tirée | | |
 | 5 | Pendant la rotation, provoquer une mise à jour de l'état (ex. un buzz d'une autre équipe, une cagnotte modifiée) | La roue ne repart pas de zéro, pas de nouvelle montée | | |
-| 6 | Manche RAFALE : lancer la roue de l'alphabet | Comportement inchangé (pas de montée) | | |
+| 6 | Recharger la page de la tablette (ou la TV) pendant la rotation, après la montée | L'écran qui se reconnecte part directement à la vitesse de croisière (pas de nouvelle montée) | |  |
+| 7 | Lancer et laisser tourner jusqu'à la durée maximale (10 s par défaut) | La durée maximale est comptée montée comprise : l'arrêt automatique survient 10 s après le lancement | | |
+| 8 | Manche RAFALE : lancer la roue de l'alphabet | Comportement inchangé (pas de montée) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
