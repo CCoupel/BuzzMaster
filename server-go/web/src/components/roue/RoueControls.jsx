@@ -12,6 +12,7 @@ const ERROR_TEXT = {
   WRONG_SUBPHASE: "Action déjà prise en compte ou indisponible à cette étape",
   NOT_ALLOWED: 'Action non autorisée',
   INVALID_TEAMS: 'Équipe inconnue ou en double',
+  NOT_FULL_SPEED: 'La roue prend de la vitesse : attendez la pleine vitesse pour l\'arrêter',
 }
 
 /** Message du dernier refus serveur (`ROUE_ERROR`), masqué après 4 s. `error` = { CODE, MESSAGE, SEQ }. */
@@ -29,17 +30,19 @@ export function RoueErrorLine({ error }) {
 
 /** Temps restant avant l'arrêt automatique, décompté localement depuis l'entrée en SPINNING (§6). */
 export function useSpinCountdown(gs) {
+  // Durée maximale décomptée depuis la pleine vitesse (FULL_SPEED = true), pas pendant la montée (roue.md §6).
   const spinning = gs?.ROUE_SUBPHASE === 'SPINNING'
+  const fullSpeed = spinning && gs?.ROUE_WHEEL?.FULL_SPEED === true
   const maxMs = gs?.ROUE_WHEEL?.SPIN_MAX_MS || 0
   const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
-    if (!spinning || !(maxMs > 0)) { setElapsed(0); return undefined }
+    if (!fullSpeed || !(maxMs > 0)) { setElapsed(0); return undefined }
     const t0 = Date.now()
     setElapsed(0)
     const id = setInterval(() => setElapsed(Math.min(maxMs, Date.now() - t0)), 200)
     return () => clearInterval(id)
-  }, [spinning, maxMs])
-  return { spinning, maxMs, remainingMs: Math.max(0, maxMs - elapsed), ratio: maxMs > 0 ? Math.max(0, 1 - elapsed / maxMs) : 0 }
+  }, [fullSpeed, maxMs])
+  return { spinning, fullSpeed, maxMs, remainingMs: Math.max(0, maxMs - elapsed), ratio: maxMs > 0 ? Math.max(0, 1 - elapsed / maxMs) : 0 }
 }
 
 /**

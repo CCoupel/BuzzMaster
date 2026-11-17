@@ -4,7 +4,8 @@
  * TV : équipes en haut avec leur cagnotte, catégorie + présentation, plateau plein écran, annonce, lettres
  * proposées (selon `ROUE_SHOW_LETTERS`), roue toujours affichée (bandeau ou arc selon la question).
  * Tablette (`isVPlayer`) : plateau pleine largeur, indice sur sa ligne, et la roue (mêmes props que la TV) à la place de l'ancien
- * bouton STOP : toute la zone est le bouton d'arrêt pour l'équipe qui a la main en SPINNING ; BUTTON est envoyé par `onStop`
+ * bouton STOP : toute la zone est le bouton d'arrêt pour l'équipe qui a la main en SPINNING, à pleine vitesse seulement
+ * (`ROUE_WHEEL.FULL_SPEED` ; pendant la montée : « La roue prend de la vitesse… », roue non tapable) ; BUTTON est envoyé par `onStop`
  * (le serveur ignore tout appui hors SPINNING ou d'une autre équipe).
  * Aucune phrase en entrée : seulement `ROUE_BOARD` (jamais une lettre non révélée, contrat §9).
  */
@@ -51,10 +52,10 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
   if (isVPlayer) {
     const mine = !!teamName && teamName === current
     const myBank = bank[teamName]
-    const canStop = mine && sub === 'SPINNING' && typeof onStop === 'function'
+    const canStop = mine && sub === 'SPINNING' && wheel?.FULL_SPEED === true && typeof onStop === 'function'
     const aw = solved && gs.ROUE_WINNER ? gs.ROUE_AWARDS?.[teamName] : 0
     // Zone de la roue (M5 révisée) : à la place de l'ancien bouton STOP, affichée dans toutes les sous-phases (SOLVED
-    // comprise) ; c'est un bouton seulement quand l'équipe a la main en SPINNING (le serveur reste seul juge de l'appui).
+    // comprise) ; c'est un bouton seulement quand l'équipe a la main en SPINNING à pleine vitesse (le serveur reste seul juge).
     const wheelEl = <FortuneWheel wheel={wheel} subphase={sub} teamColor={gs.ROUE_CURRENT_TEAM_COLOR} />
     return (
       <div className={`roue-vp roue-vp-${layout}`} data-testid="roue-vp" style={{ '--roue-accent': accent }}>

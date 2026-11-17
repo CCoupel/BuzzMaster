@@ -1,83 +1,77 @@
 /**
- * #144 (12.0.0.4) — lancement de la roue ROUE : montée en vitesse 0 → v0 (accélération constante sur accelMs), jonction
- * continue avec la croisière, arrêt PENDANT la montée : le freinage part de la vitesse courante, sans saut de vitesse ni
- * d'angle, et atterrit exactement sur `to` sans dépasser `durationMs`.
+ * #144 — montée en 2 tours (contracts/wheel-component.md §5, critères d'acceptation 1 à 6).
+ * Critère 1 : montée (vitesse 0 → vc, distance accelTurns×n, croissante, continue) — « critère 1 ».
+ * Critère 2 : freinage depuis la croisière — « critère 2 ». Critère 3 (`land` reçu pendant la montée locale) : Wheel.accel.144.test.jsx.
+ * Critère 5 (fonctions pures) : accelTurns absent = croisière immédiate — « critère 5 ». Critères 4 et 6 : Wheel.accel.144.test.jsx.
  */
 import { describe, it, expect } from 'vitest'
-import { spinRampPosition, spinSpeed, spinPosition, brakePlan, brakePosition } from './geometry'
+import { accelDurationMs, spinRampPosition, spinSpeed, spinPosition, brakePlan, brakePosition } from './geometry'
 
 const wrap = (a, b, n) => ((b - a + n / 2) % n + n) % n - n / 2
 const speedOf = (f, t, n, dt = 0.5) => wrap(f(t - dt), f(t + dt), n) / (2 * dt)
-const RAMP = 1500
+const TURNS = 2
 
-describe('spin avec montée', () => {
-  const n = 24, per = 2500, v0 = n / per
-  const pos = t => spinRampPosition(5, t, per, n, RAMP)
+describe('critère 1 — montée sur accelTurns tours', () => {
+  for (const [n, per] of [[24, 2500], [24, 1000], [40, 4000], [8, 6000]]) {
+    const vc = n / per, T = accelDurationMs(per, TURNS)
+    const pos = t => spinRampPosition(0, t, per, n, TURNS)
+    // distance non repliée : intégrale de spinSpeed (trapèzes fins)
+    const dist = (t) => { let d = 0; const dt = T / 4000; for (let x = 0; x < t; x += dt) d += spinSpeed(x + dt / 2, per, n, TURNS) * dt; return d }
+    it(`n=${n} période=${per} : durée 2·accelTurns·période, vitesse 0 à t=0 et vc à la fin (≤ 1 %), distance accelTurns×n (≤ 1 %)`, () => {
+      expect(T).toBe(2 * TURNS * per)
+      expect(spinSpeed(0, per, n, TURNS)).toBe(0)
+      expect(Math.abs(spinSpeed(T, per, n, TURNS) - vc) / vc).toBeLessThan(0.01)
+      expect(Math.abs(dist(T) - TURNS * n) / (TURNS * n)).toBeLessThan(0.01)
+    })
+    it(`n=${n} période=${per} : vitesse croissante, position (modulo n) continue à la jonction et conforme à d = vc·t²/(4·accelTurns·période)`, () => {
+      let prev = -1
+      for (let t = 0; t <= T; t += T / 50) { const v = spinSpeed(t, per, n, TURNS); expect(v).toBeGreaterThanOrEqual(prev); prev = v }
+      for (const t of [T / 4, T / 2, T - 1, T, T + 1, T * 2]) {
+        const analytic = t < T ? (vc * t * t) / (4 * TURNS * per) : vc * (t - T / 2)
+        expect(Math.abs(wrap(analytic, pos(t), n))).toBeLessThan(1e-6)
+      }
+      expect(Math.abs(speedOf(pos, T - 1, n) - speedOf(pos, T + 1, n)) / vc).toBeLessThan(0.01)
+    })
+  }
+})
 
-  it('part de l\'arrêt (vitesse 0), monte linéairement, atteint v0 à accelMs', () => {
-    expect(spinSpeed(0, per, n, RAMP)).toBe(0)
-    expect(spinSpeed(RAMP / 2, per, n, RAMP)).toBeCloseTo(v0 / 2, 9)
-    expect(spinSpeed(RAMP, per, n, RAMP)).toBeCloseTo(v0, 9)
-    expect(spinSpeed(5000, per, n, RAMP)).toBeCloseTo(v0, 9)
-    expect(speedOf(pos, 1, n)).toBeLessThan(v0 * 0.01 + 1e-4) // ~0 à t=0+
-  })
-  it('vitesse mesurée sur la position = spinSpeed (montée puis croisière), continue à la jonction', () => {
-    for (const t of [50, 200, 400, 700, 799, 801, 900, 1500, 3000]) {
-      expect(speedOf(pos, t, n)).toBeCloseTo(spinSpeed(t, per, n, RAMP), 4)
+const PERS = [1000, 2500, 6000], DURS = [1500, 4000, 8000], SIZES = [8, 24, 64]
+describe('critère 2 — freinage depuis la croisière (le seul freinage : roue.md §5.1)', () => {
+  it('vitesse au début = vc (≤ 5 %), jamais de recul, vitesse ≤ vc, arrêt exact sur `to`, en durationMs au plus', () => {
+    let plans = 0
+    for (const n of SIZES) for (const per of PERS) for (const dur of DURS) for (let d = 0; d < n; d += Math.max(1, Math.floor(n / 6))) {
+      const vc = n / per, from = 5, to = (5 + d) % n
+      const plan = brakePlan(from, to, n, dur, per)
+      if (!plan) continue
+      plans++
+      const f = t => brakePosition(plan, from, to, t, n)
+      expect(Math.abs(speedOf(f, 0.5, n, 0.25) - vc) / vc).toBeLessThan(0.05)
+      for (let t = 5; t < dur; t += Math.max(5, dur / 80)) {
+        const v = wrap(f(t - 1), f(t + 1), n) / 2
+        expect(v).toBeGreaterThanOrEqual(-1e-9); expect(v).toBeLessThanOrEqual(vc * 1.05 + 1e-9)
+      }
+      expect(plan.tc + plan.tb).toBeLessThanOrEqual(dur + 1e-6)
+      expect(Math.abs(wrap(from, f(0), n))).toBeLessThan(1e-6)
+      expect(f(dur)).toBe(to)
     }
-    expect(Math.abs(speedOf(pos, RAMP - 1, n) - speedOf(pos, RAMP + 1, n)) / v0).toBeLessThan(0.01)
+    expect(plans).toBeGreaterThan(150)
   })
-  it('position continue (pas de saut d\'angle) et normalisée', () => {
-    let prev = pos(0)
-    for (let t = 1; t < 4000; t += 3) {
-      const p = pos(t)
-      expect(p).toBeGreaterThanOrEqual(0); expect(p).toBeLessThan(n)
-      expect(Math.abs(wrap(prev, p, n))).toBeLessThanOrEqual(v0 * 3 + 1e-9)
-      prev = p
-    }
+  it('défauts (24 segments, 2500 / 4000 ms) : un plan pour les 24 distances', () => {
+    for (let d = 0; d < 24; d++) expect(brakePlan(0, d, 24, 4000, 2500), `d=${d}`).not.toBeNull()
   })
-  it('sans accelMs : profil d\'origine (uniforme), inchangé', () => {
-    expect(spinRampPosition(5, 1000, per, n, 0)).toBeCloseTo(spinPosition(5, 1000, per, n), 9)
-    expect(spinSpeed(0, per, n, 0)).toBeCloseTo(v0, 9)
+  it('fenêtre impossible (roue lente, arrêt très court) ou paramètres invalides : null → profil sans periodMs', () => {
+    expect(brakePlan(0, 20, 24, 1500, 6000)).toBeNull()
+    expect(brakePlan(0, 5, 0, 4000, 2500)).toBeNull()
+    expect(brakePlan(0, 5, 24, 4000, 0)).toBeNull()
   })
 })
 
-describe('arrêt pendant la montée : freinage depuis la vitesse courante', () => {
-  const SIZES = [8, 24, 64], PERS = [1000, 2500, 6000], DURS = [1500, 4000, 8000]
-  it('vitesse continue au début du freinage (< 1 % de v0) et angle continu', () => {
-    let plans = 0
-    for (const n of SIZES) for (const per of PERS) for (const dur of DURS) for (const tStop of [0, 100, 300, 500, 799]) {
-      const v0 = n / per, vs = spinSpeed(tStop, per, n, RAMP)
-      const from = 3 + (v0 * tStop * tStop) / (2 * RAMP)
-      for (let d = 0; d < n; d += Math.max(1, Math.floor(n / 6))) {
-        const to = Math.floor(from + d) % n
-        const plan = brakePlan(from, to, n, dur, per, vs, RAMP)
-        if (!plan) continue
-        plans++
-        const f = t => brakePosition(plan, from, to, t, n)
-        expect(Math.abs(speedOf(f, 0.5, n, 0.25) - vs) / v0).toBeLessThan(0.01)
-        expect(Math.abs(wrap(from, f(0), n))).toBeLessThan(1e-6)
-        // vitesse jamais au-dessus de v0 (aucune accélération parasite) ; atterrissage exact, jamais après durationMs
-        for (let t = 5; t < dur; t += Math.max(5, dur / 60)) expect(Math.abs(speedOf(f, t, n, 2))).toBeLessThanOrEqual(v0 * 1.01 + 1e-9)
-        expect(plan.t1 + plan.tc + plan.tb).toBeLessThanOrEqual(dur + 1e-6)
-        expect(f(dur)).toBe(to)
-      }
+describe('critère 5 (fonctions pures) — sans accelTurns : vitesse vc dès le départ', () => {
+  it('accelTurns absent / nul / invalide', () => {
+    const n = 24, per = 2500, vc = n / per
+    for (const a of [undefined, 0, -1, NaN]) {
+      expect(spinSpeed(0, per, n, a)).toBeCloseTo(vc, 12)
+      expect(spinRampPosition(5, 1000, per, n, a)).toBeCloseTo(spinPosition(5, 1000, per, n), 9)
     }
-    expect(plans).toBeGreaterThan(300)
-  })
-  it('arrêt à vitesse nulle (dès le lancement) : montée puis freinage, atterrissage exact', () => {
-    const n = 24, per = 2500, dur = 4000
-    for (const to of [4, 10, 18]) {
-      const plan = brakePlan(3, to, n, dur, per, 0, RAMP)
-      expect(plan).not.toBeNull()
-      expect(brakePosition(plan, 3, to, dur, n)).toBe(to)
-      expect(Math.abs(speedOf(t => brakePosition(plan, 3, to, t, n), 0.5, n, 0.25))).toBeLessThan(0.02 * (n / per))
-    }
-  })
-  it('à vitesse de croisière (vStart = v0) : identique au plan de 12.0.0.3', () => {
-    const p = brakePlan(3, 15, 24, 4000, 2500)
-    expect(p.t1).toBe(0)
-    expect(p.vp).toBeCloseTo(24 / 2500, 12)
-    expect(p.tc + p.tb).toBeCloseTo(4000, 6)
   })
 })

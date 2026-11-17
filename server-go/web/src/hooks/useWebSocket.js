@@ -191,7 +191,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     ROUE_LETTERS: [],
     ROUE_SHOW_LETTERS: true,
     ROUE_CONSONANTS_LEFT: true,
-    ROUE_WHEEL: { LAYOUT: 'strip', SPIN_PERIOD_MS: 2500, SPIN_MAX_MS: 10000, FLIP_INTERVAL_MS: 600, SEGMENTS: [], CURRENT: -1, STOP: null },
+    ROUE_WHEEL: { LAYOUT: 'strip', SPIN_PERIOD_MS: 2500, SPIN_UP_MS: 0, FULL_SPEED: false, SPIN_MAX_MS: 10000, FLIP_INTERVAL_MS: 600, SEGMENTS: [], CURRENT: -1, STOP: null },
     ROUE_LAST_EVENT: { SEQ: 0, KIND: '', TEAM: '', LETTER: '', COUNT: 0, VALUE: 0, GAIN: 0 },
     ROUE_WINNER: '',
     ROUE_AWARDS: {},

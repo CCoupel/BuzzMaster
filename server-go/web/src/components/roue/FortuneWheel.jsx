@@ -2,7 +2,7 @@
  * FortuneWheel — adaptateur ROUE → Wheel (v12.0.0, #144, contrat wheel-component.md §8, maquette M1).
  *
  * Traduit `GameState.ROUE_WHEEL` en props de `Wheel` ; ne sait rien du moteur de jeu. La barre de durée
- * maximale est décomptée LOCALEMENT depuis la réception de `SPINNING` (aucune horloge serveur).
+ * maximale est décomptée LOCALEMENT depuis la réception de `FULL_SPEED = true` (aucune horloge serveur).
  *
  * @param {Object} props.wheel - ROUE_WHEEL { LAYOUT, SPIN_PERIOD_MS, SPIN_MAX_MS, SEGMENTS, CURRENT, STOP }
  * @param {string} props.subphase - ROUE_SUBPHASE
@@ -15,10 +15,6 @@ import './FortuneWheel.css'
 const PALETTE = ['#fca5a5', '#93c5fd', '#86efac', '#fde68a', '#d8b4fe', '#fdba74']
 const SPECIAL_COLOR = '#0f172a'
 
-/** Durée de la montée en vitesse au lancement (ms), fixée par contracts/roue.md §6 (constante de l'adaptateur, ni champ
- *  ROUE_WHEEL ni réglage) : accélération constante de l'arrêt à la croisière, la roue parcourt ~0,3 tour (période 2500 ms). */
-export const SPIN_ACCEL_MS = 1500
-
 export function buildFortuneSegments(rawSegments = []) {
   let k = 0
   return rawSegments.map((s, i) => {
@@ -29,10 +25,19 @@ export function buildFortuneSegments(rawSegments = []) {
   })
 }
 
+/** Nombre de tours de la montée, déduit du serveur : `SPIN_UP_MS = 2 × accelTurns × SPIN_PERIOD_MS` (roue.md §4/§6 ; 2 tours). */
+export function fortuneAccelTurns(wheel) {
+  const period = wheel?.SPIN_PERIOD_MS || 2500
+  return wheel?.SPIN_UP_MS > 0 ? wheel.SPIN_UP_MS / (2 * period) : 0
+}
+
 export function fortuneMotion(wheel, subphase) {
-  if (subphase === 'SPINNING') return { mode: 'spin', periodMs: wheel?.SPIN_PERIOD_MS || 2500, accelMs: SPIN_ACCEL_MS }
+  const periodMs = wheel?.SPIN_PERIOD_MS || 2500
+  const accelTurns = fortuneAccelTurns(wheel)
+  // `cruise` = FULL_SPEED du serveur : fait foi pour le passage à la pleine vitesse (roue.md §6).
+  if (subphase === 'SPINNING') return { mode: 'spin', periodMs, accelTurns, cruise: wheel?.FULL_SPEED === true }
   if (subphase === 'STOPPING' && wheel?.STOP) {
-    return { mode: 'land', to: wheel.STOP.TO, durationMs: wheel.STOP.DURATION_MS, minTurns: 1, periodMs: wheel?.SPIN_PERIOD_MS || 2500, accelMs: SPIN_ACCEL_MS }
+    return { mode: 'land', to: wheel.STOP.TO, durationMs: wheel.STOP.DURATION_MS, minTurns: 1, periodMs }
   }
   return null
 }
@@ -43,15 +48,15 @@ export default function FortuneWheel({ wheel, subphase = '', teamColor, size = '
   const accent = Array.isArray(teamColor) && teamColor.length === 3
     ? `rgb(${teamColor.join(',')})`
     : (typeof teamColor === 'string' && teamColor ? teamColor : undefined)
-  const motionKey = subphase === 'SPINNING' ? `spin:${wheel?.SPIN_PERIOD_MS}`
+  const motionKey = subphase === 'SPINNING' ? `spin:${wheel?.SPIN_PERIOD_MS}:${wheel?.SPIN_UP_MS}:${wheel?.FULL_SPEED === true}`
     : subphase === 'STOPPING' && wheel?.STOP ? `land:${wheel.STOP.TO}:${wheel.STOP.DURATION_MS}:${wheel?.SPIN_PERIOD_MS}` : ''
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const motion = useMemo(() => fortuneMotion(wheel, subphase), [motionKey])
   const current = wheel && wheel.CURRENT >= 0 ? wheel.CURRENT : null
 
-  // Barre de durée maximale : décomptée localement depuis l'entrée en SPINNING.
+  // Barre de durée maximale : décomptée localement depuis la réception de FULL_SPEED = true (pas pendant la montée, roue.md §6).
   const [elapsed, setElapsed] = useState(0)
-  const spinning = subphase === 'SPINNING'
+  const spinning = subphase === 'SPINNING' && wheel?.FULL_SPEED === true
   const maxMs = wheel?.SPIN_MAX_MS || 0
   const t0 = useRef(0)
   useEffect(() => {

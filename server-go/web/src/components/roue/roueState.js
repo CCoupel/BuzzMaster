@@ -62,6 +62,8 @@ export function roueAnnouncement(gs, { mine = null } = {}) {
       if (!gs.ROUE_CONSONANTS_LEFT) return [t('Plus de consonne : proposez la phrase')]
       return mine === true ? [t('À votre équipe de jouer')] : [t('Aux '), T(team.toUpperCase()), t(' de jouer')]
     case 'SPINNING':
+      // Montée (FULL_SPEED = false, roue.md §6) : personne ne peut encore arrêter la roue.
+      if (gs?.ROUE_WHEEL && gs.ROUE_WHEEL.FULL_SPEED !== true) return [t('La roue prend de la vitesse…')]
       return mine === true ? [t('La roue tourne — arrêtez-la !')]
         : mine === false ? [t('Les '), T(team), t(' vont arrêter la roue')]
           : [T(team.toUpperCase()), t(' : buzzez pour arrêter la roue !')]
@@ -122,6 +124,8 @@ export function roueGates(gs) {
     sub,
     canSpin: sub === 'TURN' && left,
     canStop: sub === 'SPINNING',
+    // « Forcer l'arrêt » : toujours actif pour l'admin ; l'animateur attend la pleine vitesse (le serveur refuse sinon : NOT_FULL_SPEED)
+    fullSpeed: gs?.ROUE_WHEEL?.FULL_SPEED === true,
     canLetter: sub === 'LETTER',
     canFlip: sub === 'LIT',
     canAnswer: sub === 'ANSWER' || noLetters,

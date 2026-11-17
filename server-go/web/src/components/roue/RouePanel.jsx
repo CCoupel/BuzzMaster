@@ -89,12 +89,16 @@ function Action({ gs, gates, actions, selected, setSelected }) {
     case 'SPINNING':
       return (<>
         <h5>2 — Arrêt de la roue</h5>
-        <div className="roue-row">
-          <span>En attente du buzz des {team}…</span>
-          <span className="roue-bar"><i style={{ width: `${cd.ratio * 100}%` }} /></span>
-          <span className="roue-hint">arrêt automatique dans {Math.ceil(cd.remainingMs / 1000)} s</span>
-        </div>
-        <div className="roue-row roue-gap"><button type="button" className="roue-btn big" onClick={actions.stop}>✋ Forcer l'arrêt de la roue</button></div>
+        {gs.ROUE_WHEEL?.FULL_SPEED === true ? (
+          <div className="roue-row">
+            <span>En attente du buzz des {team}…</span>
+            <span className="roue-bar"><i style={{ width: `${cd.ratio * 100}%` }} /></span>
+            <span className="roue-hint">arrêt automatique dans {Math.ceil(cd.remainingMs / 1000)} s</span>
+          </div>
+        ) : (
+          <div className="roue-row"><span>La roue prend de la vitesse… personne ne peut encore l'arrêter, ni les {team}, ni vous.</span></div>
+        )}
+        <div className="roue-row roue-gap"><button type="button" className="roue-btn big" disabled={gs.ROUE_WHEEL?.FULL_SPEED !== true} onClick={actions.stop}>✋ Forcer l'arrêt de la roue</button></div>
       </>)
     case 'STOPPING': {
       const to = gs.ROUE_WHEEL?.STOP?.TO

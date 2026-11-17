@@ -71,7 +71,7 @@ export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
       {live && (
         <div className="anim-roue-steps">
           <button type="button" className={cls(1)} disabled={!gates.canSpin} onClick={actions.spin}><b>1</b>Lancer<br />la roue</button>
-          <button type="button" className={cls(2)} disabled={!gates.canStop} onClick={actions.stop}><b>2</b>Forcer<br />l'arrêt</button>
+          <button type="button" className={cls(2)} disabled={!(gates.canStop && gates.fullSpeed)} onClick={actions.stop}><b>2</b>Forcer<br />l'arrêt</button>
           <button type="button" className={`${cls(3)} ${step === 3 ? 'wait' : ''}`} disabled><b>3</b>{step === 3 ? <>La roue<br />ralentit…</> : 'Case'}</button>
           <button type="button" className={cls(4)} disabled={!gates.canLetter || !selected} onClick={() => selected && actions.letter(selected)}>
             <b>4</b>{selected && gates.canLetter ? <>Valider la<br />lettre {selected}</> : <>Valider la<br />consonne</>}
@@ -102,7 +102,7 @@ export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
         <div className="anim-roue-panel">
           <div className={`anim-roue-case${!seg && !cd.spinning ? ' none' : ''}${cd.spinning ? ' spin' : ''}`}>
             <small>Case de la roue</small>
-            {cd.spinning ? `la roue tourne · ${Math.ceil(cd.remainingMs / 1000)} s` : seg ? segmentLabel(seg) : '—'}
+            {cd.spinning ? (cd.fullSpeed ? `la roue tourne · ${Math.ceil(cd.remainingMs / 1000)} s` : 'la roue prend de la vitesse…') : seg ? segmentLabel(seg) : '—'}
           </div>
           <div className="anim-roue-gain">{gainText}</div>
           <h4>Cagnottes de la manche</h4>
