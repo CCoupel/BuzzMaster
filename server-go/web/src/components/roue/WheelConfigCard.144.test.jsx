@@ -22,7 +22,7 @@ describe('WheelConfigCard — carte « Roue de la Fortune » (#144, M4)', () => 
     render(<WheelConfigCard wheel={{ ...DEF, max_points: 100, step: 10, bankrupt_count: 1, lose_turn_count: 1 }} wheelDefault={DEF} />)
     await settle()
     expect(calls[0].url).toBe('/api/roue/wheel-preview')
-    expect(calls[0].body).toEqual({ max_points: 100, step: 10, bankrupt_count: 1, lose_turn_count: 1 })
+    expect(calls[0].body).toMatchObject({ max_points: 100, step: 10, bankrupt_count: 1, lose_turn_count: 1 })
     expect(screen.getByTestId('wheel-config-card').querySelector('.wheel-cfg-sum').textContent).toMatch(/4 cases/)
     expect(screen.getByTestId('wheel-config-card').querySelectorAll('.wheel-cfg-pc').length).toBe(4)
   })

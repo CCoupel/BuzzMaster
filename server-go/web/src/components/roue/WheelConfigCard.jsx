@@ -11,7 +11,7 @@
  * @param {Object} props.wheelDefault - `wheel_default` (bouton « Roue par défaut »)
  * @param {Function} [props.onSaved] - appelée avec la section `wheel` retenue après enregistrement
  */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Button from '../Button'
 import FortuneWheel, { buildFortuneSegments } from './FortuneWheel'
 import './WheelConfigCard.css'
@@ -42,16 +42,42 @@ function fromServer(w) {
   }
 }
 
-function Ring({ segments }) {
-  // Vue de réglage : dessin des cases telles que renvoyées par le serveur (aucune règle ici).
+/**
+ * Position (segments) du bandeau de l'essai, lue à chaque image : l'anneau tourne EXACTEMENT comme lui (même position, même
+ * instant). Ne calcule rien de la roue : il copie `data-pos` du composant `Wheel`.
+ */
+function useFollowWheel(sourceRef, active, restIndex, n) {
+  const gRef = useRef(null)
+  const rot = (idx) => (n > 0 ? -(idx * 360) / n : 0)
+  useEffect(() => {
+    const g = gRef.current
+    if (!g) return undefined
+    if (!active) { g.setAttribute('transform', `rotate(${rot(restIndex)} 500 500)`); return undefined }
+    let raf = null
+    const tick = () => {
+      const el = sourceRef.current?.querySelector('[role="img"]')
+      const p = Number(el?.getAttribute('data-pos'))
+      if (Number.isFinite(p)) g.setAttribute('transform', `rotate(${rot(p)} 500 500)`)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => { if (raf != null) cancelAnimationFrame(raf) }
+  }, [active, restIndex, n]) // eslint-disable-line react-hooks/exhaustive-deps
+  return gRef
+}
+
+function Ring({ segments, sourceRef, active = false, restIndex = 0 }) {
+  // Vue de réglage : dessin des cases telles que renvoyées par le serveur (aucune règle ici). L'essai fait tourner le groupe des
+  // cases ; le pointeur et les textes du centre restent fixes.
   const n = segments.length
+  const gRef = useFollowWheel(sourceRef, active, restIndex, n)
   const a = 360 / n
   const R = 480
   const r = 300
   const pt = (rad, deg) => { const t = (deg * Math.PI) / 180; return [(500 + rad * Math.cos(t)).toFixed(1), (500 + rad * Math.sin(t)).toFixed(1)] }
   return (
     <svg viewBox="0 0 1000 1000" className="wheel-cfg-ring" role="img" aria-label={`Roue de ${n} cases`}>
-      <circle cx="500" cy="500" r="290" fill="#f9fafb" />
+      <g ref={gRef} data-testid="wheel-cfg-ring-rotor">
       {segments.map((s, i) => {
         const mid = -90 + i * a
         const [x0, y0] = pt(R, mid - a / 2)
@@ -69,11 +95,55 @@ function Ring({ segments }) {
           </g>
         )
       })}
+      </g>
+      <circle cx="500" cy="500" r="290" fill="#f9fafb" />
       <path d="M500 46 L478 6 L522 6 Z" fill="#ef4444" />
       <text x="500" y="490" textAnchor="middle" fontSize="34" fontWeight="800" fill="#374151">{n} cases</text>
       <text x="500" y="535" textAnchor="middle" fontSize="24" fill="#6b7280">case 1 en haut, lecture ↻</text>
     </svg>
   )
+}
+
+function trialLabel(st, segments) {
+  switch (st.phase) {
+    case 'up': return 'Montée…'
+    case 'full': return `Pleine vitesse — arrêt automatique dans ${Math.ceil(st.remainingMs / 1000)} s`
+    case 'brake': return 'Freinage'
+    case 'stopped': { const seg = segments[st.rest]; return seg ? `Arrêt sur ${seg.kind === 'special' ? seg.label.replace('\n', ' ') : seg.label}` : '' }
+    default: return ''
+  }
+}
+
+/**
+ * Essai de la roue (roue.md §10.2) : états repos → montée → pleine vitesse → freinage → arrêt, SANS effet sur le jeu (aucun
+ * message WebSocket). Les durées viennent de `TIMING` (aperçu serveur), jamais d'un calcul de la page ; le tirage de la case est
+ * local (uniforme, sans valeur de jeu). Interrompu (`interrupt`) par tout changement de réglage et au démontage.
+ */
+function useWheelTrial(timing, count) {
+  const [st, setSt] = useState({ phase: 'idle', stop: null, rest: 0, remainingMs: 0 })
+  const timers = useRef([])
+  const clear = () => { timers.current.forEach(t => { clearTimeout(t); clearInterval(t) }); timers.current = [] }
+  const interrupt = useCallback(() => { clear(); setSt({ phase: 'idle', stop: null, rest: 0, remainingMs: 0 }) }, [])
+  useEffect(() => () => clear(), [])
+  const brake = useCallback((to, durMs) => {
+    clear()
+    setSt({ phase: 'brake', stop: { TO: to, DURATION_MS: durMs }, rest: to, remainingMs: 0 })
+    timers.current.push(setTimeout(() => setSt({ phase: 'stopped', stop: null, rest: to, remainingMs: 0 }), durMs + 50))
+  }, [])
+  const start = useCallback(() => {
+    if (!timing || !(count > 0)) return
+    clear()
+    const drawAndBrake = () => brake(Math.floor(Math.random() * count), timing.STOP_DURATION_MS)
+    setSt(s => ({ phase: 'up', stop: null, rest: s.rest, remainingMs: 0 }))
+    timers.current.push(setTimeout(() => {
+      const t0 = Date.now()
+      setSt(s => ({ ...s, phase: 'full', remainingMs: timing.SPIN_MAX_MS }))
+      timers.current.push(setInterval(() => setSt(s => (s.phase === 'full' ? { ...s, remainingMs: Math.max(0, timing.SPIN_MAX_MS - (Date.now() - t0)) } : s)), 200))
+      timers.current.push(setTimeout(drawAndBrake, timing.SPIN_MAX_MS)) // arrêt automatique à la durée maximale
+    }, timing.SPIN_UP_MS))
+  }, [timing, count, brake])
+  const stop = useCallback(() => { if (timing && count > 0) brake(Math.floor(Math.random() * count), timing.STOP_DURATION_MS) }, [timing, count, brake])
+  return { st, start, stop, interrupt }
 }
 
 export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
@@ -84,11 +154,17 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
   const seq = useRef(0)
+  const tvRef = useRef(null)
+  const trial = useWheelTrial(preview?.TIMING || null, preview?.SEGMENTS?.length || 0)
 
   // Les 4 paramètres qui déterminent la roue (les durées ne changent pas son dessin).
-  const { max_points: mp, step: st, bankrupt_count: bc, lose_turn_count: lc } = form
+  // Les trois durées partent aussi (facultatives) : le serveur renvoie `TIMING` (bornes appliquées, montée) pour l'essai (§10.2, §11.3).
+  const { max_points: mp, step: st, bankrupt_count: bc, lose_turn_count: lc, spin_period_ms: dp, spin_max_ms: dm, stop_duration_ms: ds } = form
   useEffect(() => {
     const body = { max_points: num(mp), step: num(st), bankrupt_count: num(bc), lose_turn_count: num(lc) }
+    if (Number.isFinite(num(dp))) body.spin_period_ms = num(dp)
+    if (Number.isFinite(num(dm))) body.spin_max_ms = num(dm)
+    if (Number.isFinite(num(ds))) body.stop_duration_ms = num(ds)
     if (![body.max_points, body.step, body.bankrupt_count, body.lose_turn_count].every(Number.isFinite)) {
       setPreview(null)
       setError('les quatre réglages sont des nombres entiers')
@@ -125,19 +201,24 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
       }
     }, PREVIEW_DELAY_MS)
     return () => { clearTimeout(timer); ctrl?.abort() }
-  }, [mp, st, bc, lc])
+  }, [mp, st, bc, lc, dp, dm, ds])
+
+  useEffect(() => { trial.interrupt() }, [preview]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const edit = (key, value) => {
+    trial.interrupt()
     setAdjusted(null)
     setToast(null)
     setForm(f => ({ ...f, [key]: value === '' ? '' : Number(value) }))
   }
   const editSeconds = (key, value) => {
+    trial.interrupt()
     setToast(null)
     setForm(f => ({ ...f, [key]: value === '' ? '' : Math.round(Number(value) * 1000) }))
   }
   const resetDefault = () => {
     if (!wheelDefault) return
+    trial.interrupt()
     setAdjusted(null)
     setToast(null)
     setForm(fromServer(wheelDefault))
@@ -170,6 +251,15 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
   }
 
   const segments = preview ? buildFortuneSegments(preview.SEGMENTS || []) : []
+  const timing = preview?.TIMING || null
+  // Essai : même adaptateur que le jeu (`FortuneWheel`), alimenté par un ROUE_WHEEL SIMULÉ (jamais envoyé nulle part).
+  const trialSub = trial.st.phase === 'up' || trial.st.phase === 'full' ? 'SPINNING' : trial.st.phase === 'brake' ? 'STOPPING' : ''
+  const trialActive = trial.st.phase !== 'idle' && trial.st.phase !== 'stopped'
+  const trialWheel = {
+    LAYOUT: 'strip', SEGMENTS: preview?.SEGMENTS, CURRENT: trial.st.rest, STOP: trial.st.stop,
+    SPIN_PERIOD_MS: timing?.SPIN_PERIOD_MS, SPIN_UP_MS: timing?.SPIN_UP_MS, SPIN_MAX_MS: timing?.SPIN_MAX_MS, STOP_DURATION_MS: timing?.STOP_DURATION_MS,
+    FULL_SPEED: trial.st.phase === 'full',
+  }
   const values = segments.filter(s => s.kind === 'value').map(s => Number(s.label))
   const special = segments.length - values.length
   const total = values.reduce((a, b) => a + b, 0)
@@ -207,6 +297,11 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
             {special ? `une chance sur ${fmt(Number((segments.length / special).toFixed(1)))} de tomber sur une case spéciale` : 'aucune case spéciale'}
             {' '}· gain moyen d'une case : {Math.round(total / segments.length)}.
           </div>
+          <div className="wheel-cfg-trial" data-testid="wheel-trial">
+            <Button variant="secondary" onClick={trial.start} disabled={!timing || !['idle', 'stopped'].includes(trial.st.phase)}>🎡 Tester</Button>
+            <Button variant="secondary" onClick={trial.stop} disabled={trial.st.phase !== 'full'}>✋ Arrêter</Button>
+            <span className="wheel-cfg-trial-state" aria-live="polite" data-testid="wheel-trial-state">{trialLabel(trial.st, segments)}</span>
+          </div>
           <div className="wheel-cfg-views">
             <div>
               <h4>Roue générée, dans l'ordre (la dernière case rejoint la première)</h4>
@@ -219,12 +314,12 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
                 ))}
               </div>
               <h4>Sur la TV — forme « bandeau » (autour de la case 1)</h4>
-              <div className="wheel-cfg-tv"><FortuneWheel wheel={{ LAYOUT: 'strip', SEGMENTS: preview.SEGMENTS, CURRENT: 0 }} size="compact" /></div>
+              <div className="wheel-cfg-tv" ref={tvRef}><FortuneWheel wheel={trialWheel} subphase={trialSub} size="compact" /></div>
               <p className="config-section-hint">Forme « arc » : la partie haute de la roue ci-contre émerge du bas de l'écran, la case tirée au sommet.</p>
             </div>
             <div>
               <h4>Vue d'ensemble de la roue</h4>
-              <Ring segments={segments} />
+              <Ring segments={segments} sourceRef={tvRef} active={trialActive} restIndex={trial.st.rest} />
               <p className="config-section-hint">Vue de réglage : permet de vérifier la place des cases spéciales. La TV n'affiche jamais la roue entière.</p>
             </div>
           </div>

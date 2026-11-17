@@ -120,6 +120,6 @@ describe('WheelConfigCard — spécification', () => {
     calls = []
     fireEvent.click(screen.getByText(/Roue par défaut/))
     await settle()
-    expect(previews().pop().body).toEqual({ max_points: 1000, step: 50, bankrupt_count: 2, lose_turn_count: 1 })
+    expect(previews().pop().body).toMatchObject({ max_points: 1000, step: 50, bankrupt_count: 2, lose_turn_count: 1 })
   })
 })

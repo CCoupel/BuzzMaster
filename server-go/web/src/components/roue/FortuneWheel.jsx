@@ -25,7 +25,7 @@ export function buildFortuneSegments(rawSegments = []) {
   })
 }
 
-/** Nombre de tours de la montée, déduit du serveur : `SPIN_UP_MS = 2 × accelTurns × SPIN_PERIOD_MS` (roue.md §4/§6 ; 2 tours). */
+/** Nombre de tours de la montée, déduit du serveur : `SPIN_UP_MS = 2 × accelTurns × SPIN_PERIOD_MS` (roue.md §4/§6 ; 1 tour depuis dd637f92 : SPIN_UP_MS = 2 × SPIN_PERIOD_MS). */
 export function fortuneAccelTurns(wheel) {
   const period = wheel?.SPIN_PERIOD_MS || 2500
   return wheel?.SPIN_UP_MS > 0 ? wheel.SPIN_UP_MS / (2 * period) : 0

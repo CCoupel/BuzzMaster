@@ -24,3 +24,5 @@
 .wheel-cfg-toast.success { color: #16a34a; }
 .wheel-cfg-toast.error { color: #dc2626; font-weight: 600; }
 @media (max-width: 900px) { .wheel-cfg-params { grid-template-columns: repeat(2, 1fr); } .wheel-cfg-views { grid-template-columns: 1fr; } }
+.wheel-cfg-trial { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.5rem 0 0.2rem; }
+.wheel-cfg-trial-state { font-size: 0.86rem; font-weight: 700; color: var(--gray-600, #4b5563); min-height: 1.3em; }
