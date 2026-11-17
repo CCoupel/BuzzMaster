@@ -1,0 +1,159 @@
+<!--
+mockup:
+  composant: admin_game_roue
+  feature: turn_controls
+  version: 12.0.0
+  type: ui
+  issue: "#144"
+  validee_le: 2026-11-16
+  proposition_retenue: "B — Bandeau de 7 étapes, retournement au bouton"
+  complete: []
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin › Jeu — Roue de la Fortune : bandeau des 7 étapes d'un tour (#144) — version retenue</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --ok:#16a34a; --okbg:#dcfce7; --error:#dc2626; --errbg:#fee2e2; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:var(--primary); border-color:#818cf8; }
+.mock-note { max-width:1240px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); }
+section[data-proposition] { display:none; } section[data-proposition].on { display:block; }
+.page { max-width:1240px; margin:.6rem auto 2rem; display:grid; grid-template-columns:230px 1fr 240px; gap:.8rem; padding:0 1rem; align-items:start; }
+.col { background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:.8rem; min-width:0; }
+.col h4 { margin:0 0 .5rem; font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; color:var(--gray-500); }
+.qitem { font-size:.8rem; padding:.35rem .5rem; border-radius:.4rem; color:var(--gray-600); display:flex; gap:.4rem; }
+.qitem.sel { background:var(--primary-100); color:var(--primary); font-weight:700; }
+.qitem .ty { font-size:.66rem; font-weight:800; background:var(--gray-200); border-radius:.25rem; padding:.05rem .3rem; color:var(--gray-700); }
+.dim { opacity:.45; }
+.team { display:flex; align-items:center; justify-content:space-between; gap:.5rem; border-left:5px solid var(--c); background:var(--gray-50); border-radius:.4rem; padding:.4rem .6rem; margin-bottom:.4rem; font-size:.84rem; }
+.team.active { background:#fff; outline:2px solid var(--c); font-weight:700; }
+.team .bank { font-weight:800; font-variant-numeric:tabular-nums; } .team .bank.up { color:var(--ok); } .team small { color:var(--gray-500); font-weight:500; display:block; font-size:.7rem; }
+.team.out { opacity:.4; }
+.meta { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.6rem; font-size:.76rem; }
+.chip { background:var(--gray-100); border-radius:999px; padding:.15rem .7rem; color:var(--gray-700); } .chip b { color:var(--gray-900); }
+.sol { font-size:1.1rem; font-weight:800; letter-spacing:.12em; line-height:1.5; background:var(--gray-50); border:1px dashed var(--gray-300); border-radius:.5rem; padding:.5rem .8rem; margin-bottom:.3rem; }
+.sol span { color:var(--gray-400); } .sol span.rv { color:var(--gray-900); } .sol span.lit { background:#fde047; color:#111827; border-radius:.2rem; padding:0 .1rem; box-shadow:0 0 .5rem #fde047; } .sol span.new { color:var(--ok); }
+.hint { font-size:.74rem; color:var(--gray-500); margin:.2rem 0 .6rem; }
+.status { font-size:.95rem; font-weight:700; margin:.7rem 0 .4rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.dot { width:.7rem; height:.7rem; border-radius:50%; background:#ef4444; display:inline-block; }
+.steps { display:grid; grid-template-columns:repeat(7, 1fr); gap:.25rem; margin:.5rem 0 .8rem; }
+.step { text-align:center; font-size:.68rem; line-height:1.2; padding:.4rem .15rem; border-radius:.5rem; background:var(--gray-100); color:var(--gray-500); border:2px solid transparent; min-width:0; }
+.step b { display:block; font-size:.95rem; } .step.done { background:var(--okbg); color:var(--ok); } .step.cur { background:#fff; border-color:var(--primary); color:var(--primary); font-weight:800; } .step.skip { opacity:.4; text-decoration:line-through; }
+.act { border:2px solid var(--primary); border-radius:.6rem; padding:.8rem; background:#fff; min-height:7.5rem; }
+.act h5 { margin:0 0 .5rem; font-size:.9rem; color:var(--primary); }
+.btn { font:inherit; font-size:.86rem; font-weight:600; padding:.55rem .9rem; border-radius:.5rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); cursor:pointer; }
+.btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; } .btn.big { font-size:1rem; padding:.75rem 1.2rem; }
+.btn.ok { background:var(--ok); border-color:var(--ok); color:#fff; } .btn.ko { background:#fff; border-color:var(--error); color:var(--error); }
+.btn.ghost { border-color:transparent; color:var(--gray-600); text-decoration:underline; background:none; font-weight:500; font-size:.8rem; }
+.btn[disabled] { opacity:.38; cursor:not-allowed; }
+.row { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+.kbd { display:grid; grid-template-columns:repeat(10, 1fr); gap:.3rem; margin:.4rem 0; }
+.key { font:inherit; font-weight:800; font-size:1rem; padding:.5rem 0; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; cursor:pointer; text-align:center; }
+.key.hit { background:var(--okbg); border-color:var(--ok); color:var(--ok); } .key.miss { background:var(--errbg); border-color:var(--error); color:var(--error); text-decoration:line-through; } .key.sel { background:var(--primary); border-color:var(--primary); color:#fff; }
+.key[disabled] { opacity:.5; cursor:not-allowed; }
+.vow { display:flex; gap:.3rem; align-items:center; font-size:.74rem; color:var(--gray-500); } .vow .key { width:2rem; padding:.2rem 0; font-size:.8rem; }
+.seg { display:inline-flex; align-items:center; font-weight:800; font-size:1.05rem; background:#fde68a; border-radius:.5rem; padding:.25rem .8rem; }
+.bar { height:.5rem; border-radius:999px; background:var(--gray-200); overflow:hidden; flex:1; min-width:8rem; } .bar i { display:block; height:100%; width:62%; background:#f59e0b; }
+.gain { font-weight:800; color:var(--ok); }
+.foot { border-top:1px solid var(--gray-200); margin-top:.8rem; padding-top:.6rem; display:flex; justify-content:space-between; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.pick { display:flex; flex-wrap:wrap; gap:.4rem; margin:.4rem 0; } .pick label { border:1px solid var(--gray-300); border-radius:.5rem; padding:.35rem .7rem; font-size:.84rem; display:flex; gap:.4rem; align-items:center; border-left:5px solid var(--c); }
+.won { background:var(--okbg); color:var(--ok); border-radius:.6rem; padding:.7rem .9rem; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Moment :</strong>
+  <span class="grp" id="states">
+    <button data-s="prep">Avant le départ</button><button data-s="s1">1 Lancer</button><button data-s="s2">2 Roue lancée</button><button data-s="s3">3 Case</button>
+    <button data-s="s4" class="on">4 Consonne</button><button data-s="s4b">4 Cases éclairées</button><button data-s="s5">5 Retournement</button><button data-s="s6">6 Réponse</button><button data-s="s7">7 Fin du tour (lettre trouvée)</button><button data-s="s7b">7 Fin du tour (lettre absente)</button><button data-s="solved">Phrase trouvée</button>
+  </span>
+</div>
+<div class="mock-note" id="pitch"></div>
+<div class="mock-note">Page <b>Jeu</b> de l'admin, question ROUE sélectionnée. Le <b>bandeau des 7 étapes</b> d'un tour reste affiché ; l'action de l'étape courante est dans le cadre dessous. Exemple : mode « Tant que je gagne », « Seul le gagnant encaisse », les Rouges ont la main, case 500, consonne <b>C</b> (3 cases).
+La roue s'arrête au <b>buzz de l'équipe qui a la main</b>, au bouton <b>« Forcer l'arrêt »</b>, ou <b>d'elle-même</b> à la durée maximale réglée dans les paramètres. Le gain du tour rejoint la <b>cagnotte de manche</b> de l'équipe à l'étape 7. Une case Banqueroute ou Tour perdu, ou une lettre absente, mène directement à l'étape 7. À l'étape 6, <b>un seul bouton « Réponse validée »</b> (la réponse est un bonus). À l'étape 7, <b>deux boutons</b> : <b>« Tour suivant »</b> (la même équipe rejoue) et <b>« Équipe suivante »</b> (équipe suivante) ; le bouton conseillé est mis en avant : « Équipe suivante » s'il n'y a pas eu de lettre trouvée, ou toujours en « Chacun son tour » ; « Tour suivant » après une lettre trouvée en « Tant que je gagne » ; en « Solo », seul « Tour suivant » existe. La phrase solution n'est visible que de l'admin et de l'animateur.</div>
+
+<div class="page" id="pgB"></div>
+
+<script>
+const PITCH = { B: "<b>Retournement au bouton.</b> Après la saisie de la consonne, ses cases restent éclairées sur la TV jusqu'à ce que l'admin (ou l'animateur) clique « Retourner les cases » ; elles se retournent alors une à une." };
+const st = { p:"B", s:"s4" };
+const TEAMS = [["Rouges","#ef4444",1300],["Bleus","#3b82f6",400],["Verts","#22c55e",0],["Jaunes","#eab308",900]];
+const CONS = "BCDFGHJKLMNPQRSTVWXZ".split("");
+const PHRASE = "COMBIEN POUR CE CHIEN DANS LA VITRINE";
+const ORDER = { s1:1, s2:2, s3:3, s4:4, s4b:4, s5:5, s6:6, s7:7, s7b:7, solved:8 };
+const STEPS = ["Lancer|la roue","Arrêt|de la roue","Affichage|de la case","Sélection de|la consonne","Affichage|des cases","Réponse","Fin|du tour"];
+
+function left() {
+  return `<div class="col"><h4>Manche 2</h4>
+    <div class="qitem dim"><span class="ty">QCM</span> Capitale de l'Australie</div><div class="qitem sel"><span class="ty">ROUE</span> Combien pour ce chien…</div>
+    <div class="qitem dim"><span class="ty">ROUE</span> Le tour de France</div><div class="qitem dim"><span class="ty">RAFALE</span> Culture générale</div>
+    <h4 style="margin-top:1rem">Commandes</h4>
+    <div class="row"><button class="btn" ${st.s === "prep" ? "" : "disabled"}>▶ Démarrer</button><button class="btn" ${st.s === "prep" ? "disabled" : ""}>⏸</button><button class="btn" ${st.s === "prep" ? "disabled" : ""}>⏹ Stop</button></div>
+    <p class="hint">Boutons existants, inchangés.</p></div>`;
+}
+function right() {
+  const up = st.s === "s7";
+  return `<div class="col"><h4>Équipes — cagnotte de la manche</h4>` + TEAMS.map((t, i) =>
+    `<div class="team ${i === 0 && st.s !== "prep" ? "active" : ""}" style="--c:${t[1]}"><span>${t[0]}${i === 0 && !["prep","solved"].includes(st.s) ? "<small>a la main</small>" : ""}${st.s === "solved" && i === 0 ? "<small>gagne +1 300 points</small>" : ""}</span><span class="bank ${i === 0 && up ? "up" : ""}">${st.s === "prep" ? "—" : (i === 0 && up ? 2800 : t[2]).toLocaleString("fr-FR")}</span></div>`).join("")
+    + `<div class="team out" style="--c:#a855f7"><span>Violets<small>ne participe pas</small></span><span class="bank">—</span></div><p class="hint">Les scores de la partie ne changent qu'à la phrase trouvée.</p></div>`;
+}
+function head() {
+  const o = ORDER[st.s] || 0;
+  const rv = st.s === "prep" ? "" : st.s === "solved" ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" : (o >= 6 && st.s !== "s7b") ? "TRNC" : "TRN";
+  const litOn = st.s === "s4b", flip = st.s === "s5";
+  const sol = [...PHRASE].map(ch => ch === " " ? " &nbsp;" : `<span class="${ch === "C" && litOn ? "lit" : ch === "C" && flip ? "new" : rv.includes(ch) ? "rv" : ""}">${ch}</span>`).join("");
+  return `<div class="meta"><span class="chip">🐾 <b>Animaux</b></span><span class="chip">Présentation : <b>Chanson de Line Renaud</b></span><span class="chip">Mode : <b>Tant que je gagne</b></span><span class="chip">Gains : <b>Seul le gagnant encaisse</b></span></div>
+    <div class="sol">${sol}</div><p class="hint">Phrase solution (visible ici seulement) — noir : lettres affichées sur la TV ; jaune : cases éclairées ; vert : en cours de retournement.</p>`;
+}
+function keys(sel) {
+  const cls = l => "TRN".includes(l) ? "hit" : l === "G" ? "miss" : (l === "C" && sel) ? "sel" : "";
+  return `<div class="kbd">${CONS.map(l => `<button class="key ${cls(l)}" ${cls(l) === "hit" || cls(l) === "miss" ? "disabled" : ""}>${l}</button>`).join("")}</div>
+    <div class="vow">Voyelles non disponibles : ${"AEIOUY".split("").map(v => `<button class="key" disabled>${v}</button>`).join("")}</div>`;
+}
+function band() {
+  const o = ORDER[st.s];
+  return `<div class="steps">${STEPS.map((s, i) => `<div class="step ${i + 1 < o ? "done" : i + 1 === o ? "cur" : ""}"><b>${i + 1 < o ? "✓" : i + 1}</b>${s.replace("|", "<br>")}</div>`).join("")}</div>`;
+}
+function action(p) {
+  const s = st.s;
+  if (s === "s1") return `<h5>1 — Lancer la roue</h5><div class="row"><button class="btn primary big">🎡 Lancer la roue</button></div><p class="hint">La roue se met à tourner sur la TV ; l'équipe qui a la main buzze pour l'arrêter.</p>`;
+  if (s === "s2") return `<h5>2 — Arrêt de la roue</h5><div class="row"><span>En attente du buzz des Rouges…</span><span class="bar"><i></i></span><span class="hint" style="margin:0">arrêt automatique dans 4 s</span></div><div class="row" style="margin-top:.6rem"><button class="btn big">✋ Forcer l'arrêt de la roue</button></div>`;
+  if (s === "s3") return `<h5>3 — Affichage de la case</h5><div class="row"><span>La roue ralentit et s'arrête sur</span><span class="seg">500</span></div><p class="hint">Aucun geste : le clavier des consonnes s'ouvre dès l'arrêt. Sur Banqueroute ou Tour perdu, passage direct à l'étape 7.</p>`;
+  if (s === "s4") return `<h5>4 — Sélection de la consonne <span class="seg" style="margin-left:.5rem">500</span></h5>${keys(true)}<div class="row" style="margin-top:.5rem"><button class="btn primary big">Valider la lettre C</button><span class="hint" style="margin:0">ou tapez la lettre au clavier puis Entrée — une voyelle affiche « Voyelle non disponible »</span></div>`;
+  if (s === "s4b") return `<h5>4 — Consonne C : 3 cases éclairées sur le plateau</h5>` + (p === "A"
+      ? `<div class="row"><span>Les cases du <b>C</b> sont éclairées sur la TV.</span><span class="bar"><i style="width:45%"></i></span><span class="hint" style="margin:0">retournement automatique dans 1 s</span></div>`
+      : `<div class="row"><span>Les cases du <b>C</b> sont éclairées sur la TV.</span></div><div class="row" style="margin-top:.6rem"><button class="btn primary big">🔄 Retourner les cases</button></div>`);
+  if (s === "s5") return `<h5>5 — Affichage des cases</h5><div class="row"><span>Les 3 cases se retournent une à une sur la TV…</span><span class="gain">C : 3 × 500 = +1 500</span></div><p class="hint">Aucun geste : l'étape 6 s'ouvre à la fin de l'animation.</p>`;
+  if (s === "s6") return `<h5>6 — Réponse (bonus)</h5><div class="row"><button class="btn ok big">✓ Réponse validée</button><span class="hint" style="margin:0">sinon, étape 7 :</span><button class="btn primary big">Tour suivant — même équipe</button><button class="btn big">Équipe suivante ▶ Bleus</button></div><p class="hint">La réponse est un bonus : une réponse fausse ne fait pas perdre la main. Gain du tour en attente : <span class="gain">+1 500</span>.</p>`;
+  if (s === "s7") return `<h5>7 — Fin du tour</h5><div class="row"><span class="gain">+1 500</span><span>ajoutés à la cagnotte des Rouges : <b>2 800</b></span></div><div class="row" style="margin-top:.6rem"><button class="btn primary big">Tour suivant — même équipe ▶ Rouges</button><button class="btn big">Équipe suivante ▶ Bleus</button></div><p class="hint">Lettre trouvée en « Tant que je gagne » : « Tour suivant » est mis en avant. L'autre bouton reste disponible.</p>`;
+  if (s === "s7b") return `<h5>7 — Fin du tour</h5><div class="row"><span>Lettre <b>K</b> absente — aucun gain pour les Rouges</span></div><div class="row" style="margin-top:.6rem"><button class="btn big">Tour suivant — même équipe ▶ Rouges</button><button class="btn primary big">Équipe suivante ▶ Bleus</button></div><p class="hint">Pas de lettre trouvée : « Équipe suivante » est mis en avant (de même après Banqueroute ou Tour perdu).</p>`;
+  return "";
+}
+function center(p) {
+  let b;
+  if (st.s === "prep") b = `<div class="status">Équipes participantes</div><div class="pick">${TEAMS.map(t => `<label style="--c:${t[1]}"><input type="checkbox" checked> ${t[0]}</label>`).join("")}<label style="--c:#a855f7"><input type="checkbox"> Violets</label></div><p class="hint">Ordre de passage = ordre des équipes cochées. « Tant que je gagne » : 2 équipes au moins. « Démarrer » reste grisé tant que la sélection n'est pas conforme.</p>`;
+  else if (st.s === "solved") b = `<div class="won">🎉 Les Rouges ont trouvé la phrase — +1 300 points crédités (seul le gagnant encaisse).</div><p class="hint">Cliquez « Stop » pour terminer la manche et passer à la question suivante.</p>`;
+  else b = `<div class="status"><span class="dot"></span> Les Rouges ont la main</div>${band()}<div class="act">${action(p)}</div>`;
+  const off = ["prep","solved"].includes(st.s);
+  return `<div class="col">${head()}${b}<div class="foot"><div class="row"><button class="btn ghost" ${off || st.s !== "s1" ? "disabled" : ""}>⏭ Passer la main</button><button class="btn ghost" ${off ? "disabled" : ""}>👁 Dévoiler la phrase (sans gagnant)…</button></div><span class="hint" style="margin:0">Lettres proposées : T R N · <s>G</s></span></div></div>`;
+}
+function render() {
+  document.getElementById("pgB").innerHTML = left() + center("B") + right();
+  document.getElementById("pitch").innerHTML = PITCH[st.p];
+  document.querySelectorAll("section[data-proposition]").forEach(s => s.classList.toggle("on", s.dataset.proposition === st.p));
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.p === st.p));
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", b.dataset.s === st.s));
+}
+document.getElementById("states").addEventListener("click", e => { if (e.target.dataset.s) { st.s = e.target.dataset.s; render(); } });
+render();
+</script>
+</body>
+</html>

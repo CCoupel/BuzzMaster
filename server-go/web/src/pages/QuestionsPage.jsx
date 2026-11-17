@@ -30,6 +30,7 @@ import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import EntracteFields from '../components/EntracteFields'
+import RoueEditor, { roueRefusalText } from '../components/roue/RoueEditor'
 import RoundGroup from '../components/RoundGroup'
 import RoundDeleteDialog from '../components/RoundDeleteDialog'
 import RoundAmbianceDialog from '../components/RoundAmbianceDialog'
@@ -127,6 +128,13 @@ export default function QuestionsPage() {
     // #282 (v11.4.0) — option Alphabétique + présentation TV de la roue (contrat rafale.md §15.2/§15.7)
     rafaleAlphabetical: false,
     rafaleWheelLayout: 'strip',
+    // ROUE fields (v12.0.0, #145, contrat roue.md §3)
+    rouePhrase: '',
+    rouePresentation: '',
+    roueMode: 'TANT_QUE_JE_GAGNE',
+    roueGainsRule: 'WINNER_ONLY',
+    roueWheelLayout: 'strip',
+    roueShowLetters: true,
     // ENTRACTE fields (#214, milestone v9.0.0) — second déclencheur du
     // mécanisme ENTRACTE existant (#119, EntracteConfigForm.jsx/#215) :
     // chaque occurrence du déroulé porte sa propre config, MÊME STRUCTURE
@@ -252,6 +260,8 @@ export default function QuestionsPage() {
   // aiToast/shuffleToast ci-dessous), car il accompagne un enregistrement
   // réussi (le formulaire est déjà revenu à l'état "nouvelle question").
   const [soundError, setSoundError] = useState(null)
+  // ROUE (#145) — la phrase a été validée par l'aperçu serveur (POST /api/roue/preview)
+  const [roueValid, setRoueValid] = useState(false)
   const [soundToast, setSoundToast] = useState(null)
   // #219 (ajustement ergonomie QUALIF v11.1.0.1) — durée du fichier son,
   // lue côté navigateur via l'évènement `loadedmetadata` du même `<audio>`
@@ -815,7 +825,7 @@ export default function QuestionsPage() {
   // rendu aussi par MEMORY / MEMOTION (hôte) / ENTRACTE). « Chrono démarre » n'existe que
   // pour les types à chronomètre global : jamais pour ENTRACTE ni l'hôte MEMOTION.
   const renderQuestionSoundBlock = () => {
-    const hasTimer = formData.type !== 'ENTRACTE' && formData.type !== 'MEMOTION'
+    const hasTimer = formData.type !== 'ENTRACTE' && formData.type !== 'MEMOTION' && formData.type !== 'ROUE'
     // Libellés de la maquette #235 : entracte / manche MEMOTION (hôte) / question.
     const soundBlockTitle = formData.type === 'ENTRACTE' ? 'Son de l\'entracte'
       : formData.type === 'MEMOTION' ? 'Son de la manche'
@@ -1203,6 +1213,13 @@ export default function QuestionsPage() {
       rafaleMaxQuestions: question.RAFALE_MAX_QUESTIONS || 100,
       rafaleAlphabetical: question.RAFALE_ALPHABETICAL === true,
       rafaleWheelLayout: question.RAFALE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip',
+      // ROUE (#145) — ROUE_SHOW_LETTERS absent = true (le champ n'est écrit que pour false)
+      rouePhrase: question.ROUE_PHRASE || '',
+      rouePresentation: question.ROUE_PRESENTATION || '',
+      roueMode: question.ROUE_MODE || 'TANT_QUE_JE_GAGNE',
+      roueGainsRule: question.ROUE_GAINS_RULE || 'WINNER_ONLY',
+      roueWheelLayout: question.ROUE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip',
+      roueShowLetters: question.ROUE_SHOW_LETTERS !== false,
       // ENTRACTE (#214) — ENTRACTE_CONFIG (nested, contrat backend
       // TypedContent.EntracteConfig) : mêmes défauts que la config globale
       // (EntracteConfigForm.jsx) si l'occurrence n'en porte pas encore.
@@ -1359,6 +1376,13 @@ export default function QuestionsPage() {
       rafaleMaxQuestions: 100,
       rafaleAlphabetical: false,
       rafaleWheelLayout: 'strip',
+      // ROUE fields (#145) — voir état initial
+      rouePhrase: '',
+      rouePresentation: '',
+      roueMode: 'TANT_QUE_JE_GAGNE',
+      roueGainsRule: 'WINNER_ONLY',
+      roueWheelLayout: 'strip',
+      roueShowLetters: true,
       // ENTRACTE fields — voir commentaire de l'état initial (useState
       // ci-dessus) pour le détail des champs.
       entracteConfig: { title: 'ENTRACTE', subtitle: 'Retour dans 20mn', panelSize: 65, animPeriod: 10, animIntensity: 20, transitionMs: 2000 },
@@ -1641,7 +1665,10 @@ export default function QuestionsPage() {
     // For normal questions, need question and answer
     // For QCM, need question and at least the correct answer filled
     // For Memory, need question and at least 2 valid pairs
-    if (!formData.question) return
+    // ROUE (#145) — pas d'énoncé : la phrase est validée par le serveur (aperçu) ; bouton désactivé tant qu'elle est refusée
+    if (formData.type === 'ROUE') {
+      if (!formData.rouePhrase.trim() || !roueValid) return
+    } else if (!formData.question) return
     if (formData.type === 'SPEEDY' && !formData.answer) return
     if (formData.type === 'ARDOISE' && !formData.answer) return
     if (formData.type === 'QCM' && (!formData.qcmCorrect || !formData.qcmAnswers[formData.qcmCorrect])) return
@@ -1694,7 +1721,8 @@ export default function QuestionsPage() {
     if (editingId) {
       data.append('number', editingId)
     }
-    data.append('question', formData.question)
+    // ROUE : la phrase ne transite jamais par le champ générique « question » (visible TV, contrat roue.md §9)
+    data.append('question', formData.type === 'ROUE' ? (formData.rouePresentation.trim() || 'Roue de la Fortune') : formData.question)
     data.append('type', formData.type)
     if (formData.category) {
       data.append('category', formData.category)
@@ -1941,6 +1969,15 @@ export default function QuestionsPage() {
       // repli textuel pour tout consommateur qui n'afficherait pas les chips
       // dédiées de QuestionCard.jsx).
       data.append('answer', `${formData.rafaleCategories.join('/') || '?'} - ${formData.rafaleDifficulties.map(d => '★'.repeat(d)).join(', ')}`)
+    } else if (formData.type === 'ROUE') {
+      // ROUE (#145, contrat roue.md §11.1) — tous les champs sont envoyés à chaque enregistrement (un champ non lu serait perdu)
+      data.append('roue_phrase', formData.rouePhrase)
+      data.append('roue_presentation', formData.rouePresentation)
+      data.append('ROUE_MODE', formData.roueMode)
+      data.append('roue_gains_rule', formData.roueGainsRule)
+      data.append('roue_wheel_layout', formData.roueWheelLayout === 'arc' ? 'arc' : 'strip')
+      data.append('roue_show_letters', formData.roueShowLetters ? 'true' : 'false')
+      data.append('answer', '—')
     } else if (formData.type === 'ENTRACTE') {
       // ENTRACTE (#214) — configuration du panneau PAR OCCURRENCE, envoyée
       // en JSON-encodé (même convention que motion_config/RAFALE_*_BY_*
@@ -1983,7 +2020,7 @@ export default function QuestionsPage() {
     } else if (formData.soundCleared) {
       data.append('sound_cleared', 'true')
     }
-    data.append('sound_timer_delayed', (formData.soundTimerDelayed && formData.type !== 'ENTRACTE' && formData.type !== 'MEMOTION') ? 'true' : 'false')
+    data.append('sound_timer_delayed', (formData.soundTimerDelayed && formData.type !== 'ENTRACTE' && formData.type !== 'MEMOTION' && formData.type !== 'ROUE') ? 'true' : 'false')
     // #288 — lecture en boucle (contrat sound.md §13.2) : toujours envoyé, combinable avec le différé
     data.append('sound_loop', formData.soundLoop ? 'true' : 'false')
 
@@ -2441,6 +2478,7 @@ export default function QuestionsPage() {
                 className="add-form"
                 noValidate={formData.type === 'MEMOTION' && formData.motionCards.some(c => c.rectoTheme.trim() && pointsRuleValueError(c.pointsRule))}
               >
+                {formData.type !== 'ROUE' && (
                 <div className="form-group">
                   <label htmlFor="question-input">Question *</label>
                   <textarea
@@ -2452,6 +2490,7 @@ export default function QuestionsPage() {
                     required
                   />
                 </div>
+                )}
 
                 {/* #245 — champ « Manche » (maquette (f″)) : seulement s'il existe des manches ; seul ajout du formulaire.
                     Nouvelle question : envoyé en `round_id`. Question existante : le changement de manche part en
@@ -2518,7 +2557,8 @@ export default function QuestionsPage() {
                   </div>
                 )}
 
-                {/* Points Target Selector */}
+                {/* Points Target Selector — ROUE : gains par cases de la roue, pas de barème de question */}
+                {formData.type !== 'ROUE' && (
                 <div className="form-group">
                   <label>Attribution des points</label>
                   <div className="type-selector points-target-selector">
@@ -2550,6 +2590,7 @@ export default function QuestionsPage() {
                     </button>
                   </div>
                 </div>
+                )}
 
                 {/* Normal Answer */}
                 {(formData.type === 'SPEEDY' || formData.type === 'ARDOISE') && (
@@ -3591,6 +3632,15 @@ export default function QuestionsPage() {
                     dans le déroulé (maquette §02) — Titre/Sous-titre
                     ci-dessous sont ce qui s'affiche RÉELLEMENT sur le
                     panneau pendant la pause. */}
+                {/* ROUE (v12.0.0, #145, maquette M3) — section en composant séparé */}
+                {formData.type === 'ROUE' && (
+                  <RoueEditor
+                    values={formData}
+                    onChange={handleInputChange}
+                    onValidityChange={setRoueValid}
+                  />
+                )}
+
                 {formData.type === 'ENTRACTE' && (
                   <div className="rafale-section">
                     <EntracteFields
@@ -3645,7 +3695,7 @@ export default function QuestionsPage() {
                   {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card.
                       ENTRACTE (#214) — ne rapporte jamais aucun point (maquette
                       entracte-programme-214.html §04). */}
-                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'ENTRACTE' && (
+                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && (
                     <div className="form-group">
                       <label htmlFor="points-input">Points</label>
                       <input
@@ -3698,7 +3748,7 @@ export default function QuestionsPage() {
                       </p>
                     </div>
                   )}
-                  {formData.type !== 'MEMOTION' && (
+                  {formData.type !== 'MEMOTION' && formData.type !== 'ROUE' && (
                     <div className="form-group">
                       <label htmlFor="time-input">Temps (s)</label>
                       <input
@@ -3719,7 +3769,7 @@ export default function QuestionsPage() {
                     panneau), mais avec son propre champ dédié dans la section ENTRACTE ci-dessous
                     (libellé "Image de fond", pas "Image question") — pas de "Image reponse" (aucun
                     sens pour ce type), donc exclu ici comme les 3 autres. */}
-                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && formData.type !== 'ENTRACTE' && (
+                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && (
                   <>
                     <div className="form-group">
                       <label htmlFor="media-input">Image question (optionnel)</label>
@@ -3786,12 +3836,12 @@ export default function QuestionsPage() {
                 {/* #235 — Son pour MEMORY, ENTRACTE et hôte MEMOTION (maquette
                     admin_question_editor__sound_memory_memotion_entracte.html) :
                     même bloc, filtre de type levé. */}
-                {['MEMORY', 'MEMOTION', 'ENTRACTE'].includes(formData.type) && renderQuestionSoundBlock()}
+                {['MEMORY', 'MEMOTION', 'ENTRACTE', 'ROUE'].includes(formData.type) && renderQuestionSoundBlock()}
 
                 {/* Refus serveur (corps HTTP brut) pour les types sans section « Son »
                     (RAFALE) — ex. POINTS_RULE_* (#190). */}
-                {soundError && formData.type === 'RAFALE' && (
-                  <p className="sound-error-message" role="alert">✕ {soundError}</p>
+                {soundError && (formData.type === 'RAFALE' || formData.type === 'ROUE') && (
+                  <p className="sound-error-message" role="alert">✕ {formData.type === 'ROUE' ? roueRefusalText(soundError) : soundError}</p>
                 )}
 
                 <Button
@@ -3799,8 +3849,8 @@ export default function QuestionsPage() {
                   variant={editingId ? 'primary' : 'fun'}
                   size="lg"
                   loading={isUploading}
-                  disabled={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)}
-                  title={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty) ? 'Corrigez la pénalité de mauvaise réponse' : undefined}
+                  disabled={(formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)) || (formData.type === 'ROUE' && !roueValid)}
+                  title={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty) ? 'Corrigez la pénalité de mauvaise réponse' : (formData.type === 'ROUE' && !roueValid ? 'Saisissez une phrase acceptée par le plateau' : undefined)}
                   className="submit-btn"
                 >
                   {editingId ? 'Modifier' : 'Ajouter'}

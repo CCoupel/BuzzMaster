@@ -1,0 +1,10 @@
+/* RoueBoard — plateau de la question ROUE (#145, maquette M3). */
+.roue-board { display: inline-grid; grid-auto-rows: var(--roue-cell, 26px); gap: 3px; background: #0b1020; padding: 8px; border-radius: var(--radius-lg, 0.5rem); }
+.roue-cell { background: rgba(255, 255, 255, 0.06); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; color: #111827; }
+.roue-cell.letter { background: #f8fafc; }
+.roue-cell.vowel { background: #bfdbfe; }
+.roue-board-legend { font-size: 0.74rem; color: var(--gray-500); margin-top: 0.3rem; }
+.roue-board-legend i { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 2px; vertical-align: -0.1rem; margin: 0 0.2rem 0 0.6rem; }
+.roue-board-legend i:first-child { margin-left: 0; }
+.roue-legend-letter { background: #f8fafc; border: 1px solid var(--gray-300); }
+.roue-legend-vowel { background: #bfdbfe; }

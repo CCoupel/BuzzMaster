@@ -462,6 +462,9 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/categories", h.handleAPICategories)
 	h.mux.HandleFunc("/api/categories/", h.handleAPICategoryByKey) // v11.4.0, #285: PUT/DELETE {key}, POST {key}/icon
 
+	// ROUE phrase preview (v12.0.0, #145, contracts/roue.md §11.2)
+	h.mux.HandleFunc("/api/roue/preview", h.handleRouePreview)
+	h.mux.HandleFunc("/api/roue/wheel-preview", h.handleRoueWheelPreview) // #144, contracts/roue.md §11.3
 	// RAFALE reservoir API (v8.0.0 — #197, contracts/rafale.md §9)
 	h.mux.HandleFunc("/api/rafale/questions", h.handleRafaleQuestions)
 	// Exact-path registration BEFORE the "/api/rafale/questions/" prefix
@@ -1510,6 +1513,16 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		// If not provided or invalid, omit the field (frontend defaults to AZERTY)
 	}
 
+	// ROUE (v12.0.0, #145, contracts/roue.md §11.1): every ROUE_* field is read
+	// at each save (a field not read here would be lost, lesson #107); a
+	// refusal answers 400 prefixed by its code and writes nothing (#278).
+	if questionType == string(game.QuestionTypeRoue) {
+		if status, msg := applyRoueFields(r, question); status != 0 {
+			http.Error(w, msg, status)
+			return
+		}
+	}
+
 	// Handle RAFALE specific fields (v8.0.0, #107, contract §3.3) — round
 	// configuration: difficulty/mode/seconds-per-question/max-questions.
 	// CATEGORY is already handled generically above (shared field, contract
@@ -1628,7 +1641,8 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// existingQuestion.
 	// #235 : MEMOTION (hôte) et ENTRACTE n'ont pas de chrono global — le différé est
 	// ignoré (écrit false), contracts/sound.md §14.3/§14.4.
-	noGlobalTimer := questionType == string(game.QuestionTypeMemotion) || questionType == string(game.QuestionTypeEntracte)
+	noGlobalTimer := questionType == string(game.QuestionTypeMemotion) || questionType == string(game.QuestionTypeEntracte) ||
+		questionType == string(game.QuestionTypeRoue)
 	soundTimerDelayed := r.FormValue("sound_timer_delayed") == "true" && !noGlobalTimer
 	// sound_loop (v11.4.0, #288, contract sound.md §13.2): same discipline.
 	soundLoop := r.FormValue("sound_loop") == "true"
@@ -2499,6 +2513,24 @@ func (h *HTTPServer) handleGameConfig(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// Wheel (v12.0.0, #144, contract roue.md §10): validated BEFORE anything is
+		// saved (a refusal writes nothing); a step that does not divide the maximum
+		// is corrected, the response reports it.
+		stepAdjustedFrom := 0
+		if data, ok := raw["wheel"]; ok {
+			var wc config.WheelConfig
+			if err := json.Unmarshal(data, &wc); err != nil {
+				http.Error(w, "Invalid \"wheel\" section: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			np, adjusted, nerr := game.NormalizeRoueWheelParams(wheelParamsFromConfig(wc))
+			if nerr != nil {
+				http.Error(w, nerr.Error(), http.StatusBadRequest)
+				return
+			}
+			gs.Wheel = wheelConfigFromParams(np)
+			stepAdjustedFrom = adjusted
+		}
 		// v6.5.2, #119, C1 — the "entracte" section used to live here
 		// (QUALIF only, never production). It has moved to game_state.json,
 		// edited via the WS action UPDATE_ENTRACTE_CONFIG from the Quiz page
@@ -2523,7 +2555,7 @@ func (h *HTTPServer) handleGameConfig(w http.ResponseWriter, r *http.Request) {
 		LogInfo(game.LogComponentHTTP, "Game config updated and saved (sections: %v; neon_effect: enabled=%v, mode=%s, arc=%d, intensity=%d, speed=%.1f, offset=%d, thickness=%d; default_delay=%d)",
 			keysOf(raw), gs.NeonEffect.Enabled, gs.NeonEffect.Mode, gs.NeonEffect.ArcWidth, gs.NeonEffect.IntensityGap, gs.NeonEffect.RotationSpeed, gs.NeonEffect.BarOffset, gs.NeonEffect.BarThickness, gs.Game.DefaultDelay)
 
-		respJSON, err := json.MarshalIndent(&gs, "", "  ")
+		respJSON, err := marshalGameConfigWithWheelExtras(&gs, stepAdjustedFrom)
 		if err != nil {
 			http.Error(w, "Failed to encode game config", http.StatusInternalServerError)
 			return
@@ -2535,7 +2567,7 @@ func (h *HTTPServer) handleGameConfig(w http.ResponseWriter, r *http.Request) {
 
 	// GET: return current game config
 	gs := config.GetGameSettings()
-	data, err := json.MarshalIndent(gs, "", "  ")
+	data, err := marshalGameConfigWithWheelExtras(gs, 0)
 	if err != nil {
 		http.Error(w, "Failed to encode game config", http.StatusInternalServerError)
 		return

@@ -49,6 +49,8 @@ import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import AnimRafaleActions from '../components/AnimRafaleActions'
 import AnimSoundActions from '../components/AnimSoundActions'
+import RouePanel from '../components/roue/RouePanel'
+import { makeRoueActions } from '../components/roue/roueState'
 import './GamePage.css'
 import '../styles/entracte.css'
 
@@ -103,6 +105,8 @@ export default function GamePage() {
     clearTeamPointsBatchResult,
     // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
     questionSound,
+    // ROUE (v12.0.0, #144) — refus serveur d'une action ROUE_* (contrat roue.md §8.3)
+    roueError,
   } = useGame()
   // #253 — popup « Lancer la partie » ouverte sur un AUTRE poste : le serveur suspend les actions de
   // jeu ; on désactive les commandes ici avec le motif (bandeau global sous la barre de navigation).
@@ -856,6 +860,8 @@ export default function GamePage() {
       <div className="admin-col-center">
       {/* Timer + Display Section (stacked vertically) */}
       <div className="timer-display-section">
+        {/* ROUE (#144, décision GATE 2) : aucun chronomètre en mode ROUE */}
+        {gameState.question?.TYPE !== 'ROUE' && (
         <Card variant="elevated" padding="md" className="timer-card">
           <Timer
             currentTime={gameState.timer}
@@ -872,6 +878,7 @@ export default function GamePage() {
             <div className="sound-wait-badge-inline">⏳ le chrono démarre à la fin du son</div>
           )}
         </Card>
+        )}
         <Card variant="elevated" padding="sm" className="display-card">
           <span className="toggle-label-vertical">TV</span>
           <div className="toggle-buttons">
@@ -1205,6 +1212,20 @@ export default function GamePage() {
           )
         })()}
 
+        {/* ROUE (v12.0.0, #144, maquette M2) — choix des équipes (PREPARE/READY) puis commandes d'un tour (STARTED/PAUSED) */}
+        {gameState.question?.TYPE === 'ROUE' && (() => {
+          const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+          return (
+            <RouePanel
+              gameState={gameState}
+              actions={makeRoueActions(sendMessage)}
+              error={roueError}
+              teamList={teamsWithBuzzers.map(t => ({ name: t.name, color: getRgbColor(t.COLOR), ready: isTeamReady(t) }))}
+              waitReasons={prepareWaitReasons(gameState.phase, gameState.question, teamsWithBuzzers, gameState)}
+            />
+          )
+        })()}
+
         {/* ARDOISE — zone réponses équipes (pattern Memory team zone) */}
         {gameState.question?.TYPE === 'ARDOISE' &&
          ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase) && (
@@ -1364,6 +1385,7 @@ export default function GamePage() {
       <div className="control-panel">
         <Card variant="elevated" padding="lg" className="controls-card">
           <div className="control-inputs">
+            {gameState.question?.TYPE !== 'ROUE' && (
             <div className="input-group">
               <label htmlFor="time-input">Temps (sec)</label>
               <input
@@ -1376,6 +1398,7 @@ export default function GamePage() {
                 disabled={isPlaying}
               />
             </div>
+            )}
           </div>
 
           {/* RAFALE — panneau de configuration de manche + alerte de pool
@@ -1748,7 +1771,7 @@ export default function GamePage() {
                 lui-même inchangé — son `disabled` reste piloté par `canStart`
                 (phase serveur), jamais par ce texte. */}
             {!isPlaying && gameState.phase === 'PREPARE'
-              && !['MEMORY', 'MEMOTION', 'RAFALE'].includes(gameState.question?.TYPE)
+              && !['MEMORY', 'MEMOTION', 'RAFALE', 'ROUE'].includes(gameState.question?.TYPE)
               && (() => {
                 const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
                 // Évolution UX (retour QUALIF v11.1.0.5 puis v11.1.0.6,

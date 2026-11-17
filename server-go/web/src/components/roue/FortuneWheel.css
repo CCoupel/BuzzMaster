@@ -1,0 +1,4 @@
+/* FortuneWheel — TV statique : overflow hidden, unités viewport (#144). */
+.fortune-wheel { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
+.fortune-wheel-timer { position: absolute; left: 20%; right: 20%; top: 0; height: 0.8vh; background: rgba(255, 255, 255, 0.15); border-radius: 0.4vh; z-index: 2; overflow: hidden; }
+.fortune-wheel-timer-fill { height: 100%; background: #fde68a; transition: width 0.1s linear; }

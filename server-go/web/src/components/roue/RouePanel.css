@@ -1,0 +1,30 @@
+/* RouePanel — admin (M2). */
+.roue-panel { background: #fff; border-radius: 0.7rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); padding: 0.8rem; margin: 0.6rem 0; }
+.roue-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; font-size: 0.76rem; }
+.roue-chip { background: var(--gray-100, #f3f4f6); border-radius: 999px; padding: 0.15rem 0.7rem; color: var(--gray-700, #374151); }
+.roue-sol { font-size: 1.1rem; font-weight: 800; letter-spacing: 0.12em; line-height: 1.5; background: var(--gray-50, #f9fafb); border: 1px dashed var(--gray-300, #d1d5db); border-radius: 0.5rem; padding: 0.5rem 0.8rem; margin-bottom: 0.3rem; }
+.roue-sol span { color: var(--gray-400, #9ca3af); }
+.roue-sol span.rv { color: var(--gray-900, #111827); }
+.roue-sol span.lit { background: #fde047; color: #111827; border-radius: 0.2rem; padding: 0 0.1rem; box-shadow: 0 0 0.5rem #fde047; }
+.roue-sol span.new { color: #16a34a; }
+.roue-hint { font-size: 0.74rem; color: var(--gray-500, #6b7280); margin: 0.2rem 0 0.6rem; }
+.roue-wait { font-size: 0.8rem; color: #92400e; margin: 0.2rem 0; }
+.roue-banks-admin { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.4rem 0; }
+.roue-bank-chip { border-left: 5px solid var(--c); background: var(--gray-50, #f9fafb); border-radius: 0.4rem; padding: 0.3rem 0.6rem; font-size: 0.82rem; }
+.roue-bank-chip.active { background: #fff; outline: 2px solid var(--c); font-weight: 700; }
+.roue-bank-chip b { margin-left: 0.4rem; font-variant-numeric: tabular-nums; }
+.roue-status { font-size: 0.95rem; font-weight: 700; margin: 0.7rem 0 0.4rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.roue-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: #ef4444; display: inline-block; }
+.roue-act { border: 2px solid var(--primary, #4f46e5); border-radius: 0.6rem; padding: 0.8rem; background: #fff; min-height: 7.5rem; margin: 0; min-inline-size: 0; }
+.roue-act h5 { margin: 0 0 0.5rem; font-size: 0.9rem; color: var(--primary, #4f46e5); }
+.roue-gap { margin-top: 0.6rem; }
+.roue-bar { height: 0.5rem; border-radius: 999px; background: var(--gray-200, #e5e7eb); overflow: hidden; flex: 1; min-width: 8rem; }
+.roue-bar i { display: block; height: 100%; background: #f59e0b; transition: width 0.2s linear; }
+.roue-seg { display: inline-flex; align-items: center; font-weight: 800; font-size: 1.05rem; background: #fde68a; border-radius: 0.5rem; padding: 0.25rem 0.8rem; margin-left: 0.5rem; }
+.roue-gain { font-weight: 800; color: #16a34a; }
+.roue-won { background: #dcfce7; color: #16a34a; border-radius: 0.6rem; padding: 0.7rem 0.9rem; font-weight: 700; }
+.roue-foot { border-top: 1px solid var(--gray-200, #e5e7eb); margin-top: 0.8rem; padding-top: 0.6rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.roue-pick { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.4rem 0; }
+.roue-pick label { border: 1px solid var(--gray-300, #d1d5db); border-radius: 0.5rem; padding: 0.35rem 0.7rem; font-size: 0.84rem; display: flex; gap: 0.4rem; align-items: center; border-left: 5px solid var(--c); cursor: pointer; }
+.roue-pick label.not-ready { opacity: 0.5; }
+.roue-order { background: var(--primary, #4f46e5); color: #fff; border-radius: 50%; width: 1.2rem; height: 1.2rem; font-size: 0.7rem; display: inline-flex; align-items: center; justify-content: center; }

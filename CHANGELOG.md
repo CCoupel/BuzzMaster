@@ -2,6 +2,58 @@
 
 Historique des versions du projet BuzzControl.
 
+## [12.0.0] - 2026-11-17 — Roue de la Fortune (#144, #145)
+
+Nouveau type de question **Roue de la Fortune** : une phrase à deviner, des équipes qui tournent la roue, proposent des
+consonnes et tentent la réponse. Les gains sont crédités en points d'équipe à la résolution.
+
+### Added
+
+- **Question Roue (#145)** — type `ROUE` : phrase à deviner (4 lignes de 14 caractères au plus, mots non coupés),
+  catégorie existante et présentation publique (80 caractères au plus). Modes `SOLO`, `CHACUN_SON_TOUR`,
+  `TANT_QUE_JE_GAGNE` ; gains `WINNER_ONLY` ou `ALL_TEAMS` ; forme de la roue (bandeau ou arc) et affichage des lettres
+  proposées, par question.
+- **Éditeur de question Roue (#145)** — choix du type « Roue » dans l'éditeur de questions, aperçu du plateau par le
+  serveur (`POST /api/roue/preview`). Refus `400` avec code `ROUE_*`, rien n'est enregistré.
+- **Moteur de manche Roue (#144)** — 7 étapes par tour (lancer, arrêt, case, consonne, retournement, réponse, fin de
+  tour), arrêt au buzz de l'équipe qui a la main, à `ROUE_STOP` ou à la durée maximale ; tirage de la case par le
+  serveur ; cagnottes de manche par équipe, crédit en points d'équipe à la résolution.
+- **Roue générée (#144)** — section `wheel` de `game-config.json` (4 paramètres et durées), construction de la roue
+  par le serveur (`POST /api/roue/wheel-preview`), correction du pas au diviseur le plus proche.
+- **Carte « Roue » des paramètres (#144)** — `/admin/settings` : 4 paramètres, aperçu, « Roue par défaut ».
+- **Écrans Roue (#144)** — TV (équipes en haut, plateau plein écran, roue permanente), tablette joueur, panneau admin
+  de la manche, tablette animateur (sept étapes).
+- **Actions WebSocket `ROUE_*` (#144)** — `ROUE_SET_TEAMS`, `ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_FLIP`,
+  `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL` ; refus à l'émetteur seul par `ROUE_ERROR`.
+- **Sélection des équipes ROUE (#144)** — la sélection ne contrôle que l'existence et l'absence de doublon des équipes
+  (`INVALID_TEAMS` : « Équipe inconnue ou en double ») ; le nombre d'équipes est contrôlé au passage en READY (`SOLO` :
+  1 équipe ; autres modes : 2 au moins), et le libellé indique « sélectionnez une seule équipe » en `SOLO` si plusieurs
+  équipes sont cochées.
+- **Composant `Wheel` : mouvement long (#144)** — prop `motion` (`spin`, `land`), roue de RAFALE inchangée sans prop.
+- **Roue : freinage sans saut (#144)** — le freinage part toujours de la vitesse de croisière, à vitesse continue.
+- **Roue : montée en 1 tour (#144)** — la roue accélère pendant 1 tour (`SPIN_UP_MS` = 2 × `SPIN_PERIOD_MS`, 5 s par
+  défaut) ; la durée maximale de rotation est comptée après la montée.
+- **Roue : bouton « Tester » (#144)** — dans la carte « Roue » des réglages, anime la roue avec les valeurs saisies, sans
+  enregistrer ni écrire dans la manche.
+- **Roue : freinage de la tablette corrigé (#144)** — la roue de la tablette freine à l'arrêt, elle n'est plus remontée au
+  passage de tapable à non tapable.
+- **Roue : arrêt seulement à pleine vitesse (#144)** — pendant la montée, personne ne peut arrêter la roue (admin,
+  animateur, équipe qui a la main) : `ROUE_STOP` est refusé `NOT_FULL_SPEED`, un appui est ignoré.
+- **Roue sur la tablette (#144)** — la roue remplace le bouton STOP, et l'indice s'affiche sur sa propre ligne ; la roue
+  n'est tapable qu'à pleine vitesse.
+
+### Security
+
+- **Phrase secrète (#145)** — `ROUE_PHRASE` n'est envoyé ni à la TV ni aux tablettes joueurs (l'admin et la tablette de l'animateur la reçoivent), dans aucune phase. Le serveur
+  refuse une présentation qui contient la phrase.
+
+### Notes
+
+- Hors périmètre v12.0 : round bonus final (#146), achat de voyelles (#147), round spécial (#148). Les voyelles ne
+  peuvent pas être proposées en v12.0.
+- Aucun nouveau stockage : la phrase vit dans `question.json`, la configuration dans `game-config.json`.
+- Protocole BuzzClick inchangé : aucune action nouvelle côté buzzer.
+
 ## [11.8.0] - 2026-11-12 — Import / export des effets et éditeur d'effets pas à pas (#305, #210)
 
 Effets lumière : import, téléchargement et suppression depuis le catalogue (#305), éditeur d'effets dans l'interface (#210), format de fichier révision 7 avec un changement cassant pour `gN`.

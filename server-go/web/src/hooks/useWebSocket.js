@@ -176,6 +176,25 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     // #282 (v11.4.0) — option Alphabétique : lettre courante publique + lettres encore à jouer
     RAFALE_CURRENT_LETTER: '',
     RAFALE_LETTERS: [],
+    // ROUE fields (v12.0.0, #144 — contrat roue.md §4). Jamais nil côté serveur : défauts vides, jamais null.
+    // Diffusés à admin/anim/TV/tablette ; la phrase n'y figure jamais (§9, seulement QUESTION.ROUE_PHRASE admin/anim).
+    ROUE_SUBPHASE: '',
+    ROUE_STEP: 0,
+    ROUE_TEAMS: [],
+    ROUE_CURRENT_TEAM: '',
+    ROUE_CURRENT_TEAM_COLOR: [],
+    ROUE_NEXT_TEAM: '',
+    ROUE_NEXT_DEFAULT: '',
+    ROUE_TEAM_BANK: {},
+    ROUE_TURN_GAIN: 0,
+    ROUE_BOARD: { COLS: 14, ROWS: [] },
+    ROUE_LETTERS: [],
+    ROUE_SHOW_LETTERS: true,
+    ROUE_CONSONANTS_LEFT: true,
+    ROUE_WHEEL: { LAYOUT: 'strip', SPIN_PERIOD_MS: 2500, SPIN_UP_MS: 0, FULL_SPEED: false, SPIN_MAX_MS: 10000, FLIP_INTERVAL_MS: 600, SEGMENTS: [], CURRENT: -1, STOP: null },
+    ROUE_LAST_EVENT: { SEQ: 0, KIND: '', TEAM: '', LETTER: '', COUNT: 0, VALUE: 0, GAIN: 0 },
+    ROUE_WINNER: '',
+    ROUE_AWARDS: {},
     // Son de la question (v11.1, #219, contrats game-state.md/sound.md §10).
     // Jamais omitempty côté serveur (règle projet) : les défauts ci-dessous
     // sont les valeurs zéro correctes ("aucune lecture en cours" / "le
@@ -243,6 +262,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // /ws/tv et /ws/player, qui ne la reçoivent jamais. `null` tant qu'aucune
   // question RAFALE n'a encore été tirée.
   const [rafaleAnswer, setRafaleAnswer] = useState(null)
+  // ROUE_ERROR (v12.0.0, #144, contrat roue.md §8.3) — refus d'une action ROUE_*, adressé à l'émetteur seul.
+  // `SEQ` croît à chaque erreur pour que deux refus identiques consécutifs restent distinguables.
+  const [roueError, setRoueError] = useState(null)
   // Résultat du dernier PLAYER_CONNECT en attente de réponse serveur — consommé
   // par EnrollPage (attend PLAYER_CONNECTED/PLAYER_REJECTED au lieu de naviguer
   // en aveugle, fix R1 #109). { status: 'connected', id, name } | { status: 'rejected', reason } | null
@@ -549,6 +571,24 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             RAFALE_EXHAUSTED: MSG.GAME.RAFALE_EXHAUSTED ?? prev.RAFALE_EXHAUSTED,
             RAFALE_CURRENT_LETTER: MSG.GAME.RAFALE_CURRENT_LETTER ?? prev.RAFALE_CURRENT_LETTER,
             RAFALE_LETTERS: MSG.GAME.RAFALE_LETTERS ?? prev.RAFALE_LETTERS,
+            // ROUE fields (v12.0.0, #144 — contrat roue.md §4)
+            ROUE_SUBPHASE: MSG.GAME.ROUE_SUBPHASE ?? prev.ROUE_SUBPHASE,
+            ROUE_STEP: MSG.GAME.ROUE_STEP ?? prev.ROUE_STEP,
+            ROUE_TEAMS: MSG.GAME.ROUE_TEAMS ?? prev.ROUE_TEAMS,
+            ROUE_CURRENT_TEAM: MSG.GAME.ROUE_CURRENT_TEAM ?? prev.ROUE_CURRENT_TEAM,
+            ROUE_CURRENT_TEAM_COLOR: MSG.GAME.ROUE_CURRENT_TEAM_COLOR ?? prev.ROUE_CURRENT_TEAM_COLOR,
+            ROUE_NEXT_TEAM: MSG.GAME.ROUE_NEXT_TEAM ?? prev.ROUE_NEXT_TEAM,
+            ROUE_NEXT_DEFAULT: MSG.GAME.ROUE_NEXT_DEFAULT ?? prev.ROUE_NEXT_DEFAULT,
+            ROUE_TEAM_BANK: MSG.GAME.ROUE_TEAM_BANK ?? prev.ROUE_TEAM_BANK,
+            ROUE_TURN_GAIN: MSG.GAME.ROUE_TURN_GAIN ?? prev.ROUE_TURN_GAIN,
+            ROUE_BOARD: MSG.GAME.ROUE_BOARD ?? prev.ROUE_BOARD,
+            ROUE_LETTERS: MSG.GAME.ROUE_LETTERS ?? prev.ROUE_LETTERS,
+            ROUE_SHOW_LETTERS: MSG.GAME.ROUE_SHOW_LETTERS ?? prev.ROUE_SHOW_LETTERS,
+            ROUE_CONSONANTS_LEFT: MSG.GAME.ROUE_CONSONANTS_LEFT ?? prev.ROUE_CONSONANTS_LEFT,
+            ROUE_WHEEL: MSG.GAME.ROUE_WHEEL ?? prev.ROUE_WHEEL,
+            ROUE_LAST_EVENT: MSG.GAME.ROUE_LAST_EVENT ?? prev.ROUE_LAST_EVENT,
+            ROUE_WINNER: MSG.GAME.ROUE_WINNER ?? prev.ROUE_WINNER,
+            ROUE_AWARDS: MSG.GAME.ROUE_AWARDS ?? prev.ROUE_AWARDS,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
             virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,
@@ -757,6 +797,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // MAJEUR-1 — contrepartie serveur→client de SET_CREDIT_POINTS,
         // contrat §CREDIT_POINTS. Toujours un entier (0 = rien à créditer).
         setCreditPoints(MSG?.POINTS ?? 0)
+        break
+
+      case 'ROUE_ERROR':
+        setRoueError(prev => ({ CODE: MSG?.CODE || '', MESSAGE: MSG?.MESSAGE || '', SEQ: (prev?.SEQ || 0) + 1 }))
         break
 
       case 'RAFALE_ANSWER':
@@ -1583,6 +1627,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     regieMessage,
     // RAFALE (v8.0.0, #16/#107)
     rafaleAnswer,
+    roueError,
+    clearRoueError: () => setRoueError(null),
     rafaleValidate,
     rafaleInvalidate,
     rafaleSetTeams,

@@ -64,6 +64,11 @@ export function participantsConform(question, participating) {
     const isSolo = !question.RAFALE_MODE || question.RAFALE_MODE === 'SOLO'
     return isSolo ? count === 1 : count >= 2
   }
+  if (type === 'ROUE') {
+    // ROUE (#144, contrat roue.md §13 item 4) — mêmes règles que RAFALE : SOLO = 1 équipe, sinon 2 au moins
+    const isSolo = question.ROUE_MODE === 'SOLO'
+    return isSolo ? count === 1 : count >= 2
+  }
   // SPEEDY, QCM, ARDOISE, type inconnu — déjà couvert par AreAllTeamsReady
   // (≥1 équipe active) ou sans règle : permissif.
   return true
@@ -101,7 +106,7 @@ const SOUND_UNAVAILABLE_REASON_LABELS = {
 // Libellés courts (#166, style "à suivre"/"attendu"/"optionnel" —
 // AnimConductPanel.anim-conduct-btn-sub, tablette, place limitée) et
 // libellés complets (régie, memory-selector-label, plus de place).
-function participantsReasonLabel(question, { short } = {}) {
+function participantsReasonLabel(question, { short, count = 0 } = {}) {
   const type = question?.TYPE
   if (type === 'MEMORY') {
     const isSolo = !question.MEMORY_MODE || question.MEMORY_MODE === 'SOLO'
@@ -117,6 +122,11 @@ function participantsReasonLabel(question, { short } = {}) {
     const isSolo = !question.RAFALE_MODE || question.RAFALE_MODE === 'SOLO'
     if (short) return isSolo ? '1 équipe' : '2 équipes'
     return isSolo ? 'sélectionnez une équipe' : 'sélectionnez au moins deux équipes participantes'
+  }
+  if (type === 'ROUE') {
+    const isSolo = question.ROUE_MODE === 'SOLO'
+    if (short) return isSolo ? '1 équipe' : '2 équipes'
+    return isSolo ? (count > 1 ? 'sélectionnez une seule équipe' : 'sélectionnez une équipe') : 'sélectionnez au moins deux équipes participantes'
   }
   return null
 }
@@ -173,10 +183,12 @@ export function prepareWaitReasons(phase, question, activeTeams, gameState, opts
     ? (gameState?.MEMOTION_PARTICIPATING_TEAMS || [])
     : question?.TYPE === 'RAFALE'
       ? (gameState?.RAFALE_PARTICIPATING_TEAMS || [])
-      : (gameState?.MEMORY_PARTICIPATING_TEAMS || [])
+      : question?.TYPE === 'ROUE'
+        ? (gameState?.ROUE_TEAMS || [])
+        : (gameState?.MEMORY_PARTICIPATING_TEAMS || [])
 
   if (!participantsConform(question, participating)) {
-    const label = participantsReasonLabel(question, opts)
+    const label = participantsReasonLabel(question, { ...opts, count: participating.length })
     if (label) reasons.push(label)
   }
 

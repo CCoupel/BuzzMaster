@@ -72,6 +72,14 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// périmètre as REVEAL/BUMPER_POINTS/TEAM_POINTS above.
 	protocol.ActionRafaleValidate:   {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionRafaleInvalidate: {ClientTypeAdmin, ClientTypeAnim},
+	// ROUE (v12.0.0, #144, contract roue.md §8.2): the 7 step buttons of the
+	// animateur's tablet — SET_TEAMS, PASS and REVEAL stay admin only (below).
+	protocol.ActionRoueSpin:   {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueStop:   {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueLetter: {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueFlip:   {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueAnswer: {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueNext:   {ClientTypeAdmin, ClientTypeAnim},
 	// QUESTION_SOUND (v11.1, #219, contract sound.md §10.2): the three
 	// conduite gestures (rejouer/pause/stop) on a question's attached
 	// sound — same périmètre as REVEAL/RAFALE_VALIDATE above.
@@ -99,7 +107,11 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// RAFALE_SET_TEAMS (v8.0.0, #107, contract rafale.md §5.1): admin only,
 	// same périmètre as MEMORY_SET_TEAMS/MEMOTION_SET_TEAMS above — choosing
 	// participating teams stays with the régie, never anim.
-	protocol.ActionRafaleSetTeams:        {ClientTypeAdmin},
+	protocol.ActionRafaleSetTeams: {ClientTypeAdmin},
+	// ROUE_SET_TEAMS / ROUE_PASS / ROUE_REVEAL (v12.0.0, #144): admin only.
+	protocol.ActionRoueSetTeams:          {ClientTypeAdmin},
+	protocol.ActionRouePass:              {ClientTypeAdmin},
+	protocol.ActionRoueReveal:            {ClientTypeAdmin},
 	protocol.ActionShowQRCode:            {ClientTypeAdmin},
 	protocol.ActionHideQRCode:            {ClientTypeAdmin},
 	protocol.ActionSetVirtualPlayerLimit: {ClientTypeAdmin},

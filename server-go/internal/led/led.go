@@ -553,6 +553,45 @@ func (c *Controller) sendLEDSetForBuzzerRafale(mac string, bumper *game.Bumper, 
 	}
 }
 
+// sendLEDSetForBuzzerRoue computes and sends the LED of ONE buzzer during a
+// ROUE question (v12.0.0, #144, contract roue.md §12): the team that has the
+// hand is lit, the others dimmed (existing active / next grid), the
+// non-participating teams off; outside STARTED the plain team colour (DIM
+// when paused). Pressing a buzzer is handled by the engine, not here.
+func (c *Controller) sendLEDSetForBuzzerRoue(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
+	rgb := c.TeamColor(bumper)
+	switch phase {
+	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseRevealed:
+		c.Send(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	case game.PhasePaused:
+		c.Send(mac, protocol.LEDSetPayload{Color: rgb, Intensity: colors.DimIntensityFor(rgb), Effect: "DIM"})
+	case game.PhaseStarted:
+		c.sendLEDSetMultiTeam(mac, bumper, state.RoueCurrentTeam, state.RoueNextTeam, state.RoueTeams)
+	default:
+		c.Send(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	}
+}
+
+// RoueTeams refreshes the buzzer LEDs of the active ROUE round (wired to
+// Engine.OnRoueChange): the team that has the hand lit, the others dimmed.
+func (c *Controller) RoueTeams() {
+	state := c.h.Engine().GetState()
+	if state.Phase != game.PhaseStarted || state.Question == nil || state.Question.Type != game.QuestionTypeRoue {
+		return
+	}
+	tb := c.h.Engine().GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		c.sendLEDSetForBuzzerRoue(mac, bumper, state.Phase, state)
+	}
+	c.h.BroadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
+}
+
 // RafaleTeams refreshes buzzer LEDs for the active RAFALE round —
 // contract §8.3. Wired to Engine.OnRafaleTeamsChanged (setupCallbacks
 // below) — fired on round start, RAFALE_SET_TEAMS, and every advance (task
@@ -618,6 +657,8 @@ func (c *Controller) AllBuzzers() {
 			// sendLEDSetAllBuzzers mid-round (editing bumpers/teams) would
 			// transiently overwrite the active-team grid.
 			c.sendLEDSetForBuzzerRafale(mac, bumper, phase, state)
+		case state.Question != nil && state.Question.Type == game.QuestionTypeRoue:
+			c.sendLEDSetForBuzzerRoue(mac, bumper, phase, state) // v12.0.0, #144
 		case state.Question != nil && state.Question.Type == game.QuestionTypeMemotion:
 			// MEMOTION: buzzers display team color (same as NORMAL)
 			c.sendLEDSetForBuzzerNormal(mac, bumper, phase)

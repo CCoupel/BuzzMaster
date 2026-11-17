@@ -1369,7 +1369,7 @@ export function resolveHostContext(gameState) {
   
   if (MEMOTION_SUBPHASE && MEMOTION_SELECTED) {
     // Hôte carte MEMOTION
-    const card = gameState.MEMOTION_CARDS.find(c => c.ID === MEMOTION_SELECTED);
+    const card = gameState.MOTION_CARDS.find(c => c.ID === MEMOTION_SELECTED);
     return {
       hostType: 'MOTION_CARD',
       cardID: MEMOTION_SELECTED,
@@ -1416,7 +1416,7 @@ function resolveL3Content(gameState, hostContext) {
   
   if (hostContext.cardID) {
     // Hôte carte : synthétiser une question de la carte
-    const motionCard = gameState.MEMOTION_CARDS.find(c => c.ID === hostContext.cardID);
+    const motionCard = gameState.MOTION_CARDS.find(c => c.ID === hostContext.cardID);
     sourceObject = {
       TYPE: hostContext.type,
       QUESTION: motionCard.RECTO_THEME, // adaptateur de champs
@@ -1922,6 +1922,92 @@ Fichier CSS partagé déclarant :
 - `@media (prefers-reduced-motion: reduce)` — animation neutralisée
 
 ---
+
+## Roue de la Fortune — composants et branchements (v12.0.0, #144, #145)
+
+Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-component.md`. Livré dans la v12.0.0.
+
+### Composant `Wheel` — mouvement long (`web/src/components/wheel/`)
+
+- `Wheel.jsx` reçoit une prop `motion` : `null` (comportement v11.4.0 inchangé, RAFALE), `spin` (défilement continu)
+  ou `land` (freinage jusqu'à la case cible).
+- `spin` avec `accelTurns` (Roue de la Fortune : 1, soit `SPIN_UP_MS = 2 × SPIN_PERIOD_MS`) : **montée** depuis l'arrêt, à accélération constante, jusqu'à la vitesse
+  de croisière, atteinte après exactement `accelTurns` tours (durée `2 × accelTurns × periodMs`), puis croisière. Sans
+  `accelTurns`, pas de montée : vitesse de croisière dès le départ. `cruise: true` (`FULL_SPEED` du serveur) passe
+  aussitôt à la croisière depuis la position courante, sans saut ; il ne relance jamais la montée. Un montage direct en
+  `spin` ne joue pas la montée.
+- `land` avec `periodMs` (Roue de la Fortune) : freinage à vitesse continue, qui part toujours de la croisière (aucun
+  freinage depuis la montée). `minTurns` est ignoré dans ce mode, sauf repli sur l'ancien profil quand la fenêtre
+  `durationMs` est trop courte (voir ADMIN_GUIDE, règle de réglage) ; sans `periodMs`, l'ancien profil (au moins
+  `minTurns` tours, ease-out cubique) reste en vigueur.
+- Le mouvement écrit directement `transform` dans le DOM, image par image : pas de `setState` par image. La position
+  est normalisée dans `[0, n)` à chaque image et à l'arrêt ; un passage `spin` → `land` repart de la position affichée
+  (pas de saut).
+- Amplitude de `land` : au plus 4 × n, minimum de tours plafonné à 3 (`MAX_LAND_TURNS`, `geometry.js`).
+- Montage directement en `land`, ou `prefers-reduced-motion` : placement immédiat, sans animation.
+- Libellés longs : `label` sur deux lignes (séparateur `\n`), icône additive (`💸 BANQUE / ROUTE`, `⏭ TOUR / PERDU`) ;
+  l'`aria-label` n'a pas de `\n`.
+- Limite : 64 cases.
+
+### Dossier `web/src/components/roue/`
+
+| Fichier | Rôle |
+|---|---|
+| `FortuneWheel.jsx` | Adaptateur : segments de la roue (`buildFortuneSegments`), mouvement `spin` / `land` (`fortuneMotion`) selon `ROUE_SUBPHASE` ; `spin` = `{ accelTurns: SPIN_UP_MS / (2 × SPIN_PERIOD_MS) (= 1), cruise: FULL_SPEED }` ; barre de durée maximale décomptée localement (intervalle 100 ms) depuis `FULL_SPEED = true`, pas pendant la montée |
+| `RoueBoard.jsx` | Plateau de l'**éditeur** (aperçu de la phrase, sans état de jeu) |
+| `RoueGameBoard.jsx` | Plateau de **jeu** (TV, tablette, admin, animateur), distinct de `RoueBoard` |
+| `RoueTv.jsx` | Écran TV ROUE : équipes en haut, plateau plein écran, roue permanente (bandeau ou arc selon `ROUE_WHEEL.LAYOUT`). Rend aussi la zone roue de la **tablette joueur** (`.roue-vp-zone`) : la roue y remplace le bouton STOP (voir Règles d'interface) |
+| `RouePanel.jsx` | Panneau admin de la manche : choix des équipes (`ROUE_SET_TEAMS`, même emplacement que RAFALE), bandeau des 7 étapes, commandes de l'étape courante, « Passer la main », « Dévoiler la phrase » (confirmation en deux clics, sans `window.confirm`). Le START reste celui de `GamePage` |
+| `RoueSteps.jsx` | Bandeau des 7 étapes |
+| `RoueControls.jsx` | Boutons de l'étape courante, clavier de consonnes, boutons « Tour suivant » / « Équipe suivante », message de refus `ROUE_ERROR`, décompte local |
+| `AnimRoue.jsx` | Vue animateur (tablette) : les 7 étapes, réponse colorée par équipe, consonnes jouées |
+| `RoueEditor.jsx` | Éditeur de question ROUE (`QuestionsPage`) : phrase, présentation, mode, gains, forme, lettres ; aperçu par `POST /api/roue/preview` (debounce 300 ms) |
+| `WheelConfigCard.jsx` | Carte « Roue » des paramètres (`ConfigPage`) : 4 paramètres, durées, aperçu par `POST /api/roue/wheel-preview` (debounce 300 ms), bouton « Tester » / « Arrêter » (essai, voir Règles d'interface) |
+| `roueState.js` | Helpers partagés : portes d'action par sous-phase et par rôle, libellés |
+
+Règles d'interface :
+
+- **Aucune copie JavaScript** de la mise en lignes ni de la construction de la roue : l'aperçu vient toujours du serveur.
+  Un pas corrigé est affiché « Pas ajusté à … » et remplace la valeur du champ.
+- La carte de réglage n'apparaît que si `GET /game-config.json` renvoie `wheel`. `wheel_default` est facultatif : sans lui, le bouton « Roue par défaut » n'a pas de valeurs à appliquer.
+- **Essai « Tester »** (carte de réglage) : anime les deux aperçus déjà présents (bandeau « Sur la TV » via `FortuneWheel`,
+  vue circulaire `Ring`) avec les valeurs saisies, non enregistrées, d'après `TIMING` de la réponse `wheel-preview`
+  (aucune règle de durée dans la page). Enchaîne repos → « Montée… » (« Tester » et « Arrêter » grisés) → « Pleine vitesse »
+  (« Arrêter » actif, arrêt automatique à `SPIN_MAX_MS`) → « Freinage » (`STOP_DURATION_MS`) → arrêt sur la case tirée au
+  hasard côté client. Les deux aperçus tournent ensemble et s'arrêtent sur la même case. Grisé si l'aperçu n'a pas de
+  `TIMING`. Aucun message WebSocket ; un réglage modifié, « Roue par défaut » ou le démontage de la page interrompt l'essai.
+- **Freinage de la tablette** (correctif `5689ebb5`) : la roue de la tablette freine à l'arrêt ; elle n'est plus remontée
+  au passage de tapable à non tapable.
+- Le plateau d'une phrase refusée n'est pas dessiné : le `400` ne renvoie pas de lignes.
+- Le champ générique `question` d'une question ROUE vaut la présentation, ou « Roue de la Fortune » si elle est vide.
+  La phrase ne passe jamais par `question`.
+- Tablette : l'appui ROUE envoie `BUTTON` directement, sans `useAckedSend` (le serveur ne consigne pas d'ACK pour
+  l'appui ROUE).
+- Tablette joueur, zone roue : la roue est affichée dans toutes les sous-phases (y compris `SOLVED`), à la place du
+  bouton STOP. Elle n'est tapable (`button`, « Arrêter la roue ») que pour l'équipe qui a la main, en `SPINNING`, à
+  `FULL_SPEED = true`. Message « 👆 Touchez la roue pour l'arrêter » ; pour l'autre équipe, l'annonce habituelle
+  (« Les <équipe> vont arrêter la roue »).
+- Pendant la montée (`FULL_SPEED = false`) : pas de cadre ni de « Touchez la roue » sur la tablette ; le message
+  « La roue prend de la vitesse… » s'affiche (`roueAnnouncement`, `roueState.js`). Sur le panneau admin (`RouePanel`) et
+  la tablette animateur (`AnimRoue`), « Forcer l'arrêt » est grisé tant que `FULL_SPEED` est `false` ; le libellé
+  `NOT_FULL_SPEED` (« La roue prend de la vitesse : attendez la pleine vitesse pour l'arrêter ») couvre la course entre
+  l'appui et la réception.
+- L'indice (catégorie et `ROUE_PRESENTATION`, jamais la phrase) est sur sa propre ligne, au-dessus du plateau, sur la
+  tablette joueur (2 lignes au plus).
+
+### Branchements
+
+| Fichier | Branchement |
+|---|---|
+| `hooks/useWebSocket.js` | Champs `ROUE_*` lus dans `UPDATE` ; `ROUE_ERROR` → `roueError` / `clearRoueError` |
+| `pages/PlayerDisplay.jsx` | Branche `isRoue` → `<RoueTv/>` (TV) |
+| `pages/VPlayerPage.jsx` | Appui `BUTTON` d'une tablette en `ROUE` |
+| `pages/GamePage.jsx` | Montage de `RouePanel` ; chrono « Temps » et motifs d'attente génériques masqués pour ROUE (décision GATE 2 : aucun chronomètre) |
+| `components/AnimConductPanel.jsx` | Niveau 3 pour ROUE (`AnimRoue`), rien au niveau 2 |
+| `pages/QuestionsPage.jsx` | Bouton de type « Roue » (🎡), `RoueEditor` |
+| `pages/ConfigPage.jsx` | État `wheelConfig` / `wheelDefault`, `WheelConfigCard` |
+| `utils/questionTypeMeta.js` | Type `ROUE` : non générable par IA, non imbriquable |
+| `utils/prepareWaitReason.js` | Motif d'attente PREPARE : 1 équipe en `SOLO`, 2 sinon |
 
 ## Pages et Composants — Mode RAFALE (v8.0.0, #16)
 

@@ -29,6 +29,10 @@ import (
 type GameSettings struct {
 	Game       GameConfig       `json:"game"`
 	NeonEffect NeonEffectConfig `json:"neon_effect"`
+	// Wheel (v12.0.0, #144, contracts/roue.md §10): the ROUE wheel, generated
+	// from four parameters. Validation, step correction and generation live in
+	// internal/game (RoueWheelParams); this is the persisted section.
+	Wheel WheelConfig `json:"wheel"`
 	// NOTE: an "entracte" section briefly lived here (v6.5.2, #119, QUALIF
 	// only) and was REMOVED 2026-08-20 (C1, arbitrage utilisateur): the
 	// entracte panel configuration is a property of the GAME/session, not
@@ -41,6 +45,24 @@ type GameSettings struct {
 	// contracts/CHANGELOG.md [20260820-2] (BREAKING, QUALIF-only).
 }
 
+// WheelConfig is the `wheel` section of game-config.json (contract roue.md §10).
+type WheelConfig struct {
+	MaxPoints      int `json:"max_points"`
+	Step           int `json:"step"`
+	BankruptCount  int `json:"bankrupt_count"`
+	LoseTurnCount  int `json:"lose_turn_count"`
+	SpinPeriodMs   int `json:"spin_period_ms"`
+	SpinMaxMs      int `json:"spin_max_ms"`
+	StopDurationMs int `json:"stop_duration_ms"`
+	FlipIntervalMs int `json:"flip_interval_ms"`
+}
+
+// DefaultWheelConfig is the default wheel: 1000 / 50 / 2 / 1 (22 cases).
+func DefaultWheelConfig() WheelConfig {
+	return WheelConfig{MaxPoints: 1000, Step: 50, BankruptCount: 2, LoseTurnCount: 1,
+		SpinPeriodMs: 2500, SpinMaxMs: 10000, StopDurationMs: 4000, FlipIntervalMs: 600}
+}
+
 // ApplyGameSettingsDefaults fills every zero-valued field with its default
 // value — the GameSettings counterpart to ApplyDefaults, holding exactly
 // the defaults that used to live in ApplyDefaults for the Game/NeonEffect
@@ -51,6 +73,33 @@ type GameSettings struct {
 func ApplyGameSettingsDefaults(gs *GameSettings) {
 	if gs.Game.DefaultDelay == 0 {
 		gs.Game.DefaultDelay = 30
+	}
+
+	// Wheel (#144): a section absent (all zero) yields the default wheel; a
+	// section present keeps its counts (0 is a valid BANQUEROUTE / TOUR PERDU
+	// count) and only has its missing maximum / step / durations defaulted.
+	if gs.Wheel == (WheelConfig{}) {
+		gs.Wheel = DefaultWheelConfig()
+	} else {
+		def := DefaultWheelConfig()
+		if gs.Wheel.MaxPoints == 0 {
+			gs.Wheel.MaxPoints = def.MaxPoints
+		}
+		if gs.Wheel.Step == 0 {
+			gs.Wheel.Step = def.Step
+		}
+		if gs.Wheel.SpinPeriodMs == 0 {
+			gs.Wheel.SpinPeriodMs = def.SpinPeriodMs
+		}
+		if gs.Wheel.SpinMaxMs == 0 {
+			gs.Wheel.SpinMaxMs = def.SpinMaxMs
+		}
+		if gs.Wheel.StopDurationMs == 0 {
+			gs.Wheel.StopDurationMs = def.StopDurationMs
+		}
+		if gs.Wheel.FlipIntervalMs == 0 {
+			gs.Wheel.FlipIntervalMs = def.FlipIntervalMs
+		}
 	}
 
 	if gs.NeonEffect.Mode == "" {

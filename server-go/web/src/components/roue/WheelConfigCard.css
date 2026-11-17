@@ -1,0 +1,28 @@
+/* WheelConfigCard — maquette M4 (#144). */
+.wheel-cfg-params { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.7rem; }
+.wheel-cfg-param { border: 1px solid var(--gray-200); border-radius: 0.6rem; padding: 0.6rem 0.7rem; background: var(--gray-50); }
+.wheel-cfg-param label { display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 0.3rem; }
+.wheel-cfg-param input { font: inherit; font-size: 1.2rem; font-weight: 800; width: 100%; box-sizing: border-box; padding: 0.3rem 0.5rem; }
+.wheel-cfg-param small { display: block; font-size: 0.7rem; color: var(--gray-500); margin-top: 0.25rem; }
+.wheel-cfg-fix { background: #fef3c7; color: #92400e; border-radius: 0.5rem; padding: 0.45rem 0.7rem; font-size: 0.82rem; margin: 0.7rem 0 0; }
+.wheel-cfg-err { background: #fee2e2; color: #dc2626; border-radius: 0.5rem; padding: 0.45rem 0.7rem; font-size: 0.82rem; font-weight: 600; margin: 0.7rem 0; }
+.wheel-cfg-sum { font-size: 0.82rem; background: #e0e7ff; border-radius: 0.5rem; padding: 0.45rem 0.7rem; margin: 0.7rem 0 0.4rem; }
+.wheel-cfg-views { display: grid; grid-template-columns: 1fr 380px; gap: 1.2rem; align-items: start; }
+.wheel-cfg h4 { font-size: 0.86rem; margin: 1rem 0 0.3rem; }
+.wheel-cfg-strip { display: flex; flex-wrap: wrap; gap: 3px; }
+.wheel-cfg-pc { width: 58px; height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 900; font-size: 0.86rem; color: #111827; border-radius: 0.3rem; line-height: 1; position: relative; }
+.wheel-cfg-pc.sp { background: #0f172a; color: #fff; font-size: 1rem; }
+.wheel-cfg-pc.sp small { font-size: 0.42rem; letter-spacing: 0.03em; margin-top: 0.12rem; text-align: center; line-height: 1.05; }
+.wheel-cfg-pc i { position: absolute; top: 1px; left: 3px; font-style: normal; font-size: 0.5rem; font-weight: 600; opacity: 0.55; }
+.wheel-cfg-tv { background: #0b1020; border-radius: 0.5rem; padding: 0.5rem; height: 82px; overflow: hidden; }
+.wheel-cfg-ring { display: block; width: 100%; height: auto; }
+.wheel-cfg-row { display: flex; align-items: center; gap: 0.8rem; margin: 0.55rem 0; flex-wrap: wrap; }
+.wheel-cfg-lbl { width: 210px; font-size: 0.84rem; font-weight: 600; }
+.wheel-cfg-row input { width: 5.2rem; }
+.wheel-cfg-actions { justify-content: space-between; }
+.wheel-cfg-toast { font-size: 0.82rem; margin: 0.6rem 0 0; }
+.wheel-cfg-toast.success { color: #16a34a; }
+.wheel-cfg-toast.error { color: #dc2626; font-weight: 600; }
+@media (max-width: 900px) { .wheel-cfg-params { grid-template-columns: repeat(2, 1fr); } .wheel-cfg-views { grid-template-columns: 1fr; } }
+.wheel-cfg-trial { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.5rem 0 0.2rem; }
+.wheel-cfg-trial-state { font-size: 0.86rem; font-weight: 700; color: var(--gray-600, #4b5563); min-height: 1.3em; }

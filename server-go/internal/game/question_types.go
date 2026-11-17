@@ -166,6 +166,18 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		// contract §9.3's guard, same as MEMORY.
 		DefaultPointsRule: PointsRuleModeStarsProrata,
 	},
+	QuestionTypeRoue: {
+		Type: QuestionTypeRoue,
+		// CATEGORY is the generic Question.Category (not owned). ANSWER, POINTS
+		// and TIME are unused by ROUE — the phrase never goes into ANSWER.
+		OwnedFields: []string{
+			"ROUE_PHRASE", "ROUE_PRESENTATION", "ROUE_MODE", "ROUE_GAINS_RULE",
+			"ROUE_WHEEL_LAYOUT", "ROUE_SHOW_LETTERS",
+		},
+		MediaSlots:           nil,
+		NestableInMotionCard: false, // contracts/roue.md §3
+		HasPlayerInput:       false, // the buzz goes through the existing BUTTON action
+	},
 	QuestionTypeEntracte: {
 		Type:        QuestionTypeEntracte,
 		OwnedFields: []string{"ENTRACTE_CONFIG"},

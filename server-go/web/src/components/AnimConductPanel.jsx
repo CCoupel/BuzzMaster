@@ -20,6 +20,7 @@ import AnimRafaleActions from './AnimRafaleActions'
 import AnimRafaleQuestion from './AnimRafaleQuestion'
 import AnimSoundActions from './AnimSoundActions'
 import './AnimConductPanel.css'
+import AnimRoue from './roue/AnimRoue'
 
 // L1 — cinq emplacements FIXES (#166/F5) : la liste ne varie jamais dans
 // son nombre d'entrées, seul l'état de chaque bouton varie par phase.
@@ -226,6 +227,8 @@ export default function AnimConductPanel({
   // — VALIDE/INVALIDE) ; L3 reste l'emplacement réservé générique, RAFALE
   // ne portant aucune grille propre à ce jour (§7).
   const isRafale = question?.TYPE === 'RAFALE'
+  // ROUE (v12.0.0, #144, maquette M7) — l'animateur commande la manche : panneau dédié en L3 (aucun geste de mode en L2)
+  const isRoue = question?.TYPE === 'ROUE'
   // #219 (v11.1) — SPEEDY/QCM/ARDOISE porteurs d'un son : occupe L2 comme
   // MEMOTION/RAFALE ci-dessus, mais par PRÉSENCE d'un son plutôt que par
   // TYPE (le champ est structurellement commun à tous les types, plan
@@ -399,7 +402,7 @@ export default function AnimConductPanel({
               onValidate={onRafaleValidate}
               onInvalidate={onRafaleInvalidate}
             />
-          ) : showSound ? (
+          ) : isRoue ? null : showSound ? (
             <AnimSoundActions soundState={soundState} onCommand={onQuestionSound} />
           ) : (
             <div className="anim-conduct-reserved">{modeGestureText}</div>
@@ -462,6 +465,8 @@ export default function AnimConductPanel({
             // .anim-zone-context (le bandeau du haut) où elles vivaient au
             // cycle précédent. Câblage réel dans AnimPage.jsx.
             <AnimRafaleQuestion {...(rafale || {})} />
+          ) : isRoue ? (
+            <AnimRoue />
           ) : (
             <div className="anim-conduct-reserved">Aucun élément spécifique à cette question</div>
           )}

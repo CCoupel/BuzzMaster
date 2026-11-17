@@ -79,3 +79,11 @@
 @media (prefers-reduced-motion: reduce) {
   .wheel-track, .wheel-arc .rotor { transition: none !important; }
 }
+
+/* Libellés longs / pictogramme (v12.0.0, #144) : « 💸 BANQUE / ROUTE », nombres à 4-5 chiffres. */
+.wheel-cell { flex-direction: column; }
+.wheel-cell .wheel-icon { font-size: 4.6vh; line-height: 1; }
+.wheel-cell .wheel-lab.multi { font-size: 1.7vh; letter-spacing: 0.06em; text-align: center; line-height: 1.05; margin-top: 0.25em; }
+.wheel-size-compact .wheel-cell .wheel-icon { font-size: 18px; }
+.wheel-size-compact .wheel-cell .wheel-lab.multi { font-size: 9px; }
+.wheel-arc .wheel-icon { fill: #fff; }

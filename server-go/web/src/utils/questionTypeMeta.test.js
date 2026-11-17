@@ -41,17 +41,17 @@ const KNOWN_TYPES = ['SPEEDY', 'QCM', 'MEMORY', 'MEMOTION', 'ARDOISE']
 // ALL_TYPES — les 7 types réellement enregistrés dans QUESTION_TYPES depuis
 // RAFALE (v8.0.0, #16, contrat rafale.md §2.1) et ENTRACTE (#214, milestone
 // v9.0.0, second déclencheur du mécanisme ENTRACTE existant #119).
-const ALL_TYPES = [...KNOWN_TYPES, 'RAFALE', 'ENTRACTE']
+const ALL_TYPES = [...KNOWN_TYPES, 'RAFALE', 'ENTRACTE', 'ROUE']
 
 // ---------------------------------------------------------------------------
 // 1. Le registre — 7 types connus, forme attendue.
 // ---------------------------------------------------------------------------
 
 describe('questionTypeMeta — registre QUESTION_TYPES / QUESTION_TYPE_META', () => {
-  it('QUESTION_TYPES contient exactement les 7 types connus, une fois chacun', () => {
+  it('QUESTION_TYPES contient exactement les 8 types connus, une fois chacun', () => {
     const keys = QUESTION_TYPES.map(t => t.key)
-    expect(keys).toHaveLength(7)
-    expect(new Set(keys).size).toBe(7)
+    expect(keys).toHaveLength(8)
+    expect(new Set(keys).size).toBe(8)
     ALL_TYPES.forEach(type => expect(keys).toContain(type))
   })
 
@@ -62,7 +62,7 @@ describe('questionTypeMeta — registre QUESTION_TYPES / QUESTION_TYPE_META', ()
     expect(entry.icon).toBeTruthy()
   })
 
-  it('QUESTION_TYPE_META est dérivée de QUESTION_TYPES (même 7 clés, même contenu)', () => {
+  it('QUESTION_TYPE_META est dérivée de QUESTION_TYPES (même 8 clés, même contenu)', () => {
     expect(Object.keys(QUESTION_TYPE_META).sort()).toEqual([...ALL_TYPES].sort())
     ALL_TYPES.forEach(type => {
       const fromArray = QUESTION_TYPES.find(t => t.key === type)
@@ -100,6 +100,8 @@ describe('questionTypeMeta — nestable (#184/B-F4, miroir de NestableInMotionCa
     // §04 : "pas imbriquable dans une carte MEMOTION", une pause interrompt
     // la partie, elle n'a pas de sens à l'intérieur d'une manche).
     ENTRACTE: false,
+    // ROUE (v12.0.0, #145, contrat roue.md §3) — NestableInMotionCard ❌
+    ROUE: false,
   }
 
   it.each(ALL_TYPES)('QUESTION_TYPES[%s] porte un champ `nestable` booléen', (type) => {
@@ -124,8 +126,8 @@ describe('questionTypeMeta — nestable (#184/B-F4, miroir de NestableInMotionCa
 // ---------------------------------------------------------------------------
 
 describe('GENERABLE_TYPES — pseudo-type MEMOTION_PLUS, séparé de QUESTION_TYPES (#196)', () => {
-  it('QUESTION_TYPES contient TOUJOURS exactement 7 entrées — MEMOTION_PLUS ne doit JAMAIS y fuiter', () => {
-    expect(QUESTION_TYPES).toHaveLength(7)
+  it('QUESTION_TYPES contient TOUJOURS exactement 8 entrées — MEMOTION_PLUS ne doit JAMAIS y fuiter', () => {
+    expect(QUESTION_TYPES).toHaveLength(8)
     expect(QUESTION_TYPES.some(t => t.key === 'MEMOTION_PLUS')).toBe(false)
   })
 

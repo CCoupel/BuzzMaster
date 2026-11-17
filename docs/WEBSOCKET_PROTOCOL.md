@@ -701,6 +701,83 @@ Exemple de valeurs dans `GameState` (`RAFALE_CURRENT_LETTER` = `"S"`, `RAFALE_LE
 
 ---
 
+## ROUE — Roue de la Fortune (v12.0.0, #144, #145)
+
+Contrat : `contracts/roue.md` §8 et §9. Les actions sont dans la liste blanche entrante
+(`internal/server/inbound_allowlist.go`) ; un émetteur absent de la liste est refusé.
+
+### Actions client → serveur
+
+| Action | Payload | Sous-phases acceptées | Émetteurs |
+|---|---|---|---|
+| `ROUE_SET_TEAMS` | `{ "TEAMS": string[] }` | `PREPARE`, `READY` ; aucun contrôle du nombre (existence et doublon seulement ; liste vide = effacement). Comptage `SOLO` : 1 équipe exactement, autres modes : 2 au moins, appliqué au passage `PREPARE`→`READY` et `FORCE_READY` | admin |
+| `ROUE_SPIN` | `{}` | `STARTED` + `TURN` + consonnes restantes | admin, anim |
+| `ROUE_STOP` | `{}` | `STARTED` + `SPINNING` (« Forcer l'arrêt ») **et `ROUE_WHEEL.FULL_SPEED = true`** ; pendant la montée : `ROUE_ERROR` `NOT_FULL_SPEED`, admin comme animateur | admin, anim |
+| `ROUE_LETTER` | `{ "LETTER": "T" }` | `STARTED` + `LETTER` | admin, anim |
+| `ROUE_FLIP` | `{}` | `STARTED` + `LIT` (« Retourner les cases ») | admin, anim |
+| `ROUE_ANSWER` | `{}` | `STARTED` + `ANSWER` ; aussi `TURN` sans consonne restante (« Réponse validée ») | admin, anim |
+| `ROUE_NEXT` | `{ "HAND": "SAME" \| "NEXT" }` | `STARTED` + `TURN_END` ou `ANSWER` ; aussi `TURN` sans consonne restante. `NEXT` refusé en `SOLO` | admin, anim |
+| `ROUE_PASS` | `{}` | `STARTED` + `TURN`, hors `SOLO` | admin seul |
+| `ROUE_REVEAL` | `{}` | `STARTED`, sous-phase différente de `SOLVED` | admin seul |
+
+- `/ws/tv` et `/ws/player` n'envoient aucune action `ROUE_*` : la tablette envoie seulement `BUTTON`.
+- `/ws/anim` envoie les six actions des boutons de la tablette animateur (`ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`,
+  `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT`). Jamais `ROUE_SET_TEAMS`, `ROUE_PASS` ni `ROUE_REVEAL`.
+- Admin et animateur peuvent commander en même temps : la première action valable pour la sous-phase courante
+  s'applique, la suivante est refusée (`WRONG_SUBPHASE`), sans double application.
+- Montée (`ROUE_WHEEL.FULL_SPEED = false`, `SPIN_UP_MS` = 1 tour : `2 × SPIN_PERIOD_MS`, 5 s par défaut) : personne ne peut arrêter la roue, pas même l'admin.
+  Un appui `BUTTON` pendant la montée est ignoré en silence (aucun effet, aucune diffusion, aucune erreur) ; `ROUE_STOP`
+  de l'admin ou de l'animateur est refusé avec `ROUE_ERROR` `NOT_FULL_SPEED` (état et minuterie de montée inchangés).
+- Arrêt par les joueurs : action `BUTTON` existante (buzzer physique, tablette, simulation admin). Une tablette ou un
+  buzzer de l'équipe qui a la main arrête la roue pendant `SPINNING` ; les autres appuis sont ignorés sans diffusion.
+  Aucun changement de protocole BuzzClick.
+
+Exemple (admin, étape 4) :
+```json
+{ "ACTION": "ROUE_LETTER", "MSG": { "LETTER": "T" } }
+```
+
+### Actions serveur → client
+
+- `UPDATE` (`GameState`) après chaque transition, action existante. Les champs `ROUE_*` sont décrits dans
+  `docs/DATA_MODELS.md`.
+- `ROUE_ERROR` — **émetteur seul**, état inchangé :
+  ```json
+  { "ACTION": "ROUE_ERROR", "MSG": { "CODE": "NOT_A_LETTER", "MESSAGE": "…" } }
+  ```
+  `CODE` ∈ `VOWEL_NOT_AVAILABLE` (voyelle, non disponible en v12.0) | `NOT_A_LETTER` | `WRONG_SUBPHASE` |
+  `NOT_ALLOWED` | `INVALID_TEAMS` (équipe inconnue ou en double dans `ROUE_SET_TEAMS` ; jamais un nombre d'équipes) |
+  `NOT_FULL_SPEED` (`ROUE_STOP` pendant la montée de la roue, admin ou animateur).
+
+### Confidentialité de la phrase
+
+- `QUESTION.ROUE_PHRASE` est retiré de tout message envoyé à `/ws/tv` (`SerializeForTV`) et aux tablettes
+  (`filterVPlayerAnswers`), dans toutes les phases. Il reste présent pour `/ws/admin` et `/ws/anim`.
+- `ROUE_BOARD` ne contient jamais de lettre non révélée (`_` ou `*` seulement).
+- La phrase n'est jamais écrite dans `ANSWER`, ni dans `/ws/logs`, ni dans un message aux buzzers.
+- Test de non-fuite : `internal/protocol/roue_leak_test.go` — pour chaque sous-phase avant `SOLVED`, la phrase et ses
+  lettres non révélées sont absentes des messages TV et tablette.
+
+### Aperçu de la roue — `POST /api/roue/wheel-preview` (HTTP, sans écriture)
+
+Construit la roue pour des paramètres non enregistrés (carte « Roue » des réglages). Les trois durées
+`spin_period_ms`, `spin_max_ms`, `stop_duration_ms` sont facultatives (valeurs par défaut si absentes).
+
+Réponse `200` : `COUNT`, `step`, `SEGMENTS` et, toujours présent, **`TIMING`** :
+
+```json
+"TIMING": { "SPIN_PERIOD_MS": 2500, "SPIN_UP_MS": 5000, "SPIN_MAX_MS": 10000, "STOP_DURATION_MS": 4000 }
+```
+
+Ce sont les durées telles que le jeu les utiliserait : ramenées à leurs bornes comme à l'enregistrement, et
+`SPIN_UP_MS = 2 × SPIN_PERIOD_MS` (même règle qu'au `START`). Le bouton « Tester » de la carte anime les aperçus avec
+ces valeurs, sans message WebSocket ni écriture. Aucun calcul de règle côté client.
+
+### Diffusion aux buzzers
+
+Aucun message `ROUE_*` n'est envoyé aux buzzers. Côté LED : équipe qui a la main allumée, autres atténuées (règles
+`led.go`). Ambiance : `ActiveTeam` renvoie l'équipe qui a la main. Sons : bruitages existants seulement.
+
 ## Architecture serveur
 
 ### Hubs separes

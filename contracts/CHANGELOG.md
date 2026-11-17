@@ -1,6 +1,124 @@
 # Changelog des Contrats API
 
 ---
+## [20261117-c] — v12.0.0 — ROUE : montée en 1 tour, essai « Tester » des réglages (#144, LOT-1)
+
+`roue.md` §4, §5, §5.1, §6, §10, §10.2 (nouveau), §11.3 ; `wheel-component.md` §5, §8. Décisions utilisateur de la
+QUALIF 12.0.0.8 (ordre `_work/tasks/planner-20261117-111500.md`). **Aucun BREAKING.**
+
+- **[CHANGED]** `ROUE_WHEEL.SPIN_UP_MS` — `2 × SPIN_PERIOD_MS` au lieu de `4 ×` : pleine vitesse atteinte en **1 tour**
+  (5 s par défaut au lieu de 10 s) ; arrêt automatique 15 s après le lancer par défaut (§4, §5.1, §6). Les autres
+  règles de `[20261117-b]` sont inchangées : arrêt seulement à pleine vitesse pour tous, durée maximale comptée
+  après la montée, appui ignoré. `spin_period_ms` : même défaut (2500), mêmes bornes.
+- **[CHANGED]** `POST /api/roue/wheel-preview` — accepte trois durées facultatives (`spin_period_ms`, `spin_max_ms`,
+  `stop_duration_ms`) et renvoie toujours `TIMING` (`SPIN_PERIOD_MS`, `SPIN_UP_MS`, `SPIN_MAX_MS`,
+  `STOP_DURATION_MS`), durées effectives pour ces réglages (§11.3). Additif.
+- **[NEW]** Essai de la roue — bouton « Tester » de la carte de réglage : anime les deux aperçus existants avec les
+  valeurs non enregistrées, tirage côté client, aucune action serveur ni effet sur le jeu (§10.2).
+- **[CHANGED]** `wheel-component.md` §5, §8 — `accelTurns = 1` ; l'adaptateur n'est pas recréé entre `SPINNING` et
+  `STOPPING` ; l'essai réutilise l'adaptateur.
+- Précision (§6) : le placement direct sur la case ne vaut que pour un écran qui se connecte pendant le freinage ;
+  une tablette déjà affichée freine comme la TV.
+
+---
+## [20261117-b] — v12.0.0 — ROUE : montée en 2 tours, arrêt seulement à pleine vitesse (#144, LOT-1)
+
+`roue.md` §4, §5, §5.1, §6, §8, §10, §12, §13 ; `wheel-component.md` §5, §8. Décisions utilisateur du 2026-11-17
+(ordre `_work/tasks/planner-20261117-102000.md`). **Remplace** la montée de 1 500 ms de l'entrée `[20261117]`
+ci-dessous. Aucun changement de protocole BuzzClick. Les deux **[BREAKING]** ne concernent que le mode `ROUE`, jamais
+livré en production (v12.0.0 en cours) : aucun déploiement existant n'est touché.
+
+- **[CHANGED]** `GameState.ROUE_WHEEL` — deux champs ajoutés : `SPIN_UP_MS` (durée de la montée, `4 × SPIN_PERIOD_MS`,
+  calculée par le serveur) et `FULL_SPEED` (bool : pleine vitesse atteinte, `true` seulement en `SPINNING` après la
+  montée ; `UPDATE` à la fin de la montée) (§4). Additif.
+- **[BREAKING]** Action `BUTTON` en type `ROUE` — un appui de l'équipe qui a la main **pendant la montée** est
+  désormais ignoré (il arrêtait la roue) ; l'arrêt par les joueurs n'est accepté qu'à pleine vitesse (§5.1).
+- **[BREAKING]** Action `ROUE_STOP` — pendant la montée : refusée, `ROUE_ERROR` `NOT_FULL_SPEED`, **pour l'admin
+  comme pour l'animateur** (elle était acceptée dès `SPINNING`). Décision utilisateur du 2026-11-17, qui remplace la
+  première rédaction (`689140e6` : admin accepté à tout moment) (§5.1).
+- **[NEW]** Code d'erreur `ROUE_ERROR` : `NOT_FULL_SPEED` (§8.3).
+- **[CHANGED]** Minuteries de `SPINNING` — minuterie de montée (`SPIN_UP_MS`), puis durée maximale (`SPIN_MAX_MS`)
+  armée seulement à la fin de la montée : l'arrêt automatique passe de `SPIN_MAX_MS` à `SPIN_UP_MS + SPIN_MAX_MS`
+  après le lancer (10 s → 20 s par défaut) (§5.1). Réglages `spin_period_ms` et `spin_max_ms` : mêmes bornes, sens
+  précisé (§10).
+- **[CHANGED]** Animation de la roue (TV et tablette) — pleine vitesse atteinte en 2 tours à accélération constante ;
+  roue non tapable pendant la montée ; client connecté en cours de rotation : vitesse de croisière directe ;
+  freinage **toujours** depuis la croisière : aucun freinage depuis la montée (§6).
+- **[CHANGED]** `wheel-component.md` §5 — `spin` : `accelTurns` (montée par distance) remplace `accelMs` ; nouvelle
+  option `cruise` ; `land` part toujours de la vitesse de croisière (plus de vitesse de départ variable ni de
+  « poursuite de la montée ») ; critères d'acceptation revus. §8 : l'adaptateur tire la montée de `ROUE_WHEEL.SPIN_UP_MS`.
+- Correction de forme : `roue.md` §5, le paragraphe « `ROUE_STEP` est fonction de… » coupait le tableau des étapes
+  depuis `8d91498a` ; replacé sous le tableau.
+
+---
+## [20261117] — v12.0.0 — ROUE : roue et indice sur la tablette, accélération au lancement (#144, LOT-1)
+
+`roue.md` §6, §9, §12. Décisions utilisateur du 2026-11-17 après la QUALIF 12.0.0.2 (maquette
+`vplayer_roue__wheel_tap_stop`). **Aucun BREAKING** : aucun champ, aucune action, aucun message ajouté ou modifié ;
+aucun changement côté serveur ni de protocole BuzzClick.
+
+- **[CHANGED]** Tablette joueur en type `ROUE` — la roue (`ROUE_WHEEL`, même forme que sur la TV) est affichée en
+  permanence à la place du bouton d'arrêt ; l'équipe qui a la main touche la roue pour l'arrêter (action `BUTTON`
+  existante) ; la catégorie et `ROUE_PRESENTATION` sont affichées sur leur propre ligne, jamais tronquées (§12).
+- **[CHANGED]** Sérialisation TV et tablette — `QUESTION.ROUE_PRESENTATION` et `QUESTION.CATEGORY` déclarés champs
+  publics à conserver (§9). Comportement déjà en place, désormais garanti par le contrat.
+- **[CHANGED]** Animation de la roue (TV et tablette) — au lancement la roue accélère depuis l'arrêt jusqu'à la
+  vitesse de croisière (un tour en `SPIN_PERIOD_MS`) en 1 500 ms, constante d'affichage ; le freinage part de la
+  vitesse courante, y compris pendant la montée (§6). Purement visuel. **Remplacé le jour même** par l'entrée
+  `[20261117-b]` (montée en 2 tours, arrêt seulement à pleine vitesse).
+- **[CHANGED]** `ROUE_SET_TEAMS` — ne contrôle plus le nombre d'équipes, seulement leur existence et l'absence de
+  doublon ; liste vide = effacement ; le comptage n'est appliqué qu'à `PREPARE` → `READY` et `FORCE_READY` (§8.1,
+  §13, commit `1d2f7f03`). Assouplissement.
+
+---
+## [20261116] — v12.0.0 — mode de jeu ROUE « Roue de la Fortune » (#144, #145, LOT-1)
+
+Nouveau contrat `roue.md` ; `wheel-component.md` §5 révisé, §7 mis à jour, §8 ajouté ; ligne `ROUE` de
+`question-types.md` §7. Décisions utilisateur du 2026-11-16 (`_work/reports/plan-ambiguities-20261116-112244.md`,
+Q1–Q4 ; ordre `_work/tasks/planner-20261116-112200.md`). **Aucun BREAKING** : types, actions et champs existants
+inchangés ; aucun changement de protocole BuzzClick ; un `game-config.json` sans section `wheel` reste valide.
+
+- **[NEW]** Type de question `ROUE` : champs `ROUE_PHRASE`, `ROUE_PRESENTATION`, `ROUE_MODE`
+  (`SOLO | CHACUN_SON_TOUR | TANT_QUE_JE_GAGNE`, enum existant), `ROUE_GAINS_RULE` (`WINNER_ONLY | ALL_TEAMS`),
+  `ROUE_WHEEL_LAYOUT` (`strip | arc`), `ROUE_SHOW_LETTERS` (`roue.md` §3).
+- **[CHANGED]** `POST /questions` — champs de formulaire `roue_phrase`, `roue_presentation`, `ROUE_MODE`,
+  `roue_gains_rule`, `roue_wheel_layout`, `roue_show_letters` pour `type=ROUE` ; refus `400` `ROUE_*` (§11.1). Additif.
+- **[NEW]** `POST /api/roue/preview` — validation et mise en lignes d'une phrase, sans écriture (§11.2).
+- **[NEW]** Champs `GameState` `ROUE_*` (sous-phase, étape 1 à 7, équipes, équipe suivante, cagnottes de manche,
+  gain du tour, plateau avec cases éclairées, lettres, roue, dernier événement, gagnant, crédits), diffusés aux
+  clients web, jamais persistés, jamais aux buzzers (§4).
+- **[NEW]** Actions client → serveur : `ROUE_SET_TEAMS`, `ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_FLIP`,
+  `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL` ; admin : toutes ; animateur : `ROUE_SPIN`, `ROUE_STOP`,
+  `ROUE_LETTER`, `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT` (§8.2) ; serveur → émetteur : `ROUE_ERROR` (§8).
+- **[CHANGED]** Action `BUTTON` — en type `ROUE`, n'est acceptée que de l'équipe qui a la main pendant `SPINNING`
+  (arrêt de la roue avant la durée maximale), sans statut `PAUSE` ; comportement inchangé pour les autres types (§5.1).
+- **[CHANGED]** Sérialisation TV et tablette — `QUESTION.ROUE_PHRASE` retiré (§9). Additif (champ nouveau).
+- **[CHANGED]** `GET/POST /game-config.json` — section `wheel` : 4 paramètres (points maximum, pas, nombre de
+  BANQUEROUTE, nombre de TOUR PERDU ; pas inférieur au maximum, corrigé au diviseur le plus proche s'il ne le
+  divise pas ; 64 cases au plus) et durées (tour, rotation maximale, freinage, retournement) ; champ en
+  lecture `wheel_default` ; paramètres hors limites refusés `400` (§10). La roue est générée par le serveur (§10.1).
+  Additif.
+- **[NEW]** `POST /api/roue/wheel-preview` — roue générée pour des paramètres non enregistrés (§11.3).
+- **[CHANGED]** Composant `Wheel` — `motion` implémenté sous une forme nouvelle (`spin` / `land`), sans horloge
+  serveur ; la forme réservée en v11.4.0 (`from, to, turns, durationMs, startedAt`), jamais implémentée ni
+  utilisée, est abandonnée ; `motion = null` inchangé (`wheel-component.md` §5, §8).
+
+Précision après les tests du moteur (commit `38627055`) — `roue.md` §4, §5.1. **Aucun BREAKING** (mode nouveau) :
+
+- **[CHANGED]** `ROUE_LAST_EVENT` — règle « un événement par action » : `SEQ` augmente d'exactement 1 par action ;
+  l'entrée en `TURN_END` causée par `LETTER_MISS`, `LETTER_REPEAT`, `BANKRUPT` ou `LOSE_TURN` n'émet que l'événement
+  de cause, sans événement `TURN_END` ; `TURN_END` n'est émis que par `ROUE_NEXT` reçu en `ANSWER` (ou en `TURN` sans
+  consonne restante) ; `ROUE_NEXT` reçu en `TURN_END` n'émet rien.
+
+Précisions après la revue du LOT-1.2 (dev-backend `ce4552b4`) — `roue.md` §9, §10, §11.1, §11.3. **Aucun BREAKING**
+(mode nouveau) :
+
+- **[NEW]** `POST /questions`, `type=ROUE` — refus `400` `ROUE_PRESENTATION_CONTAINS_PHRASE` quand la présentation
+  contient la phrase à deviner (comparaison repliée) ; un champ `question` qui la contient est remplacé par la
+  présentation ou par « Roue de la Fortune ».
+- **[CHANGED]** Section `wheel` et `POST /api/roue/wheel-preview` — `max_points` limité à 1 000 000 ; au-delà, refus `400`.
+
+---
 ## [20261112] — v11.8.0 — éditeur d'effets, import et export (#210, #305)
 
 `light-effects.md` **révision 5, §11** ; table de `http-endpoints.md`. Décisions utilisateur du 2026-11-12

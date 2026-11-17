@@ -1,0 +1,101 @@
+<!--
+mockup:
+  composant: admin_question_editor
+  feature: roue_phrase
+  version: 12.0.0
+  type: ui
+  issue: "#145"
+  validee_le: 2026-11-16
+  proposition_retenue: "A — Formulaire puis aperçu"
+  complete: [docs/mockup/v11.6.0/ui/admin_question_editor__sound_memory_memotion_entracte.html, docs/mockup/v11.4.0/ui/admin_question_editor__rafale_alphabetical.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin › Questions — éditeur d'une question ROUE : phrase à deviner (#145) — version retenue</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --ok:#16a34a; --error:#dc2626; --errbg:#fee2e2; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:var(--primary); border-color:#818cf8; }
+.mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); }
+.card { max-width:1060px; margin:.6rem auto 2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.row { display:flex; align-items:flex-start; gap:.8rem; margin:.7rem 0; } .lbl { width:160px; flex:0 0 160px; font-size:.84rem; font-weight:600; color:var(--gray-700); padding-top:.4rem; }
+.fld { flex:1; min-width:0; }
+input[type=text] { width:100%; font:inherit; font-size:.9rem; padding:.45rem .6rem; border:1px solid var(--gray-300); border-radius:.4rem; }
+input.err { border-color:var(--error); background:var(--errbg); }
+.hint { font-size:.74rem; color:var(--gray-500); margin:.25rem 0 0; } .hint.err { color:var(--error); font-weight:600; } .hint.ok { color:var(--ok); }
+.types { display:flex; flex-wrap:wrap; gap:.3rem; } .types span { font-size:.78rem; padding:.35rem .7rem; border:1px solid var(--gray-300); border-radius:.4rem; color:var(--gray-600); }
+.types span.sel { background:var(--primary); border-color:var(--primary); color:#fff; font-weight:700; }
+.chips { display:flex; flex-wrap:wrap; gap:.35rem; } .chips label { font-size:.8rem; border:1px solid var(--gray-300); border-radius:999px; padding:.25rem .7rem; display:flex; gap:.35rem; align-items:center; }
+.chips label.sel { border-color:var(--primary); background:var(--primary-100); font-weight:700; }
+.modes { display:grid; grid-template-columns:repeat(3, 1fr); gap:.5rem; } .modes.two { grid-template-columns:repeat(2, 1fr); }
+.mode { border:1px solid var(--gray-300); border-radius:.5rem; padding:.5rem .6rem; display:flex; gap:.5rem; font-size:.8rem; align-items:flex-start; }
+.mode.sel { border-color:var(--primary); background:var(--primary-100); } .mode strong { display:block; } .mode small { color:var(--gray-600); }
+.board { display:inline-grid; grid-template-columns:repeat(14, 26px); grid-auto-rows:26px; gap:3px; background:#0b1020; padding:8px; border-radius:.5rem; }
+.bc { background:rgba(255,255,255,.06); border-radius:3px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111827; }
+.bc.l { background:#f8fafc; } .bc.v { background:#bfdbfe; } .bc.x { background:#fecaca; color:#991b1b; }
+.legend { font-size:.74rem; color:var(--gray-500); margin-top:.3rem; } .legend i { display:inline-block; width:.8rem; height:.8rem; border-radius:2px; vertical-align:-.1rem; margin:0 .2rem 0 .6rem; }
+.vig { width:86px; height:48px; border-radius:.3rem; background:#0b1020; flex:0 0 86px; position:relative; overflow:hidden; }
+.vig.strip::after { content:''; position:absolute; left:6px; right:6px; bottom:6px; height:12px; border-radius:3px; background:repeating-linear-gradient(90deg, #fca5a5 0 12px, #93c5fd 12px 24px, #86efac 24px 36px, #fde68a 36px 48px); }
+.vig.arc::after { content:''; position:absolute; left:-12px; right:-12px; bottom:-78px; height:100px; border-radius:50%; border:12px solid #93c5fd; border-top-color:#fca5a5; border-left-color:#86efac; border-right-color:#fde68a; }
+.vig::before { content:''; position:absolute; left:10px; right:10px; top:7px; height:16px; border-radius:2px; background:repeating-linear-gradient(90deg, #1d4ed8 0 5px, transparent 5px 7px); }
+.switch { display:inline-flex; align-items:center; gap:.6rem; font-size:.86rem; font-weight:600; } .sw { width:2.6rem; height:1.4rem; border-radius:999px; background:var(--primary); position:relative; display:inline-block; } .sw::after { content:''; position:absolute; top:.15rem; right:.15rem; width:1.1rem; height:1.1rem; border-radius:50%; background:#fff; }
+.new { font-size:.64rem; font-weight:800; background:#fef3c7; color:#b45309; border-radius:.3rem; padding:.05rem .35rem; margin-left:.3rem; vertical-align:.1rem; }
+.dimrow { opacity:.5; font-size:.82rem; }
+.actions { display:flex; justify-content:flex-end; gap:.5rem; border-top:1px solid var(--gray-200); padding-top:.8rem; margin-top:1rem; }
+.btn { font:inherit; font-size:.86rem; font-weight:600; padding:.5rem .9rem; border-radius:.5rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); } .btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; } .btn[disabled] { opacity:.4; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette — cas :</strong><span class="grp" id="states"><button data-s="ok" class="on">Phrase valide</button><button data-s="long">Phrase trop longue</button></span></div>
+<div class="mock-note">Éditeur de question, type <b>ROUE</b> — proposition <b>A retenue</b> (formulaire, aperçu du plateau sous la phrase), complétée de deux réglages de la question <span class="new">nouveau</span> : la <b>forme de la roue</b> sur la TV (bandeau ou arc) et l'<b>affichage des lettres déjà proposées</b>. Le mode de jeu reprend les choix et les libellés des autres types, sans « Maillon faible ». Pas de champ Réponse, Points ni Temps pour ce type. Plateau de <b>4 lignes de 14 cases</b>, mots non coupés, majuscules sans accent ; une phrase qui ne tient pas ne peut pas être enregistrée.</div>
+<div class="card" id="card"></div>
+<script>
+const st = { s:"ok" };
+const OK = { text:"Combien pour ce chien dans la vitrine", rows:["COMBIEN POUR","CE CHIEN DANS","LA VITRINE"] };
+const LONG = { text:"Il ne faut pas vendre la peau de l'ours avant de l'avoir tué", rows:["IL NE FAUT PAS","VENDRE LA PEAU","DE L'OURS","AVANT DE","L'AVOIR TUE"] };
+function board() {
+  const d = st.s === "ok" ? OK : LONG, rows = d.rows.slice(); while (rows.length < 4) rows.push("");
+  let h = `<div class="board">`;
+  rows.forEach((r, ri) => { const pad = Math.floor((14 - r.length) / 2);
+    for (let c = 0; c < 14; c++) { const ch = r[c - pad];
+      h += !ch || ch === " " ? `<div class="bc"></div>` : `<div class="bc ${ri >= 4 ? "x" : "AEIOUY".includes(ch) ? "v" : "l"}">${ch}</div>`; } });
+  return h + `</div>`;
+}
+function render() {
+  const ok = st.s === "ok", d = ok ? OK : LONG;
+  document.getElementById("card").innerHTML = `
+  <div class="row"><span class="lbl">Type</span><div class="fld"><div class="types"><span>SPEEDY</span><span>QCM</span><span>MEMORY</span><span>MEMOTION</span><span>ARDOISE</span><span>RAFALE</span><span>ENTRACTE</span><span class="sel">🎡 ROUE</span></div></div></div>
+  <div class="row"><span class="lbl">Phrase à deviner</span><div class="fld"><input type="text" class="${ok ? "" : "err"}" value="${d.text}">
+    ${ok ? `<p class="hint ok">✓ 3 lignes sur 4 · 12 consonnes différentes · 17 lettres différentes</p>` : `<p class="hint err">✗ Phrase trop longue : 5 lignes, 4 au plus (14 caractères par ligne, mots non coupés). Raccourcissez la phrase pour pouvoir l'enregistrer.</p>`}
+    <div style="margin-top:.5rem">${board()}</div>
+    <div class="legend"><i style="background:#f8fafc;border:1px solid #d1d5db"></i>consonne ou signe<i style="background:#bfdbfe"></i>voyelle (non proposable, dévoilée à la fin)${ok ? "" : `<i style="background:#fecaca"></i>dépasse du plateau`}</div></div></div>
+  <div class="row"><span class="lbl">Catégorie<br><small style="font-weight:400;color:var(--gray-500)">une seule</small></span><div class="fld"><div class="chips"><label><input type="radio" name="c"> 🌍 Géographie</label><label><input type="radio" name="c"> 🎬 Cinéma</label><label class="sel"><input type="radio" name="c" checked> 🐾 Animaux</label><label><input type="radio" name="c"> 🎵 Musique</label><label><input type="radio" name="c"> ⚽ Sport</label><label>⚙ Gérer les catégories…</label></div><p class="hint">Affichée sur la TV au-dessus du plateau. Sélecteur et gestion des catégories existants.</p></div></div>
+  <div class="row"><span class="lbl">Phrase de présentation</span><div class="fld"><input type="text" value="Chanson de Line Renaud"><p class="hint">Facultative, 80 caractères au plus (22 / 80). Indice affiché sur la TV à côté de la catégorie.</p></div></div>
+  <div class="row"><span class="lbl">Mode de jeu</span><div class="fld"><div class="modes">
+    <label class="mode"><input type="radio" name="m"><span><strong>SOLO</strong><small>Une équipe joue seule</small></span></label>
+    <label class="mode"><input type="radio" name="m"><span><strong>CHACUN SON TOUR</strong><small>La main passe à la fin de chaque tour</small></span></label>
+    <label class="mode sel"><input type="radio" name="m" checked><span><strong>TANT QUE JE GAGNE</strong><small>Garde la main tant que la lettre est trouvée</small></span></label></div></div></div>
+  <div class="row"><span class="lbl">Gains de la manche</span><div class="fld"><div class="modes two">
+    <label class="mode sel"><input type="radio" name="g" checked><span><strong>Seul le gagnant encaisse</strong><small>L'équipe qui trouve la phrase reçoit sa cagnotte ; les autres perdent la leur</small></span></label>
+    <label class="mode"><input type="radio" name="g"><span><strong>Tout le monde encaisse</strong><small>Chaque équipe garde la cagnotte gagnée pendant la manche</small></span></label></div></div></div>
+  <div class="row"><span class="lbl">Forme de la roue <span class="new">nouveau</span></span><div class="fld"><div class="modes two">
+    <label class="mode sel"><input type="radio" name="w" checked><span class="vig strip"></span><span><strong>Bandeau</strong><small>Bande horizontale en bas de l'écran ; plateau le plus grand</small></span></label>
+    <label class="mode"><input type="radio" name="w"><span class="vig arc"></span><span><strong>Arc</strong><small>Haut d'une grande roue qui émerge du bas de l'écran</small></span></label></div><p class="hint">Présentation de la roue sur la TV pour cette question. Les cases de la roue se règlent dans les Paramètres.</p></div></div>
+  <div class="row"><span class="lbl">Lettres déjà proposées <span class="new">nouveau</span></span><div class="fld"><span class="switch"><span class="sw"></span> Afficher sur la TV les lettres déjà proposées</span><p class="hint">Activé : une ligne « Lettres proposées » sous le plateau, lettres absentes barrées. Désactivé : aux joueurs de s'en souvenir.</p></div></div>
+  <div class="row dimrow"><span class="lbl">🔊 Son de la question</span><div class="fld">… bloc existant, inchangé …</div></div>
+  <div class="actions"><button class="btn">Annuler</button><button class="btn primary" ${ok ? "" : "disabled"}>Enregistrer</button></div>`;
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", b.dataset.s === st.s));
+}
+document.getElementById("states").addEventListener("click", e => { if (e.target.dataset.s) { st.s = e.target.dataset.s; render(); } });
+render();
+</script>
+</body>
+</html>

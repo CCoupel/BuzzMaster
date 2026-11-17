@@ -1,0 +1,120 @@
+<!--
+mockup:
+  composant: anim_roue
+  feature: conduct_panel
+  version: 12.0.0
+  type: ui
+  issue: "#144"
+  validee_le: 2026-11-16
+  proposition_retenue: "A — Réponse colorée par équipe, 7 boutons d'étape, consonnes jouées et case de la roue"
+  complete: []
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Animateur (tablette) — Roue de la Fortune : réponse, 7 boutons d'étape, consonnes jouées (#144) — version retenue</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --ok:#16a34a; --okbg:#dcfce7; --error:#dc2626; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#111827; color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#000; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:var(--primary); border-color:#818cf8; }
+.mock-note { max-width:1000px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:#9ca3af; line-height:1.45; } .mock-note b { color:#e5e7eb; }
+.tab { width:936px; height:616px; margin:.6rem auto 2rem; border:8px solid #374151; border-radius:1.4rem; background:var(--gray-100); overflow:hidden; display:flex; flex-direction:column; padding:12px; gap:10px; }
+.bar { display:flex; align-items:center; gap:.5rem; font-size:.78rem; }
+.chip { background:#fff; border-radius:999px; padding:.2rem .7rem; color:var(--gray-700); border:1px solid var(--gray-200); white-space:nowrap; } .chip b { color:var(--gray-900); }
+.hand { margin-left:auto; color:#fff; font-weight:800; border-radius:999px; padding:.3rem 1rem; font-size:.9rem; }
+.sol { background:#fff; border-radius:.7rem; padding:.6rem 1rem; font-size:1.75rem; font-weight:900; letter-spacing:.14em; line-height:1.35; text-align:center; }
+.sol span { color:var(--gray-300); } .sol span.f { color:var(--c); } .sol span.lit { background:#fde047; color:#111827; border-radius:.25rem; box-shadow:0 0 .6rem #fde047; }
+.steps { display:grid; grid-template-columns:repeat(8, 1fr); gap:.3rem; }
+.sb { font:inherit; border-radius:.6rem; border:2px solid var(--gray-200); background:#fff; color:var(--gray-500); padding:.45rem .2rem; min-height:4.6rem; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.15rem; font-size:.74rem; font-weight:700; line-height:1.15; text-align:center; }
+.sb b { font-size:1.05rem; } .sb.done { background:var(--okbg); border-color:var(--okbg); color:var(--ok); }
+.sb.cur { background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:0 .25rem 0 #3730a3; font-size:.82rem; }
+.sb.wait { background:#fff; border-color:var(--primary); color:var(--primary); border-style:dashed; }
+.sb.cur.ok { background:var(--ok); border-color:var(--ok); box-shadow:0 .25rem 0 #166534; }
+.sb.alt { background:#fff; border-color:var(--primary); color:var(--primary); box-shadow:0 .25rem 0 var(--primary-100); font-size:.82rem; }
+.mini { font:inherit; font-weight:800; font-size:.72rem; border-radius:.35rem; border:1px solid var(--gray-300); background:#fff; width:100%; padding:.22rem 0; } .mini.ok { background:var(--ok); border-color:var(--ok); color:#fff; } .mini.ko { border-color:var(--error); color:var(--error); }
+.body { flex:1; min-height:0; display:grid; grid-template-columns:1fr 250px; gap:10px; }
+.panel { background:#fff; border-radius:.7rem; padding:.7rem .8rem; min-height:0; overflow:hidden; display:flex; flex-direction:column; gap:.5rem; }
+h4 { margin:0; font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--gray-500); display:flex; justify-content:space-between; align-items:center; }
+.kbd { display:grid; grid-template-columns:repeat(10, 1fr); gap:.4rem; flex:1; align-content:center; }
+.key { font:inherit; border-radius:.5rem; border:2px solid var(--gray-200); background:#fff; height:4.4rem; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.1rem; color:var(--gray-900); }
+.key b { font-size:1.35rem; line-height:1; } .key small { font-size:.56rem; font-weight:700; line-height:1; }
+.key.hit { border-color:var(--c); background:color-mix(in srgb, var(--c) 16%, #fff); } .key.hit b, .key.hit small { color:var(--c); }
+.key.miss { border-color:var(--gray-300); background:var(--gray-100); } .key.miss b { text-decoration:line-through; color:var(--gray-400); } .key.miss small { color:var(--c); }
+.key.sel { border-color:var(--primary); background:var(--primary); } .key.sel b { color:#fff; }
+.key.off { opacity:.55; }
+.legend { display:flex; gap:.7rem; font-size:.7rem; color:var(--gray-600); flex-wrap:wrap; } .legend i { display:inline-block; width:.7rem; height:.7rem; border-radius:50%; margin-right:.25rem; vertical-align:-.05rem; }
+.case { border-radius:.7rem; text-align:center; padding:.5rem; font-weight:900; font-size:2.6rem; line-height:1.1; background:#fde68a; } .case small { display:block; font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--gray-600); }
+.case.none { background:var(--gray-100); color:var(--gray-400); } .case.spin { background:repeating-linear-gradient(90deg, #fca5a5 0 25%, #93c5fd 25% 50%, #86efac 50% 75%, #fde68a 75% 100%); color:#111827; font-size:1.3rem; padding:1.1rem .5rem; }
+.gain { text-align:center; font-weight:800; color:var(--ok); font-size:.95rem; min-height:1.3rem; }
+.team { display:flex; align-items:center; justify-content:space-between; border-left:5px solid var(--c); background:var(--gray-50); border-radius:.4rem; padding:.35rem .6rem; font-size:.86rem; }
+.team.active { outline:2px solid var(--c); font-weight:800; background:#fff; } .team .v { font-weight:800; font-variant-numeric:tabular-nums; } .team .v.up { color:var(--ok); }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Moment :</strong>
+  <span class="grp" id="states"><button data-s="s1">1 Lancer</button><button data-s="s2">2 Roue lancée</button><button data-s="s3">3 Case</button><button data-s="s4" class="on">4 Consonne</button><button data-s="s5">5 Cases éclairées</button><button data-s="s6">6 Réponse</button><button data-s="s7">7 Fin du tour (lettre trouvée)</button><button data-s="s7b">7 Fin du tour (lettre absente)</button></span>
+</div>
+<div class="mock-note">Tablette de l'<b>animateur</b>. De haut en bas : <b>la réponse</b>, dont chaque lettre trouvée prend <b>la couleur de l'équipe qui l'a trouvée</b> ; <b>les 7 boutons d'étape</b>, les mêmes que sur le poste admin — l'animateur commande la manche ; au centre, <b>les consonnes déjà jouées et par quelle équipe</b> (ce clavier sert aussi à saisir la consonne à l'étape 4) et <b>la valeur de la case</b> de la roue. Aucun texte explicatif. À l'étape 6, <b>un seul grand bouton « Réponse validée »</b> (la réponse est un bonus). L'étape 7 a <b>deux boutons</b> : <b>« Tour suivant »</b> (la même équipe rejoue) et <b>« Équipe suivante »</b> (équipe suivante), actifs dès l'étape 6 ; le bouton conseillé est plein, l'autre en contour — « Équipe suivante » s'il n'y a pas eu de lettre trouvée. L'admin garde les mêmes commandes : le premier geste valable est pris, l'autre est sans effet.
+Exemple : T trouvé par les Bleus, R par les Rouges, N par les Jaunes, G proposé par les Verts (absent de la phrase) ; les Rouges ont la main, case 500, ils proposent C.</div>
+<div class="tab" id="tab"></div>
+<script>
+const st = { s:"s4" };
+const PHRASE = "COMBIEN POUR CE CHIEN DANS LA VITRINE", CONS = "BCDFGHJKLMNPQRSTVWXZ".split("");
+const TEAMS = { Rouges:"#ef4444", Bleus:"#3b82f6", Verts:"#22c55e", Jaunes:"#ca8a04" };
+const BANK = { Rouges:1300, Bleus:400, Verts:0, Jaunes:900 };
+const ORDER = { s1:1, s2:2, s3:3, s4:4, s5:5, s6:6, s7:7, s7b:7 };
+const NAMES = ["Lancer<br>la roue","Forcer<br>l'arrêt","Case","Valider la<br>consonne","Retourner<br>les cases","Réponse<br>validée","Tour<br>suivant"];
+function played() { const p = { T:["Bleus",1], R:["Rouges",1], N:["Jaunes",1], G:["Verts",0] }; if (ORDER[st.s] >= 6 && st.s !== "s7b") p.C = ["Rouges",1]; if (st.s === "s7b") p.K = ["Rouges",0]; return p; }
+function sol() {
+  const p = played();
+  return `<div class="sol">${[...PHRASE].map(ch => ch === " " ? " &nbsp;" : ch === "C" && st.s === "s5" ? `<span class="lit">C</span>` : p[ch] && p[ch][1] ? `<span class="f" style="--c:${TEAMS[p[ch][0]]}">${ch}</span>` : `<span>${ch}</span>`).join("")}</div>`;
+}
+function steps() {
+  const o = ORDER[st.s], miss = st.s === "s7b";
+  const cells = NAMES.map((n, i) => { const k = i + 1;
+    if (k === 7) return "";
+    if (k < o) return `<button class="sb done"><b>✓</b>${n}</button>`;
+    if (k > o) return `<button class="sb" disabled><b>${k}</b>${n}</button>`;
+    if (k === 3) return `<button class="sb wait"><b>3</b>La roue<br>ralentit…</button>`;
+    if (k === 6) return `<button class="sb cur ok"><b>✓</b>Réponse<br>validée</button>`;
+    if (k === 4) return `<button class="sb cur"><b>4</b>Valider<br>la lettre C</button>`;
+    return `<button class="sb cur"><b>${k}</b>${n}</button>`; });
+  const on = o >= 6;
+  cells.push(`<button class="sb ${on ? (miss ? "alt" : "cur") : ""}" ${on ? "" : "disabled"}><b>7</b>Tour suivant<br>▶ Rouges</button>`);
+  cells.push(`<button class="sb ${on ? (miss ? "cur" : "alt") : ""}" ${on ? "" : "disabled"}><b>7</b>Équipe suivante<br>▶ Bleus</button>`);
+  return `<div class="steps">${cells.join("")}</div>`;
+}
+function keys() {
+  const p = played(), on = st.s === "s4";
+  return `<div class="kbd">${CONS.map(l => { const x = p[l];
+    if (x) return `<button class="key ${x[1] ? "hit" : "miss"}" style="--c:${TEAMS[x[0]]}" disabled><b>${l}</b><small>${x[0]}</small></button>`;
+    if (l === "C" && (st.s === "s4" || st.s === "s5")) return `<button class="key sel"><b>C</b><small style="color:#fff">${st.s === "s5" ? "3 cases" : "choisie"}</small></button>`;
+    return `<button class="key ${on ? "" : "off"}" ${on ? "" : "disabled"}><b>${l}</b><small>&nbsp;</small></button>`; }).join("")}</div>`;
+}
+function caseBox() {
+  const o = ORDER[st.s];
+  if (o === 1) return `<div class="case none"><small>Case de la roue</small>—</div>`;
+  if (o === 2) return `<div class="case spin"><small>Case de la roue</small>la roue tourne · 4 s</div>`;
+  return `<div class="case"><small>Case de la roue</small>500</div>`;
+}
+function render() {
+  const o = ORDER[st.s], gain = o === 5 ? "C : 3 cases × 500" : o === 6 ? "Gain du tour : +1 500" : st.s === "s7b" ? "K absente — aucun gain" : o === 7 ? "+1 500 → cagnotte 2 800" : "";
+  document.getElementById("tab").innerHTML = `<div class="bar"><span class="chip">🎡 <b>ROUE</b></span><span class="chip">🐾 <b>Animaux</b></span><span class="chip">« Chanson de Line Renaud »</span><span class="chip">Tant que je gagne</span><span class="hand" style="background:${TEAMS.Rouges}">▶ Rouges</span></div>
+  ${sol()}${steps()}
+  <div class="body"><div class="panel"><h4><span>Consonnes jouées</span><span class="legend">${Object.entries(TEAMS).map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("")}<span>barrée = absente</span></span></h4>${keys()}</div>
+  <div class="panel">${caseBox()}<div class="gain">${gain}</div><h4>Cagnottes de la manche</h4>${Object.keys(TEAMS).map(n => `<div class="team ${n === "Rouges" ? "active" : ""}" style="--c:${TEAMS[n]}"><span>${n}</span><span class="v ${n === "Rouges" && st.s === "s7" ? "up" : ""}">${(n === "Rouges" && st.s === "s7" ? 2800 : BANK[n]).toLocaleString("fr-FR")}</span></div>`).join("")}</div></div>`;
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", b.dataset.s === st.s));
+}
+document.getElementById("states").addEventListener("click", e => { if (e.target.dataset.s) { st.s = e.target.dataset.s; render(); } });
+render();
+</script>
+</body>
+</html>

@@ -824,6 +824,14 @@ export default function VPlayerPage() {
 
     activateNoSleep()
 
+    // ROUE (#144, contrat roue.md §5.1) — l'appui est un simple BUTTON : le serveur l'ignore hors SPINNING ou
+    // pour une autre équipe que celle qui a la main, et ne le consigne jamais (pas de TIME, donc pas d'accusé à
+    // attendre ni de renvoi) ; envoi direct, sans useAckedSend.
+    if (gameState.question?.TYPE === 'ROUE') {
+      sendMessage('BUTTON', { ID: bumper.id, button: 'A' })
+      return
+    }
+
     // #248 — le buzz attend l'accusé du serveur (TIME > 0 sur son bumper) et se
     // renvoie tant qu'il n'est pas venu ; pendant une coupure il est retenu et
     // envoyé à la reliaison (un seul appui par question, contexte revalidé).

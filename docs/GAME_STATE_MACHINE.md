@@ -320,6 +320,164 @@ if e.state.Phase != PhaseReady {
 
 **`ForceReady()` (fonction de débogage, admin)** : saute l'attente des PONG mais **respecte toujours** la conformité des participants — voir arbitrage G du plan #172.
 
+## Type de jeu ROUE — Roue de la Fortune (v12.0.0, #144, #145)
+
+Contrat de référence : `contracts/roue.md`. Livré dans la v12.0.0 (moteur, actions, configuration, éditeur et écrans) ;
+procédure de partie complète : `tests/procedures/roue/partie/`.
+
+### Vue d'ensemble
+
+Comme RAFALE, ROUE n'ajoute **aucune phase** à la machine principale (STOPPED / PREPARE / READY / COUNTDOWN /
+STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulement interne est porté par
+`ROUE_SUBPHASE` pendant `STARTED`. Une question ROUE = une manche = une phrase à deviner.
+
+- **Tour** : les 7 étapes jouées par l'équipe qui a la main, du lancer de la roue à « Tour suivant » / « Équipe suivante ».
+- **Cagnotte de manche** : gain temporaire par équipe (`ROUE_TEAM_BANK`). Aucun score n'est modifié pendant la manche ;
+  le crédit n'intervient qu'à la résolution (`ANSWER` → `SOLVED`, `ROUE_ANSWER`).
+- **Le serveur tire la case** au moment où l'arrêt est demandé (buzz de l'équipe qui a la main, `ROUE_STOP`, ou durée
+  maximale `SPIN_MAX_MS` comptée après la montée). Les écrans n'ont aucune horloge à synchroniser : ils animent à réception.
+- **Montée** : `SPINNING` se déroule en deux temps, distingués par `ROUE_WHEEL.FULL_SPEED`. La montée dure
+  `SPIN_UP_MS` (1 tour : `2 × SPIN_PERIOD_MS`, 5 s par défaut) ; pendant ce temps, personne ne peut arrêter la roue (`ROUE_STOP` refusé `NOT_FULL_SPEED`,
+  appui ignoré). À la fin de la montée, `FULL_SPEED = true` : l'arrêt devient possible.
+
+### Sous-phases (`ROUE_SUBPHASE`)
+
+| Sous-phase | `ROUE_STEP` | Description |
+|---|---|---|
+| `""` | 0 | Hors tour (manche non démarrée ou `SOLVED`) |
+| `TURN` | 1 | Roue prête, en attente du lancer (ou, si plus aucune consonne, des boutons de fin) |
+| `SPINNING` | 2 | Roue qui tourne ; montée (`FULL_SPEED = false`, 1 tour) puis pleine vitesse (`FULL_SPEED = true`) ; arrêt au buzz, à `ROUE_STOP` ou après `SPIN_MAX_MS`, seulement en pleine vitesse |
+| `STOPPING` | 3 | Case tirée (`STOP = {TO, DURATION_MS}`), freinage ; effet appliqué à la fin du freinage |
+| `LETTER` | 4 | Attente d'une consonne (`ROUE_LETTER`) — l'équipe l'annonce à voix haute avant |
+| `LIT` | 5 | Consonne présente : ses cases sont éclairées (`*`), retournement à l'admin / l'animateur |
+| `REVEALING` | 5 | Retournement des cases, une toutes les `FLIP_INTERVAL_MS` (minuterie serveur) |
+| `ANSWER` | 6 | Étape « Réponse » : `ROUE_ANSWER` (un bouton) ou directement un bouton de l'étape 7 |
+| `TURN_END` | 7 | Fin du tour : gain ajouté à la cagnotte ; `ROUE_NEXT` avec `HAND` = `SAME` ou `NEXT` |
+| `SOLVED` | 0 | Phrase résolue ou dévoilée (`ROUE_REVEAL`) ; fin de manche, action `STOP` existante |
+
+> **Numérotation de `ROUE_STEP`** : le contrat fixe les étapes 1 à 7 sans chiffrer `LETTER`, `LIT` et `SOLVED`. Le
+> backend affecte `LETTER` = 4, `LIT` et `REVEALING` = 5, `SOLVED` = 0 (fonction `roueStepOf`,
+> `internal/game/roue.go`). Ces valeurs sont les valeurs livrées.
+
+### Les 7 étapes et le bandeau
+
+| Étape | Nom affiché | Qui agit |
+|---|---|---|
+| 1 | Lancer la roue | Admin ou animateur : `ROUE_SPIN` |
+| 2 | Arrêt de la roue | Buzz de l'équipe qui a la main (buzzer ou tablette), `ROUE_STOP` (« Forcer l'arrêt »), ou durée maximale |
+| 3 | Affichage de la case | Serveur : case tirée, freinage |
+| 3 bis | *(à voix haute)* | L'équipe annonce une consonne — aucun appareil, aucun changement d'état |
+| 4 | Sélection de la consonne | Admin ou animateur : `ROUE_LETTER` |
+| 5 | Affichage des cases | Admin ou animateur : `ROUE_FLIP` (« Retourner les cases ») — jamais automatique |
+| 5 bis | *(à voix haute)* | L'équipe propose une réponse, ou n'en propose pas |
+| 6 | Réponse | Admin ou animateur : `ROUE_ANSWER` (« Réponse validée », **un seul bouton** — la réponse est un bonus) |
+| 7 | Fin du tour | Admin ou animateur : `ROUE_NEXT` avec `HAND` = `SAME` (« Tour suivant ») ou `NEXT` (« Équipe suivante ») |
+
+```
+START ─► 1 TURN ─ROUE_SPIN─► 2 SPINNING ─buzz / ROUE_STOP / durée max─► 3 STOPPING ─fin du freinage─┐
+           ▲                                                                                         │
+           │        case valeur ─► 4 LETTER ─ROUE_LETTER (présente)─► LIT ─ROUE_FLIP─► REVEALING ─► 6 ANSWER
+           │        Banqueroute / Tour perdu ───────────────┐      (absente / déjà proposée)   │         │ juste
+           └──────────── ROUE_NEXT ──────────────────── 7 TURN_END ◄───────────────────────────┴── fausse / aucune
+                                                                                          SOLVED ◄─────┘
+   toute sous-phase ─ROUE_REVEAL─► SOLVED (sans gagnant)          SOLVED ─STOP (action existante)─► STOPPED
+```
+
+### Boutons de fin de tour (étape 7)
+
+L'admin ou l'animateur décide. Le serveur indique seulement le bouton **conseillé** (`ROUE_NEXT_DEFAULT`) :
+
+| Mode | Lettre trouvée | Pas de lettre trouvée (absente, déjà proposée, Banqueroute, Tour perdu, plus de consonne) |
+|---|---|---|
+| `SOLO` | `SAME` (seul bouton) | `SAME` (seul bouton) |
+| `CHACUN_SON_TOUR` | `NEXT` | `NEXT` |
+| `TANT_QUE_JE_GAGNE` | `SAME` | `NEXT` |
+
+« Équipe suivante » (`ROUE_NEXT_TEAM`) = équipe suivante dans la rotation (`rotateTeam`). En `SOLO`, `NEXT` est refusé.
+
+### Règle « un événement par action »
+
+`ROUE_LAST_EVENT` ne porte qu'un événement ; une action en émet au plus un (`SEQ` augmente de 1) :
+
+- l'entrée en `TURN_END` provoquée par une **cause** (`LETTER_MISS`, `LETTER_REPEAT`, `BANKRUPT`, `LOSE_TURN`) ne
+  émet **que l'événement de cause** : la fin de tour se lit dans `ROUE_SUBPHASE = TURN_END`, pas dans l'événement ;
+- l'événement `TURN_END` n'est émis que par `ROUE_NEXT` reçu en `ANSWER`, ou en `TURN` sans consonne restante ;
+- `ROUE_NEXT` reçu en `TURN_END` n'émet aucun événement.
+
+Kinds : `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | LETTER_REPEAT | FLIP | ANSWER_OK | TURN_END | PASS | REVEAL`.
+
+### Transitions principales
+
+| Depuis | Déclencheur | Effet |
+|---|---|---|
+| `START` | — | Plateau construit, cagnottes à 0, `ROUE_WHEEL` figé (copie de la configuration), main à la première équipe, `TURN` |
+| `TURN` | `ROUE_SPIN` (si consonnes restantes) | `SPINNING`, `FULL_SPEED = false`, minuterie de montée `SPIN_UP_MS` armée (la durée maximale n'est pas encore armée) |
+| `SPINNING` (montée) | Fin de `SPIN_UP_MS` | `FULL_SPEED = true`, minuterie `SPIN_MAX_MS` armée à cet instant |
+| `SPINNING` (montée) | `ROUE_STOP` (admin ou animateur) | Refusé `NOT_FULL_SPEED`, état et minuterie de montée inchangés |
+| `SPINNING` (montée) | Appui `BUTTON` (joueur, buzzer, tablette) | Ignoré en silence |
+| `SPINNING` (pleine vitesse) | Buzz de l'équipe qui a la main, `ROUE_STOP`, fin de `SPIN_MAX_MS` | Tirage uniforme d'une case, `STOPPING`, `FULL_SPEED = false` |
+| `STOPPING` | Fin de `DURATION_MS` | Application de la case : valeur → `LETTER` ; Banqueroute → cagnotte à 0, `TURN_END` ; Tour perdu → `TURN_END` |
+| `LETTER` | `ROUE_LETTER` | Présente → `LIT` ; absente ou déjà proposée → `TURN_END` ; voyelle ou non-lettre → refus, reste en `LETTER` |
+| `LIT` | `ROUE_FLIP` | `REVEALING` ; événement `FLIP` avec `COUNT` |
+| `REVEALING` | Fin de `COUNT × FLIP_INTERVAL_MS` | `ANSWER` |
+| `ANSWER` | `ROUE_ANSWER` | Réponse validée : gain ajouté à la cagnotte, `SOLVED`, crédit |
+| `ANSWER` / `TURN` sans consonne | `ROUE_NEXT {HAND}` | Gain ajouté, `TURN_END` (ou `TURN`), main selon `HAND` |
+| `TURN` | `ROUE_PASS` (hors `SOLO`) | Rotation immédiate, cagnotte conservée |
+| toute sous-phase sauf `SOLVED` | `ROUE_REVEAL` | `SOLVED` sans gagnant, aucun crédit |
+| `SOLVED` | `STOP` existant | Fin de manche, nettoyage (`stopUnsafe`) |
+
+Appuis ignorés sans effet ni diffusion : buzzer d'une autre équipe, appui hors `SPINNING`, second appui pendant
+`STOPPING`. En mode `ROUE`, un appui ne pose pas le statut `PAUSE` d'un buzzer.
+
+### Minuteries, pause et annulation
+
+- Quatre minuteries serveur : montée (`SPIN_UP_MS`), durée maximale de rotation (`SPIN_MAX_MS`, armée seulement à la fin
+  de la montée, donc arrêt automatique à `SPIN_UP_MS + SPIN_MAX_MS` après le lancer), freinage (`STOP.DURATION_MS`),
+  retournement (`COUNT × FLIP_INTERVAL_MS`). Chacune porte une génération ; une minuterie périmée ne fait rien.
+- `PAUSE` suspend la minuterie en cours (montée, durée maximale, freinage ou retournement ; une seule est armée à la fois
+  par manche). Une montée suspendue reprend pour sa durée restante, `FULL_SPEED` reste `false` ;
+  `CONTINUE` les reprend. Toute action `ROUE_*` est refusée en phase `PAUSED`.
+- Toutes les minuteries sont annulées à l'arrêt de manche, à `ROUE_REVEAL` et à `NEW_GAME`.
+- Entracte : les actions `ROUE_*` sont refusées (comportement par défaut de la liste blanche d'entracte).
+
+### Champs GameState ROUE
+
+Tous présents, **sans `omitempty`**, jamais `null` pour les maps et tableaux, **jamais persistés** (remis à vide dans
+`Ready`, `stopUnsafe` et `InitGameWith`). Diffusés à admin, animateur, TV et tablettes ; jamais aux buzzers.
+Liste complète et types : `docs/DATA_MODELS.md` § « Modèles v12.0.0 — Roue de la Fortune ».
+
+```go
+ROUE_SUBPHASE            string         // "" | TURN | SPINNING | STOPPING | LETTER | LIT | REVEALING | ANSWER | TURN_END | SOLVED
+ROUE_STEP                int            // 1..7 (0 hors tour)
+ROUE_TEAMS               []string       // ordre de rotation
+ROUE_CURRENT_TEAM        string         // équipe qui a la main
+ROUE_NEXT_TEAM           string         // ANSWER / TURN_END seulement
+ROUE_NEXT_DEFAULT        string         // SAME | NEXT (bouton conseillé), ANSWER / TURN_END seulement
+ROUE_TEAM_BANK           map[string]int // cagnotte de manche
+ROUE_TURN_GAIN           int            // gain du tour, pas encore ajouté à la cagnotte
+ROUE_BOARD               RoueBoard      // { COLS: 14, ROWS: [...] } — "_" caché, "*" caché éclairé (sous-phase LIT)
+ROUE_LETTERS             []RoueLetter   // consonnes proposées (LETTER, TEAM, HIT)
+ROUE_CONSONANTS_LEFT     bool
+ROUE_WHEEL               RoueWheel      // LAYOUT, durées, SPIN_UP_MS, FULL_SPEED, SEGMENTS, CURRENT, STOP
+ROUE_LAST_EVENT          RoueEvent      // SEQ, KIND, TEAM, LETTER, COUNT, VALUE, GAIN
+ROUE_WINNER              string
+ROUE_AWARDS              map[string]int
+```
+
+### Actions WebSocket ROUE
+
+Détail (payloads, émetteurs, codes d'erreur) : `docs/WEBSOCKET_PROTOCOL.md` § « ROUE ». Résumé : `ROUE_SET_TEAMS`,
+`ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL`
+(client → serveur) ; `ROUE_ERROR` (serveur → émetteur seul). L'arrêt par les joueurs passe par l'action `BUTTON`
+existante : aucun changement de protocole BuzzClick.
+
+### Implémentation (Go)
+
+- `internal/game/roue.go` : sous-phases, minuteries, transitions, crédit (sans logique dans `engine.go`).
+- `internal/game/roue_board.go` : repli des accents, mise en lignes, validation de la phrase.
+- `internal/game/roue_wheel.go` : construction de la roue (§10.1 du contrat), correction du pas.
+- `cmd/server/roue.go` : `handleRoueAction`, rappels LED, ambiance et sons (hors `main.go`).
+
 ## Chronomètre de Réponse Configurable (v11.1.0, #219)
 
 ### Vue d'ensemble

@@ -121,3 +121,24 @@
 - La couleur se choisit en cliquant la pastille (palette), jamais par un champ séparé. _(v11.4.0, rename_color_delete, #285, 2026-11-05)_
 - L'icône ne se téléverse que sur une catégorie personnalisée ; les intégrées gardent leur emoji et ne sont jamais supprimables. _(v11.4.0, #285, 2026-11-05)_
 - Supprimer une catégorie utilisée demande « réaffecter à Sans catégorie » ou « supprimer aussi » ; les points d'historique sont regroupés dans « Sans catégorie » (sauvegarde + confirmation). _(v11.4.0, #285, 2026-11-05)_
+
+## tv_roue_started (composant Wheel, Roue de la Fortune)
+- Un seul agencement : équipes en haut, plateau plein écran, roue toujours affichée. La forme de la roue (bandeau ou arc) et l'affichage des lettres proposées sont des réglages de la question, jamais un réglage global. _(v12.0.0, #144 #145, GATE 1.5 itér. 1–5, validée 2026-11-16)_
+- Pointeur fixe, contenu qui glisse, position normalisée modulo n : même logique que `tv_rafale_started`. _(v12.0.0, #144, 2026-11-16)_
+
+## admin_game_roue / anim_roue (Roue de la Fortune)
+- Bandeau des 7 étapes ; retournement des cases au bouton, jamais automatique. _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
+- Étape 6 : un seul bouton « Réponse validée » ; jamais de bouton « réponse fausse ». _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
+- Étape 7 : deux boutons « Tour suivant » et « Équipe suivante ». Le libellé « Main suivante » est refusé. _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
+- `anim_roue` : pas de texte explicatif dans la zone centrale ; pas de bouton découpé en plusieurs (inadapté au doigt) ; l'animateur dispose des commandes (lecture seule refusée). _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
+
+## admin_settings (réglages de la roue)
+- Jamais une liste de cases à saisir : 4 paramètres (maximum, pas, BANQUEROUTE, PERDU), roue générée. _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
+- Valeurs toutes différentes ; un pas qui ne divise pas le maximum est corrigé, pas refusé ; PERDU à mi-tour. _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
+- Libellés fixés des cases spéciales : « 💸 BANQUE / ROUTE » et « ⏭ TOUR / PERDU ». _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
+
+## vplayer_roue (tablette)
+- Plateau sur toute la largeur ; paysage et portrait. _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
+
+## (toutes maquettes) — exemples exacts
+- Un exemple de maquette doit être exact : une consonne « absente » ne figure pas dans la phrase affichée. _(v12.0.0, #145, GATE 1.5, 2026-11-16)_

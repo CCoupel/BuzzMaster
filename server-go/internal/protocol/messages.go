@@ -158,6 +158,19 @@ const (
 	ActionRafaleValidate   = "RAFALE_VALIDATE"   // Admin/Anim → Server: current answer judged correct
 	ActionRafaleInvalidate = "RAFALE_INVALIDATE" // Admin/Anim → Server: current answer judged incorrect
 	ActionRafaleSetTeams   = "RAFALE_SET_TEAMS"  // Admin → Server: participating teams + play order
+	// ROUE actions (v12.0.0, #144 — contracts/roue.md §8). Client → server:
+	// admin for all, animateur for the 7 step buttons (never SET_TEAMS, PASS,
+	// REVEAL). ROUE_ERROR is Server → emitter only.
+	ActionRoueSetTeams = "ROUE_SET_TEAMS" // Admin → Server: participating teams + rotation order
+	ActionRoueSpin     = "ROUE_SPIN"      // Admin/Anim → Server: step 1, spin the wheel
+	ActionRoueStop     = "ROUE_STOP"      // Admin/Anim → Server: step 2, « Forcer l'arrêt »
+	ActionRoueLetter   = "ROUE_LETTER"    // Admin/Anim → Server: step 4, the team's consonant
+	ActionRoueFlip     = "ROUE_FLIP"      // Admin/Anim → Server: step 5, « Retourner les cases »
+	ActionRoueAnswer   = "ROUE_ANSWER"    // Admin/Anim → Server: step 6, « Réponse validée »
+	ActionRoueNext     = "ROUE_NEXT"      // Admin/Anim → Server: step 7, « Tour suivant » / « Équipe suivante »
+	ActionRouePass     = "ROUE_PASS"      // Admin → Server: pass the hand at once
+	ActionRoueReveal   = "ROUE_REVEAL"    // Admin → Server: « Dévoiler » the phrase, no winner
+	ActionRoueError    = "ROUE_ERROR"     // Server → emitter: refused action, state unchanged
 	// RAFALE_ANSWER/RAFALE_TICK are SERVER → CLIENT only (contract §5.2) —
 	// deliberately absent from internal/server/inbound_allowlist.go (see
 	// inbound_allowlist_rafale_test.go's regression guard). RAFALE_ANSWER
@@ -588,6 +601,25 @@ type QCMHintPayload struct {
 // SetVirtualPlayerLimitPayload for SET_VIRTUAL_PLAYER_LIMIT action
 type SetVirtualPlayerLimitPayload struct {
 	Limit int `json:"LIMIT"` // Maximum number of virtual players
+}
+
+// RoueSetTeamsPayload is an alias for MemorySetTeamsPayload ({TEAMS: [...]}).
+type RoueSetTeamsPayload = MemorySetTeamsPayload
+
+// RoueLetterPayload for ROUE_LETTER.
+type RoueLetterPayload struct {
+	Letter string `json:"LETTER"`
+}
+
+// RoueNextPayload for ROUE_NEXT: HAND is SAME (« Tour suivant ») or NEXT (« Équipe suivante »).
+type RoueNextPayload struct {
+	Hand string `json:"HAND"`
+}
+
+// RoueErrorPayload for ROUE_ERROR (to the emitter only).
+type RoueErrorPayload struct {
+	Code    string `json:"CODE"`
+	Message string `json:"MESSAGE"`
 }
 
 // RafaleSetTeamsPayload is an alias for MemorySetTeamsPayload — same
@@ -1208,8 +1240,14 @@ var TVOnlyGameFields = []string{
 
 // SerializeForTV is SerializeForWebClient() plus TVOnlyGameFields stripped.
 func (m *Message) SerializeForTV() ([]byte, error) {
-	return m.serializeFiltered(TVOnlyGameFields)
+	return m.serializeFilteredFor(TVOnlyGameFields, false, "", true)
 }
+
+// SecretQuestionFields lists QUESTION fields that never leave for the TV nor
+// the tablettes, in any phase (ROUE: the phrase to guess, contracts/roue.md §9
+// — the fully revealed board is enough after the resolution). The admin and
+// the animateur keep them.
+var SecretQuestionFields = []string{"ROUE_PHRASE"}
 
 // serializeFiltered is the shared implementation behind SerializeForWebClient
 // and SerializeForVPlayerCommon (#128): strips AdminOnlyBumperFields from
@@ -1237,13 +1275,13 @@ func (m *Message) SerializeForTV() ([]byte, error) {
 //   - "teams"   → map[name]*Team   (not "TEAMS"   / slice)
 //   - "GAME"    → GameState node
 func (m *Message) serializeFiltered(extraGameFields []string) ([]byte, error) {
-	return m.serializeFilteredFor(extraGameFields, false, "")
+	return m.serializeFilteredFor(extraGameFields, false, "", false)
 }
 
 // serializeFilteredFor is serializeFiltered plus, for a tablette (vplayer), the
 // #258 answer filter (filterVPlayerAnswers) applied as the LAST step, with
 // recipientID = the bound player ("" = unbound / shared frame: everything neutral).
-func (m *Message) serializeFilteredFor(extraGameFields []string, vplayer bool, recipientID string) ([]byte, error) {
+func (m *Message) serializeFilteredFor(extraGameFields []string, vplayer bool, recipientID string, tv bool) ([]byte, error) {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(m.Msg, &raw); err != nil {
 		// Not a GameData-shaped payload (or MSG isn't even an object, e.g.
@@ -1269,6 +1307,13 @@ func (m *Message) serializeFilteredFor(extraGameFields []string, vplayer bool, r
 		}
 		for _, field := range extraGameFields {
 			delete(gameNode, field)
+		}
+		if tv {
+			if q, ok := gameNode["QUESTION"].(map[string]interface{}); ok {
+				for _, field := range SecretQuestionFields {
+					delete(q, field)
+				}
+			}
 		}
 	} else if _, hasBumpers := raw["bumpers"]; !hasBumpers {
 		// Neither "GAME" nor "bumpers" present — this isn't a GameData
@@ -1319,7 +1364,7 @@ func (m *Message) SerializeForWebClient() ([]byte, error) {
 // PREPARE/READY, or an unidentified player) — an update must never be
 // silently dropped or narrower than this.
 func (m *Message) SerializeForVPlayerCommon() ([]byte, error) {
-	return m.serializeFilteredFor(VPlayerOnlyGameFields, true, "")
+	return m.serializeFilteredFor(VPlayerOnlyGameFields, true, "", false)
 }
 
 // vplayerReducedPhases are the GAME.PHASE values during which a VPlayer's own
@@ -1387,7 +1432,7 @@ func (m *Message) SerializeForVPlayer(playerID string) ([]byte, error) {
 	phase, _ := gameNode["PHASE"].(string)
 	if !vplayerReducedPhases[phase] {
 		// #258: per-recipient frame (own team intact, other teams neutral while answers are open)
-		return m.serializeFilteredFor(VPlayerOnlyGameFields, true, playerID)
+		return m.serializeFilteredFor(VPlayerOnlyGameFields, true, playerID, false)
 	}
 
 	bumpers, ok := raw["bumpers"].(map[string]interface{})
@@ -1570,7 +1615,10 @@ func filterVPlayerAnswers(raw map[string]interface{}, recipientID, phase string)
 			return st == "REVEALED" || st == "DONE"
 		}
 		if q, ok := game["QUESTION"].(map[string]interface{}); ok {
-			delete(q, "EXPLANATION") // animateur's note (#168): never on a tablette, any phase
+			delete(q, "EXPLANATION")                     // animateur's note (#168): never on a tablette, any phase
+			for _, field := range SecretQuestionFields { // ROUE phrase (#145): never on a tablette, any phase
+				delete(q, field)
+			}
 			if phase != "REVEALED" {
 				delete(q, "QCM_CORRECT")
 				delete(q, "ANSWER")
