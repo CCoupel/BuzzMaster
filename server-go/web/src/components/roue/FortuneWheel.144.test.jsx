@@ -19,8 +19,8 @@ describe('FortuneWheel — adaptateur (#144, wheel-component.md §8)', () => {
     expect(s[3]).toMatchObject({ label: 'TOUR\nPERDU', icon: '⏭' })
   })
   it('motion selon la sous-phase', () => {
-    expect(fortuneMotion(wheel(), 'SPINNING')).toEqual({ mode: 'spin', periodMs: 2500 })
-    expect(fortuneMotion(wheel({ STOP: { TO: 2, DURATION_MS: 4000 } }), 'STOPPING')).toEqual({ mode: 'land', to: 2, durationMs: 4000, minTurns: 1, periodMs: 2500 })
+    expect(fortuneMotion(wheel(), 'SPINNING')).toEqual({ mode: 'spin', periodMs: 2500, rampMs: 800 })
+    expect(fortuneMotion(wheel({ STOP: { TO: 2, DURATION_MS: 4000 } }), 'STOPPING')).toEqual({ mode: 'land', to: 2, durationMs: 4000, minTurns: 1, periodMs: 2500, rampMs: 800 })
     expect(fortuneMotion(wheel(), 'TURN')).toBeNull()
   })
   it('layout arc / strip et aria-label du segment courant', () => {
