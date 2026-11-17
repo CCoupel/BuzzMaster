@@ -29,7 +29,7 @@ describe('RouePanel — commandes admin (#144, M2)', () => {
     expect(container.querySelector('.roue-step.cur').textContent).toMatch(/^1/)
   })
   it('étape 2 : « Forcer l\'arrêt » → ROUE_STOP', () => {
-    const { send } = setup(gs({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2 }))
+    const { send } = setup(gs({ ROUE_SUBPHASE: 'SPINNING', ROUE_STEP: 2, ROUE_WHEEL: { ...gs().ROUE_WHEEL, SPIN_UP_MS: 10000, FULL_SPEED: true } }))
     fireEvent.click(screen.getByText(/Forcer l'arrêt/))
     expect(send).toHaveBeenCalledWith('ROUE_STOP', {})
   })

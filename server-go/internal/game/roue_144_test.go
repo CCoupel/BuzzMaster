@@ -110,6 +110,7 @@ func (r *roueRig) land(idx int) {
 	r.t.Helper()
 	r.idx.Store(int64(idx))
 	r.mustOK(r.e.RoueSpin())
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	r.waitSub(afterLanding(r, idx))
 }
@@ -208,6 +209,7 @@ func TestRoue144_FullTurn_SevenSteps(t *testing.T) {
 	if s := r.st(); s.RoueSubPhase != RoueSubSpinning || s.RoueStep != 2 || s.RoueLastEvent.Kind != RoueEvSpin {
 		t.Fatalf("après ROUE_SPIN : %q step %d event %s", s.RoueSubPhase, s.RoueStep, s.RoueLastEvent.Kind)
 	}
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	s := r.st()
 	if s.RoueSubPhase != RoueSubStopping || s.RoueStep != 3 || s.RoueWheel.Stop == nil || s.RoueWheel.Stop.To != wIdx100 || s.RoueWheel.Stop.DurationMs <= 0 {
@@ -345,6 +347,7 @@ func TestRoue144_Bankrupt_ZeroesThePotAndEndsTheTurn(t *testing.T) {
 	}
 	r.idx.Store(wIdxBanq)
 	r.mustOK(r.e.RoueSpin())
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	seq := r.st().RoueLastEvent.Seq // SPIN posé ; le freinage n'a pas encore produit d'événement
 	r.waitSub(RoueSubTurnEnd)
@@ -377,6 +380,7 @@ func TestRoue144_LoseTurn_KeepsThePotAndEndsTheTurn(t *testing.T) {
 	r.mustOK(r.e.RoueNext(RoueHandSame))
 	r.idx.Store(wIdxPerdu)
 	r.mustOK(r.e.RoueSpin())
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	seq := r.st().RoueLastEvent.Seq
 	r.waitSub(RoueSubTurnEnd)
@@ -562,6 +566,7 @@ func TestRoue144_Events_SeqStrictlyIncreasesByOnePerAction(t *testing.T) {
 	r.idx.Store(wIdx100)
 	r.mustOK(r.e.RoueSpin())
 	check("ROUE_SPIN")
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	r.waitSub(RoueSubLetter)
 	check("fin du freinage (LAND_VALUE)")
@@ -633,6 +638,7 @@ func TestRoue144_ActionsRefusedInWrongSubPhase(t *testing.T) {
 	// SPINNING : SPIN refusé, LETTER refusé
 	r.wantErr(r.e.RoueSpin(), RoueErrWrongSubPhase)
 	r.wantErr(r.e.RoueLetter("N"), RoueErrWrongSubPhase)
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	// STOPPING : un second ROUE_STOP est refusé, sans nouveau tirage
 	d := r.draws.Load()
@@ -734,6 +740,7 @@ func TestRoue144_Draw_UsesTheSourceOnceOverAllSegmentsAtTheStopRequest(t *testin
 	if r.draws.Load() != 0 {
 		t.Fatalf("aucun tirage au lancer")
 	}
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	if r.draws.Load() != 1 || r.lastN.Load() != 11 {
 		t.Errorf("un tirage sur 11 cases attendu, got %d tirage(s) sur %d", r.draws.Load(), r.lastN.Load())
@@ -905,6 +912,7 @@ func TestRoue144_Timers_CancelledByRevealDuringBraking(t *testing.T) {
 	r.e.mu.Unlock()
 	r.idx.Store(wIdx100)
 	r.mustOK(r.e.RoueSpin())
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	r.mustOK(r.e.RoueReveal())
 	time.Sleep(200 * time.Millisecond)
@@ -919,6 +927,7 @@ func TestRoue144_Timers_CancelledByStopDuringBraking(t *testing.T) {
 	r.e.roue.stopDuration = 80 * time.Millisecond
 	r.e.mu.Unlock()
 	r.mustOK(r.e.RoueSpin())
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	r.e.Stop()
 	time.Sleep(200 * time.Millisecond)
@@ -959,6 +968,7 @@ func TestRoue144_Pause_FreezesTheBrakingTimer(t *testing.T) {
 	r.e.mu.Unlock()
 	r.idx.Store(wIdx100)
 	r.mustOK(r.e.RoueSpin())
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	r.e.Pause()
 	time.Sleep(300 * time.Millisecond) // bien plus que la durée de freinage
@@ -1013,6 +1023,7 @@ func TestRoue144_InitGame_ClearsEverythingAndCancelsTimers(t *testing.T) {
 	r.e.roue.stopDuration = 80 * time.Millisecond
 	r.e.mu.Unlock()
 	r.mustOK(r.e.RoueSpin())
+	r.waitClimbOver()
 	r.mustOK(r.e.RoueStop())
 	r.e.InitGame()
 	time.Sleep(200 * time.Millisecond)

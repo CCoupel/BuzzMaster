@@ -20,7 +20,7 @@ describe('FortuneWheel — adaptateur (#144, wheel-component.md §8)', () => {
   })
   it('motion selon la sous-phase', () => {
     expect(fortuneMotion(wheel(), 'SPINNING')).toMatchObject({ mode: 'spin', periodMs: 2500, accelTurns: 2 })
-    expect(fortuneMotion(wheel({ STOP: { TO: 2, DURATION_MS: 4000 } }), 'STOPPING')).toMatchObject({ mode: 'land', to: 2, durationMs: 4000, minTurns: 1, periodMs: 2500, accelTurns: 2 })
+    expect(fortuneMotion(wheel({ STOP: { TO: 2, DURATION_MS: 4000 } }), 'STOPPING')).toEqual({ mode: 'land', to: 2, durationMs: 4000, minTurns: 1, periodMs: 2500 }) // freinage toujours depuis la croisière
     expect(fortuneMotion(wheel(), 'TURN')).toBeNull()
   })
   it('layout arc / strip et aria-label du segment courant', () => {

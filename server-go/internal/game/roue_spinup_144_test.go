@@ -126,37 +126,39 @@ func TestRoueSpinUp144_Buzz_AnotherTeamIgnoredEvenAtFullSpeed(t *testing.T) {
 
 // ---- ROUE_STOP selon l'origine ---------------------------------------------------------------------------------
 
-func TestRoueSpinUp144_Stop_AnimRefusedDuringClimb_AcceptedAtFullSpeed(t *testing.T) {
+func TestRoueSpinUp144_Stop_RefusedDuringClimb_AcceptedAtFullSpeed(t *testing.T) {
 	r := newRoueRig(t, roueTestPhrase, RoueModeSolo, "", "red")
 	r.setUp(200, 10000)
 	r.mustOK(r.e.RoueSpin())
 	seq := r.st().RoueLastEvent.Seq
-	r.wantErr(r.e.RoueStopFrom(RoueStopByAnim), RoueErrNotFullSpeed)
-	if r.st().RoueSubPhase != RoueSubSpinning || r.draws.Load() != 0 || r.st().RoueLastEvent.Seq != seq {
-		t.Errorf("le refus NOT_FULL_SPEED laisse l'état inchangé")
+	before := r.changes.Load()
+	// « Forcer l'arrêt » (admin comme animateur : même ROUE_STOP) est refusé pendant la montée (contrat §5.1)
+	r.wantErr(r.e.RoueStop(), RoueErrNotFullSpeed)
+	if r.st().RoueSubPhase != RoueSubSpinning || r.draws.Load() != 0 || r.st().RoueLastEvent.Seq != seq || r.changes.Load() != before || r.fullSpeed() {
+		t.Errorf("le refus NOT_FULL_SPEED laisse l'état inchangé (aucun tirage, aucun événement, aucune diffusion)")
 	}
-	r.waitClimbOver()
-	r.mustOK(r.e.RoueStopFrom(RoueStopByAnim))
-	if r.st().RoueSubPhase != RoueSubStopping {
-		t.Errorf("animateur à pleine vitesse : accepté (%q)", r.st().RoueSubPhase)
+	r.waitClimbOver() // la minuterie de montée n'a pas été touchée par le refus
+	if r.st().RoueSubPhase != RoueSubSpinning {
+		t.Fatalf("la roue tourne toujours à pleine vitesse : %q", r.st().RoueSubPhase)
+	}
+	r.mustOK(r.e.RoueStop())
+	if r.st().RoueSubPhase != RoueSubStopping || r.draws.Load() != 1 {
+		t.Errorf("à pleine vitesse ROUE_STOP est accepté : %q tirages=%d", r.st().RoueSubPhase, r.draws.Load())
 	}
 }
 
-func TestRoueSpinUp144_Stop_AdminAcceptedDuringClimb_CancelsTheClimbTimer(t *testing.T) {
-	r := newRoueRig(t, roueTestPhrase, RoueModeSolo, "", "red")
-	r.setUp(120, 10000)
-	r.idx.Store(wIdx90)
+// Aucune exception : la roue ne freine jamais depuis la montée (la minuterie de montée suit son cours).
+func TestRoueSpinUp144_Climb_NothingStopsTheWheel_ButPauseRevealAndStop(t *testing.T) {
+	r := newRoueRig(t, roueTestPhrase, RoueModeChacunSonTour, "", "red", "blue")
+	r.setUp(150, 10000)
 	r.mustOK(r.e.RoueSpin())
-	r.mustOK(r.e.RoueStop()) // admin : « Forcer l'arrêt » à tout moment de SPINNING
-	s := r.st()
-	if s.RoueSubPhase != RoueSubStopping || s.RoueWheel.Stop == nil || s.RoueWheel.Stop.To != wIdx90 || s.RoueWheel.FullSpeed {
-		t.Fatalf("arrêt forcé pendant la montée : STOPPING, STOP posé, FULL_SPEED=false — %q %+v %v", s.RoueSubPhase, s.RoueWheel.Stop, s.RoueWheel.FullSpeed)
+	r.wantErr(r.e.RoueStop(), RoueErrNotFullSpeed)
+	r.e.ProcessButtonPress("b-red", time.Now().UnixMicro(), "A")
+	r.e.ProcessButtonPress("b-blue", time.Now().UnixMicro(), "A")
+	if r.st().RoueSubPhase != RoueSubSpinning || r.st().RoueWheel.Stop != nil || r.draws.Load() != 0 {
+		t.Fatalf("pendant la montée rien n'arrête la roue : %q stop=%+v", r.st().RoueSubPhase, r.st().RoueWheel.Stop)
 	}
-	r.waitSub(RoueSubLetter)
-	time.Sleep(250 * time.Millisecond) // bien après l'échéance de montée
-	if r.fullSpeed() || r.st().RoueSubPhase != RoueSubLetter || r.draws.Load() != 1 {
-		t.Errorf("l'échéance de montée annulée ne doit plus agir : %q FULL_SPEED=%v tirages=%d", r.st().RoueSubPhase, r.fullSpeed(), r.draws.Load())
-	}
+	r.waitClimbOver()
 }
 
 // ---- échéances périmées ----------------------------------------------------------------------------------------

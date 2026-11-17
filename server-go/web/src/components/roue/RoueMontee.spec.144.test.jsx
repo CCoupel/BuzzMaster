@@ -1,6 +1,6 @@
 /**
  * #144 (v12.0.0) — commandes admin et animateur pendant la montée en 2 tours (contracts/roue.md §5.1, §8).
- * Admin : « Forcer l'arrêt » actif à tout moment de SPINNING (montée comprise). Animateur : grisé tant que
+ * Admin et animateur : « Forcer l'arrêt » grisé tant que
  * FULL_SPEED=false, actif à pleine vitesse ; libellé clair pour ROUE_ERROR NOT_FULL_SPEED. Le serveur reste juge.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
@@ -26,20 +26,26 @@ const teams = { Rouges: { COLOR: [239, 68, 68] }, Bleus: { COLOR: [59, 130, 246]
 const actionsMock = () => ({ setTeams: vi.fn(), spin: vi.fn(), stop: vi.fn(), letter: vi.fn(), flip: vi.fn(), answer: vi.fn(), next: vi.fn(), pass: vi.fn(), reveal: vi.fn() })
 const forcer = () => screen.getByRole('button', { name: /Forcer l'arrêt/ })
 
-describe('Admin (RouePanel) — « Forcer l\'arrêt » à tout moment de SPINNING', () => {
-  it('pendant la montée : actif, un clic envoie ROUE_STOP', () => {
+describe('Admin (RouePanel) — « Forcer l\'arrêt » seulement à pleine vitesse (décision du 2026-11-17)', () => {
+  it('pendant la montée : grisé, un clic n\'envoie rien', () => {
     const a = actionsMock()
     render(<RouePanel gameState={gs({ FULL_SPEED: false })} actions={a} />)
-    expect(forcer().disabled).toBe(false)
+    expect(forcer().disabled).toBe(true)
     fireEvent.click(forcer())
-    expect(a.stop).toHaveBeenCalledTimes(1)
+    expect(a.stop).not.toHaveBeenCalled()
   })
-  it('à pleine vitesse : actif', () => {
+  it('à pleine vitesse : actif, un clic envoie ROUE_STOP', () => {
     const a = actionsMock()
     render(<RouePanel gameState={gs({ FULL_SPEED: true })} actions={a} />)
     expect(forcer().disabled).toBe(false)
     fireEvent.click(forcer())
     expect(a.stop).toHaveBeenCalledTimes(1)
+  })
+  it('devient actif à l\'UPDATE FULL_SPEED=true', () => {
+    const a = actionsMock()
+    const { rerender } = render(<RouePanel gameState={gs({ FULL_SPEED: false })} actions={a} />)
+    rerender(<RouePanel gameState={gs({ FULL_SPEED: true })} actions={a} />)
+    expect(forcer().disabled).toBe(false)
   })
 })
 

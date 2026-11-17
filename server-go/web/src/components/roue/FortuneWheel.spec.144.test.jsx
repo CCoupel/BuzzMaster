@@ -42,8 +42,7 @@ describe('FortuneWheel — spécification', () => {
 
   it('STOPPING : freinage vers STOP.TO avec au moins un tour', () => {
     const m = fortuneMotion(wheel({ STOP: { TO: 2, DURATION_MS: 4000 } }), 'STOPPING')
-    expect(m).toMatchObject({ mode: 'land', to: 2, durationMs: 4000, minTurns: 1, periodMs: 2500, accelTurns: 2 })
-    expect(m.accelMs).toBeUndefined()
+    expect(m).toEqual({ mode: 'land', to: 2, durationMs: 4000, minTurns: 1, periodMs: 2500 }) // freinage toujours depuis la croisière
   })
 
   it('SPINNING : défilement à la période du serveur', () => {
@@ -53,7 +52,6 @@ describe('FortuneWheel — spécification', () => {
   it('SPINNING : accelTurns = SPIN_UP_MS / (2 × SPIN_PERIOD_MS) (le serveur fait foi), plus aucune durée fixe', () => {
     const m = fortuneMotion(wheel({ SPIN_PERIOD_MS: 1000, SPIN_UP_MS: 4000 }), 'SPINNING')
     expect(m.accelTurns).toBeCloseTo(2, 9)
-    expect(m.accelMs).toBeUndefined()
     expect(fortuneMotion(wheel({ SPIN_PERIOD_MS: 6000, SPIN_UP_MS: 24000 }), 'SPINNING').accelTurns).toBeCloseTo(2, 9)
   })
 
