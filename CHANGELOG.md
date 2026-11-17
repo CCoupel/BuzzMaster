@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [12.0.0] - [date de PROD à compléter par deployer] — Roue de la Fortune (#144, #145)
+## [12.0.0] - 2026-11-17 — Roue de la Fortune (#144, #145)
 
 Nouveau type de question **Roue de la Fortune** : une phrase à deviner, des équipes qui tournent la roue, proposent des
 consonnes et tentent la réponse. Les gains sont crédités en points d'équipe à la résolution.
