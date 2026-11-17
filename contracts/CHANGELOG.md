@@ -13,8 +13,9 @@ livré en production (v12.0.0 en cours) : aucun déploiement existant n'est touc
   montée ; `UPDATE` à la fin de la montée) (§4). Additif.
 - **[BREAKING]** Action `BUTTON` en type `ROUE` — un appui de l'équipe qui a la main **pendant la montée** est
   désormais ignoré (il arrêtait la roue) ; l'arrêt par les joueurs n'est accepté qu'à pleine vitesse (§5.1).
-- **[BREAKING]** Action `ROUE_STOP` — venant de l'animateur (`/ws/anim`) pendant la montée : refusée, `ROUE_ERROR`
-  `NOT_FULL_SPEED` (elle était acceptée dès `SPINNING`). Venant de l'admin : inchangée, acceptée à tout moment (§5.1).
+- **[BREAKING]** Action `ROUE_STOP` — pendant la montée : refusée, `ROUE_ERROR` `NOT_FULL_SPEED`, **pour l'admin
+  comme pour l'animateur** (elle était acceptée dès `SPINNING`). Décision utilisateur du 2026-11-17, qui remplace la
+  première rédaction (`689140e6` : admin accepté à tout moment) (§5.1).
 - **[NEW]** Code d'erreur `ROUE_ERROR` : `NOT_FULL_SPEED` (§8.3).
 - **[CHANGED]** Minuteries de `SPINNING` — minuterie de montée (`SPIN_UP_MS`), puis durée maximale (`SPIN_MAX_MS`)
   armée seulement à la fin de la montée : l'arrêt automatique passe de `SPIN_MAX_MS` à `SPIN_UP_MS + SPIN_MAX_MS`
@@ -22,9 +23,10 @@ livré en production (v12.0.0 en cours) : aucun déploiement existant n'est touc
   précisé (§10).
 - **[CHANGED]** Animation de la roue (TV et tablette) — pleine vitesse atteinte en 2 tours à accélération constante ;
   roue non tapable pendant la montée ; client connecté en cours de rotation : vitesse de croisière directe ;
-  freinage depuis la croisière, sauf « Forcer l'arrêt » de l'admin pendant la montée (§6).
+  freinage **toujours** depuis la croisière : aucun freinage depuis la montée (§6).
 - **[CHANGED]** `wheel-component.md` §5 — `spin` : `accelTurns` (montée par distance) remplace `accelMs` ; nouvelle
-  option `cruise` ; critères d'acceptation revus. §8 : l'adaptateur tire la montée de `ROUE_WHEEL.SPIN_UP_MS`.
+  option `cruise` ; `land` part toujours de la vitesse de croisière (plus de vitesse de départ variable ni de
+  « poursuite de la montée ») ; critères d'acceptation revus. §8 : l'adaptateur tire la montée de `ROUE_WHEEL.SPIN_UP_MS`.
 - Correction de forme : `roue.md` §5, le paragraphe « `ROUE_STEP` est fonction de… » coupait le tableau des étapes
   depuis `8d91498a` ; replacé sous le tableau.
 

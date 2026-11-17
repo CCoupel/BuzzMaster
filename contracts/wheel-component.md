@@ -99,17 +99,14 @@ profil ne la dépasse.
     passage `null` → `spin`.
 - **`land`** : freinage jusqu'à l'index `to`, arrêt **exactement** sur `to`, au plus tard à `durationMs` ; à la fin,
   position normalisée (§4) et `to` mis en évidence ; amplitude bornée (`≤ 4n`, §4) ; jamais de marche arrière.
-  - **Avec `periodMs`** (ROUE) — **vitesse continue** : le freinage part de la vitesse de la roue à l'instant du
-    passage `spin` → `land`, **sans saut de vitesse**.
-    - **Cas normal — depuis la croisière** (`vc`) : la roue continue à `vc`, puis **décélération constante**
-      jusqu'à l'arrêt sur `to`. La distance découle de `vc` et de `durationMs` : première occurrence de `to` vers
-      l'avant, plus le nombre de tours (0 à 3) qui permet ce profil ; la décélération dure au moins 500 ms.
-      `minTurns` est **ignoré** dans ce mode. Dans la Roue de la Fortune, c'est le seul cas pour un arrêt des
-      joueurs, de l'animateur ou de la durée maximale (le serveur n'accepte ces arrêts qu'à pleine vitesse).
-    - **Cas d'exception — pendant la montée** (seulement « Forcer l'arrêt » de l'admin, `roue.md` §5.1) : même
-      profil avec, pour vitesse de départ, la vitesse atteinte sur la rampe — jamais un saut à `vc`. Si cette
-      vitesse est trop faible pour atteindre `to` dans `durationMs`, la roue **poursuit sa montée** (même
-      accélération, plafonnée à `vc`) puis décélère à taux constant jusqu'à `to`.
+  - **Avec `periodMs`** (ROUE) — **vitesse continue** : le freinage part **toujours de la vitesse de croisière**
+    `vc`, sans saut de vitesse. Dans la Roue de la Fortune le serveur n'accepte aucun arrêt avant la pleine vitesse
+    (`roue.md` §5.1) : il n'existe **aucun freinage depuis la montée**, et le composant n'a pas à en prévoir.
+    - Profil : la roue continue à `vc`, puis **décélération constante** jusqu'à l'arrêt sur `to`. La distance
+      découle de `vc` et de `durationMs` : première occurrence de `to` vers l'avant, plus le nombre de tours
+      (0 à 3) qui permet ce profil ; la décélération dure au moins 500 ms. `minTurns` est **ignoré** dans ce mode.
+    - `land` reçu alors que la montée locale n'est pas terminée (écran en retard) : traité comme `cruise: true`
+      — passage à `vc` depuis la position courante, puis freinage depuis `vc`. Pas de saut de position.
     - Arrêt avant `durationMs` admis quand aucun profil n'atterrit exactement à `durationMs` (le serveur applique
       l'effet de la case à `durationMs`, `roue.md` §6 : la roue est alors déjà sur `to`).
     - Aucun profil possible (fenêtre `durationMs` trop courte pour la vitesse) : repli sur le profil sans
@@ -122,7 +119,7 @@ profil ne la dépasse.
 
 **Fonctions pures** (`geometry.js`, testées sans DOM) : position et vitesse pendant la montée et la croisière, à
 partir de `(départ, t, periodMs, n, accelTurns)` ; plan de freinage à partir de
-`(from, to, n, durationMs, periodMs, vitesse de départ, accelTurns)` et position à l'instant `t`.
+`(from, to, n, durationMs, periodMs)` — vitesse de départ toujours `vc` — et position à l'instant `t`.
 
 **Critères d'acceptation** (tests unitaires sur les fonctions pures, plus un test du composant) :
 1. Montée : vitesse nulle à `t = 0` ; à `t = 2 × accelTurns × periodMs`, vitesse égale à `vc` (écart ≤ 1 %) et
@@ -131,8 +128,8 @@ partir de `(départ, t, periodMs, n, accelTurns)` ; plan de freinage à partir d
 2. Freinage depuis la croisière : pour un jeu de `(from, to, durationMs)`, la vitesse au début du freinage vaut
    `vc` (écart ≤ 5 %), la position ne recule jamais, la vitesse ne dépasse jamais `vc`, l'arrêt se fait exactement
    sur `to`, en `durationMs` au plus.
-3. Freinage pendant la montée (arrêt forcé) : mêmes propriétés avec une vitesse de départ de `0,5 vc` et `0,1 vc` ;
-   aucun saut de position ni de vitesse entre la dernière image du `spin` et la première du `land`.
+3. `land` reçu avant la fin de la montée locale : aucun saut de position ; le freinage suit le plan calculé pour
+   `vc` et s'arrête exactement sur `to`, en `durationMs` au plus.
 4. `cruise: true` reçu avant la fin de la montée : vitesse `vc` dès l'image suivante, aucun saut de position ;
    reçu après : aucun effet.
 5. Montage direct en `spin` : vitesse `vc` dès la première image. `accelTurns` absent : idem.
