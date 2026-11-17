@@ -42,6 +42,7 @@ const (
 	RoueErrVowelNotAvailable = "VOWEL_NOT_AVAILABLE"
 	RoueErrNotALetter        = "NOT_A_LETTER"
 	RoueErrInvalidTeams      = "INVALID_TEAMS"
+	RoueErrNotFullSpeed      = "NOT_FULL_SPEED" // ROUE_STOP (admin or animateur) during the climb (contract §5.1)
 )
 
 // ROUE_LAST_EVENT kinds (contract §4).
@@ -101,6 +102,7 @@ type roueRuntime struct {
 }
 
 const (
+	roueTimerUp   = "up" // climb to full speed (SPIN_UP_MS), then the maximum duration is armed
 	roueTimerMax  = "max"
 	roueTimerStop = "stop"
 	roueTimerFlip = "flip"
@@ -134,6 +136,14 @@ func (e *Engine) SetRoueWheelParams(p RoueWheelParams) {
 	}
 	e.mu.Lock()
 	e.roueParams = np
+	e.mu.Unlock()
+}
+
+// SetRoueSpinUpMs shortens the climb of the CURRENT round (tests only: the real value is 4 × SPIN_PERIOD_MS, computed
+// at START, and the period is clamped to 1 000 ms at least). It takes effect at the next ROUE_SPIN.
+func (e *Engine) SetRoueSpinUpMs(ms int) {
+	e.mu.Lock()
+	e.state.RoueWheel.SpinUpMs = ms
 	e.mu.Unlock()
 }
 
@@ -208,6 +218,9 @@ func roueStepOf(sub string) int {
 }
 
 func (e *Engine) roueSetSubUnsafe(sub string) {
+	if sub != RoueSubSpinning {
+		e.state.RoueWheel.FullSpeed = false // true only in SPINNING, once the climb is over (contract §4)
+	}
 	e.state.RoueSubPhase = sub
 	e.state.RoueStep = roueStepOf(sub)
 }
@@ -405,7 +418,7 @@ func (e *Engine) startRoueRoundUnsafe() {
 	st.RoueWinner = ""
 	st.RoueAwards = map[string]int{}
 	st.RoueWheel = RoueWheel{
-		Layout: wl, SpinPeriodMs: params.SpinPeriodMs, SpinMaxMs: params.SpinMaxMs,
+		Layout: wl, SpinPeriodMs: params.SpinPeriodMs, SpinMaxMs: params.SpinMaxMs, SpinUpMs: 4 * params.SpinPeriodMs,
 		FlipIntervalMs: params.FlipIntervalMs, Segments: segs, Current: -1,
 	}
 	first := ""
@@ -482,6 +495,13 @@ func (e *Engine) roueTimerFired(gen int, kind string) {
 	rt.timerKind = ""
 	var fx roueFx
 	switch kind {
+	case roueTimerUp:
+		// End of the climb: FULL_SPEED and the maximum duration armed in the SAME locked section, so there is no
+		// window where a stop is lost (contract §5.1). The UPDATE comes from the fireRoueFx below.
+		if e.state.RoueSubPhase == RoueSubSpinning {
+			e.state.RoueWheel.FullSpeed = true
+			e.roueArmUnsafe(roueTimerMax, time.Duration(e.state.RoueWheel.SpinMaxMs)*time.Millisecond)
+		}
 	case roueTimerMax:
 		if e.state.RoueSubPhase == RoueSubSpinning {
 			e.roueTriggerStopUnsafe()
@@ -552,6 +572,9 @@ func (e *Engine) roueButtonUnsafe(bumperID string) {
 	if e.roue == nil || e.state.RoueSubPhase != RoueSubSpinning {
 		return
 	}
+	if !e.state.RoueWheel.FullSpeed {
+		return // during the climb a press is ignored in silence and not remembered (contract §5.1)
+	}
 	b, ok := e.data.Bumpers[bumperID]
 	if !ok || b == nil || b.Team == "" || b.Team != e.state.RoueCurrentTeam {
 		return
@@ -609,18 +632,28 @@ func (e *Engine) RoueSpin() error {
 		e.state.RoueWheel.Stop = nil
 		e.roueSetSubUnsafe(RoueSubSpinning)
 		e.roueEventUnsafe(RoueEvSpin, e.state.RoueCurrentTeam, "", 0, 0, 0)
-		e.roueArmUnsafe(roueTimerMax, time.Duration(e.state.RoueWheel.SpinMaxMs)*time.Millisecond)
+		e.state.RoueWheel.FullSpeed = false
+		if up := e.state.RoueWheel.SpinUpMs; up > 0 {
+			e.roueArmUnsafe(roueTimerUp, time.Duration(up)*time.Millisecond) // the maximum duration starts at full speed
+		} else { // no climb configured (direct engine use): full speed at once
+			e.state.RoueWheel.FullSpeed = true
+			e.roueArmUnsafe(roueTimerMax, time.Duration(e.state.RoueWheel.SpinMaxMs)*time.Millisecond)
+		}
 		return nil
 	})
 }
 
-// RoueStop — ROUE_STOP (« Forcer l'arrêt »).
+// RoueStop — ROUE_STOP (« Forcer l'arrêt »), admin or animateur: refused with NOT_FULL_SPEED during the climb, state
+// unchanged (contract roue.md §5.1, decision 2026-11-17 — no exception, the admin included).
 func (e *Engine) RoueStop() error {
 	return e.roueAction(func(fx *roueFx) error {
 		if e.state.RoueSubPhase != RoueSubSpinning {
 			return roueErr(RoueErrWrongSubPhase, "la roue ne tourne pas")
 		}
-		e.roueTriggerStopUnsafe()
+		if !e.state.RoueWheel.FullSpeed {
+			return roueErr(RoueErrNotFullSpeed, "la roue prend de la vitesse")
+		}
+		e.roueTriggerStopUnsafe() // cancels the maximum timer
 		return nil
 	})
 }
