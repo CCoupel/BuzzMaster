@@ -1937,7 +1937,8 @@ Contrat : `contracts/roue.md` §8–§11 ; composant `Wheel` : `contracts/wheel-
   aussitôt à la croisière depuis la position courante, sans saut ; il ne relance jamais la montée. Un montage direct en
   `spin` ne joue pas la montée.
 - `land` avec `periodMs` (Roue de la Fortune) : freinage à vitesse continue, qui part toujours de la croisière (aucun
-  freinage depuis la montée). `minTurns` est ignoré dans ce mode ; sans `periodMs`, l'ancien profil (au moins
+  freinage depuis la montée). `minTurns` est ignoré dans ce mode, sauf repli sur l'ancien profil quand la fenêtre
+  `durationMs` est trop courte (voir ADMIN_GUIDE, règle de réglage) ; sans `periodMs`, l'ancien profil (au moins
   `minTurns` tours, ease-out cubique) reste en vigueur.
 - Le mouvement écrit directement `transform` dans le DOM, image par image : pas de `setState` par image. La position
   est normalisée dans `[0, n)` à chaque image et à l'arrêt ; un passage `spin` → `land` repart de la position affichée

@@ -434,7 +434,8 @@ Appuis ignorés sans effet ni diffusion : buzzer d'une autre équipe, appui hors
 - Quatre minuteries serveur : montée (`SPIN_UP_MS`), durée maximale de rotation (`SPIN_MAX_MS`, armée seulement à la fin
   de la montée, donc arrêt automatique à `SPIN_UP_MS + SPIN_MAX_MS` après le lancer), freinage (`STOP.DURATION_MS`),
   retournement (`COUNT × FLIP_INTERVAL_MS`). Chacune porte une génération ; une minuterie périmée ne fait rien.
-- `PAUSE` suspend les quatre (une montée suspendue reprend pour sa durée restante, `FULL_SPEED` reste `false`) ;
+- `PAUSE` suspend la minuterie en cours (montée, durée maximale, freinage ou retournement ; une seule est armée à la fois
+  par manche). Une montée suspendue reprend pour sa durée restante, `FULL_SPEED` reste `false` ;
   `CONTINUE` les reprend. Toute action `ROUE_*` est refusée en phase `PAUSED`.
 - Toutes les minuteries sont annulées à l'arrêt de manche, à `ROUE_REVEAL` et à `NEW_GAME`.
 - Entracte : les actions `ROUE_*` sont refusées (comportement par défaut de la liste blanche d'entracte).
