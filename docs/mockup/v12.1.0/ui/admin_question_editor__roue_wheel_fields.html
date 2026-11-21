@@ -1,0 +1,143 @@
+<!--
+mockup:
+  composant: admin_question_editor
+  feature: roue_wheel_fields
+  version: 12.1.0
+  type: ui
+  issue: "#309"
+  validee_le: 2026-11-21
+  proposition_retenue: "B — Champ lié au global, à délier"
+  complete: ["v12.1.0/ui/admin_question_editor__roue_vowels_bonus.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Éditeur de question — Roue : paramètres de la roue champ par champ (#309) — version retenue</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --cust:#c2410c; --custbg:#fff7ed; --info:#0369a1; --infobg:#e0f2fe; --gold:#f59e0b; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:var(--primary); border-color:#818cf8; }
+.mock-note { max-width:920px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); }
+.form { max-width:920px; margin:0 auto 2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.folded { border:1px dashed var(--gray-300); border-radius:.5rem; padding:.5rem .8rem; margin-bottom:.6rem; color:var(--gray-500); font-size:.82rem; display:flex; justify-content:space-between; } .folded b { color:var(--gray-700); }
+.sec { border-top:1px solid var(--gray-200); padding-top:.9rem; margin-top:.6rem; } .sec h3 { margin:0 0 .3rem; font-size:.95rem; }
+.hint { font-size:.76rem; color:var(--gray-500); margin:.3rem 0 0; }
+.groups { display:grid; grid-template-columns:1fr 1.5fr; gap:.8rem; margin-top:.6rem; } @media (max-width:720px) { .groups { grid-template-columns:1fr; } }
+fieldset { border:1px solid var(--gray-200); border-radius:.6rem; padding:.6rem; margin:0; } legend { font-weight:800; font-size:.82rem; padding:0 .3rem; }
+.row2 { display:grid; grid-template-columns:repeat(2, 1fr); gap:.6rem; } .row3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:.6rem; }
+.param label { display:flex; justify-content:space-between; align-items:center; gap:.3rem; font-weight:700; font-size:.8rem; margin-bottom:.2rem; }
+.param .tag { font-size:.64rem; font-weight:800; border-radius:999px; padding:.05rem .45rem; background:var(--gray-100); color:var(--gray-500); white-space:nowrap; }
+.param.c .tag { background:var(--cust); color:#fff; }
+input[type=number] { font:inherit; font-size:.9rem; padding:.4rem .5rem; border:1px solid var(--gray-300); border-radius:.4rem; width:100%; color:var(--gray-500); }
+.param.c input, tr.c input { border:2px solid var(--cust); color:var(--gray-900); font-weight:700; background:var(--custbg); }
+input[disabled] { background:var(--gray-100); }
+.lnk { font:inherit; font-size:.72rem; background:none; border:0; color:var(--primary); cursor:pointer; padding:.2rem 0; text-decoration:underline; }
+.param small { display:block; color:var(--gray-500); font-size:.7rem; margin-top:.15rem; }
+.lock { display:flex; gap:.3rem; align-items:center; } .lock input { flex:1; }
+.lock button { font:inherit; font-size:.9rem; border:1px solid var(--gray-300); background:#fff; border-radius:.4rem; padding:.3rem .45rem; cursor:pointer; }
+.param.c .lock button { border-color:var(--cust); }
+.status { margin-top:.6rem; font-size:.82rem; border-radius:.5rem; padding:.45rem .7rem; background:var(--gray-50); border:1px solid var(--gray-200); }
+.status b.c { color:var(--cust); }
+.fix { background:var(--infobg); color:var(--info); border-radius:.4rem; padding:.35rem .6rem; font-size:.78rem; margin:.4rem 0; }
+.err { background:#fee2e2; color:#b91c1c; border-radius:.4rem; padding:.35rem .6rem; font-size:.78rem; margin:.4rem 0; }
+.summary { font-size:.8rem; color:var(--gray-700); margin-top:.5rem; }
+.strip { display:flex; gap:2px; overflow:hidden; border-radius:.4rem; margin-top:.4rem; }
+.strip span { flex:1 0 1.9rem; height:2.3rem; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:.62rem; font-weight:800; line-height:1.1; }
+.strip span.s { background:#111827; color:#fff; } .strip span.b { background:var(--gold); color:#111827; }
+table.cmp { width:100%; border-collapse:collapse; font-size:.84rem; margin-top:.5rem; } table.cmp th, table.cmp td { padding:.4rem .5rem; border-bottom:1px solid var(--gray-200); text-align:left; vertical-align:middle; }
+table.cmp th { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--gray-500); } table.cmp td.g { color:var(--gray-500); font-variant-numeric:tabular-nums; }
+table.cmp tr.c td { background:var(--custbg); } table.cmp td input[type=number] { max-width:7rem; } table.cmp tr.grp td { background:var(--gray-50); font-weight:800; font-size:.74rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:.05em; }
+.btn { font:inherit; font-size:.8rem; font-weight:600; padding:.4rem .75rem; border-radius:.45rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); cursor:pointer; }
+.save { margin-top:1rem; display:flex; justify-content:flex-end; } .save button { font:inherit; font-weight:700; background:var(--primary); color:#fff; border:0; border-radius:.5rem; padding:.6rem 1.2rem; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Exemple :</strong><span class="grp" id="states">
+  <button data-s="new" class="on">Nouvelle question (tout global)</button><button data-s="two">Pas et BONUS personnalisés</button><button data-s="fix">Pas personnalisé corrigé (30 → 25)</button><button data-s="legacy">Question LOT-1 (BONUS : 2)</button><button data-s="stale">Plus valable (pas 600, global passé à 500)</button></span>
+  <span style="color:#9ca3af">— les cadenas 🔗 / ✏️ et les champs déliés sont actifs</span></div>
+<div class="mock-note">Version retenue <b>B — Champ lié au global, à délier</b> (GATE 2 LOT-2, 2026-11-21). Chaque champ est lié (🔗) à la valeur globale, affichée et non modifiable ; ✏️ le délie avec la valeur globale comme point de départ (badge « personnalisé », bord orange) ; 🔗 le relie au global (champ retiré de la question). Éditeur de question, type <b>Roue</b>, section <b>🎡 Roue — composition</b> (#309, choix utilisateur du 2026-11-21). Les 5 paramètres sont <b>pré-remplis avec les valeurs globales</b> (Paramètres : 1000 · pas 50 · 2 Banqueroute · 1 Perdu · 0 BONUS). <b>Chaque paramètre se personnalise seul</b> et <b>revient seul au global</b> ; un paramètre non personnalisé suit les Paramètres, même s'ils changent plus tard. Les paramètres personnalisés se voient (couleur, badge, résumé). Même regroupement que la carte « Roue » retenue : <b>Points</b> / <b>Cases spéciales</b>. Pas corrigé au diviseur le plus proche (jamais refusé), roue de 64 cases au plus, aperçu de la roue effective (construction du serveur). Les sections v12.0 et Voyelles, repliées, sont inchangées.</div>
+<div class="form" id="fB"></div>
+<script>
+const G = { max:1000, step:50, B:2, P:1, X:0 };
+const KEYS = ["max","step","B","P","X"];
+const LAB = { max:["Points maximum","meilleure case"], step:["Pas","écart et plus petite valeur"], B:["💸 Banqueroute","vident la cagnotte"], P:["⏭ Perdu","font passer le tour"], X:["🎁 BONUS","0 à 4, cadeau de l'animateur"] };
+const PRESETS = { new:{}, two:{ step:25, X:3 }, fix:{ step:30, X:3 }, legacy:{ X:2 }, stale:{ step:600 } };
+const st = { s:"new" };
+let q = {}, gNow = { ...G };
+function setPreset(k) { q = { ...PRESETS[k] }; gNow = k === "stale" ? { ...G, max:500 } : { ...G }; }
+const eff = () => { const e = {}; KEYS.forEach(k => e[k] = k in q ? q[k] : gNow[k]); return e; };
+function fixStep(max, step) { if (max % step === 0) return step; let best = 1, bd = max; for (let d = 1; d < max; d++) if (max % d === 0) { const dist = Math.abs(d - step); if (dist < bd || (dist === bd && d < best)) { best = d; bd = dist; } } return best; }
+function build(max, step, B, P, X) {
+  const values = []; for (let v = max; v >= step; v -= step) { if (P >= 1 && max % 2 === 0 && v === max / 2) continue; values.push(v); }
+  const list = values.slice(); if (B >= 1) list.push(0);
+  let seq = []; for (let lo = 0, hi = list.length - 1, f = true; lo <= hi; f = !f) seq.push(f ? list[lo++] : list[hi--]);
+  if (B >= 1) seq = seq.filter(v => v !== 0);
+  const K = B + P + X, N = values.length + K, segs = new Array(N).fill(null), taken = new Array(N).fill(false);
+  const place = (i, k) => { if (i >= N) i %= N; while (i === 0 || taken[i]) i = (i + 1) % N; taken[i] = true; segs[i] = k; };
+  const kinds = []; let rB = B, rP = P, rX = X; if (rB > 0) { kinds.push("b"); rB--; }
+  while (rB > 0 || rP > 0 || rX > 0) { if (rP > 0) { kinds.push("p"); rP--; } if (rX > 0) { kinds.push("x"); rX--; } if (rB > 0) { kinds.push("b"); rB--; } }
+  taken[0] = true; kinds.forEach((k, j) => place(B >= 1 ? (j === 0 ? 1 : Math.floor(j * N / K)) : Math.floor((2 * j + 1) * N / (2 * K)), k)); taken[0] = false;
+  let si = 0; for (let i = 0; i < N && si < seq.length; i++) if (!segs[i]) segs[i] = seq[si++];
+  return segs;
+}
+function wheelOf(w) {
+  if (!(w.max >= 2) || !(w.step >= 1) || w.step >= w.max) return { err:`le pas (${w.step}) doit être inférieur aux points maximum (${w.max})` };
+  const step = fixStep(w.max, w.step), n = w.max / step + w.B + w.P + w.X - ((w.P >= 1 && w.max % 2 === 0 && (w.max / 2) % step === 0) ? 1 : 0);
+  if (n > 64) return { err:`la roue aurait ${n} cases, la limite est de 64` };
+  return { step, adjusted: step !== w.step ? w.step : null, segs: build(w.max, step, w.B, w.P, w.X) };
+}
+const PAL = ["#fca5a5","#93c5fd","#86efac","#fde68a","#d8b4fe","#fdba74"];
+const strip = segs => `<div class="strip">${segs.map((s, i) => s === "b" ? `<span class="s">💸<small>BANQUE</small></span>` : s === "p" ? `<span class="s">⏭<small>PERDU</small></span>` : s === "x" ? `<span class="b">🎁<small>BONUS</small></span>` : `<span style="background:${PAL[i % 6]}">${s}</span>`).join("")}</div>`;
+function status() {
+  const c = KEYS.filter(k => k in q).map(k => LAB[k][0].replace(/^\S+ /, ""));
+  const legacy = st.s === "legacy" ? `<div class="fix">ℹ Question créée avant la personnalisation de la roue : seul son nombre de BONUS (2) est personnalisé, le reste suit les Paramètres — sa roue ne change pas.</div>` : "";
+  return legacy + `<div class="status">${c.length ? `Personnalisé pour cette question : <b class="c">${c.join(", ")}</b> — le reste suit les Paramètres.` : "Tous les paramètres suivent les Paramètres (roue globale)."}</div>`;
+}
+function preview() {
+  const e = eff(), r = wheelOf(e);
+  if (r.err) return `<div class="err">✗ ${st.s === "stale" ? "Cette roue n'est plus valable avec les réglages globaux actuels (points maximum passés à 500) : " : "Roue refusée : "}${r.err}. ${st.s === "stale" ? "En jeu, la roue globale sera utilisée tant que la question n'est pas corrigée." : "La question ne peut pas être enregistrée."}</div>`;
+  const v = r.segs.filter(x => typeof x === "number");
+  return (r.adjusted ? `<div class="fix">ℹ Pas ajusté à <b>${r.step}</b> : ${r.adjusted} ne divise pas ${e.max} ; ${r.step} est le diviseur le plus proche.</div>` : "")
+    + `<div class="summary"><b>${r.segs.length} cases</b> : ${v.length} gagnantes de ${Math.min(...v)} à ${Math.max(...v)} par pas de ${r.step} · ${e.B} Banqueroute · ${e.P} Perdu · ${e.X} BONUS</div>${strip(r.segs)}<p class="hint">Aperçu de la roue de cette question (calculé par le serveur).</p>`;
+}
+const cust = k => k in q;
+const val = k => cust(k) ? q[k] : gNow[k];
+function paramA(k) { return `<div class="param ${cust(k) ? "c" : ""}"><label>${LAB[k][0]} <span class="tag">${cust(k) ? "personnalisé" : "global"}</span></label><input type="number" data-f="${k}" value="${val(k)}"><small>${cust(k) ? `<button class="lnk" data-reset="${k}">↺ global : ${gNow[k]}</button>` : LAB[k][1]}</small></div>`; }
+function paramB(k) { return `<div class="param ${cust(k) ? "c" : ""}"><label>${LAB[k][0]} <span class="tag">${cust(k) ? "personnalisé" : "🔗 global"}</span></label><div class="lock"><input type="number" data-f="${k}" value="${val(k)}" ${cust(k) ? "" : "disabled"}><button data-toggle="${k}" title="${cust(k) ? "Revenir au global" : "Personnaliser"}">${cust(k) ? "🔗" : "✏️"}</button></div><small>${cust(k) ? `global : ${gNow[k]} — 🔗 pour y revenir` : LAB[k][1]}</small></div>`; }
+function groups(fn) { return `<div class="groups"><fieldset><legend>Points</legend><div class="row2">${fn("max")}${fn("step")}</div></fieldset><fieldset><legend>Cases spéciales</legend><div class="row3">${fn("B")}${fn("P")}${fn("X")}</div></fieldset></div>`; }
+function tableC() {
+  const row = k => `<tr class="${cust(k) ? "c" : ""}"><td>${LAB[k][0]}</td><td class="g">${gNow[k]}</td><td><label><input type="checkbox" data-toggle="${k}" ${cust(k) ? "checked" : ""}> personnaliser</label></td><td><input type="number" data-f="${k}" value="${val(k)}" ${cust(k) ? "" : "disabled"}></td></tr>`;
+  return `<table class="cmp"><tr><th>Paramètre</th><th>Global</th><th></th><th>Cette question</th></tr><tr class="grp"><td colspan="4">Points</td></tr>${row("max")}${row("step")}<tr class="grp"><td colspan="4">Cases spéciales</td></tr>${row("B")}${row("P")}${row("X")}</table><div style="margin-top:.5rem"><button class="btn" data-resetall="1" ${Object.keys(q).length ? "" : "disabled"}>↺ Tout remettre au global</button></div>`;
+}
+function sec(p) {
+  const body = p === "A" ? groups(paramA) : p === "B" ? groups(paramB) : tableC();
+  return `<div class="folded"><span><b>Phrase, présentation, mode, gains, forme de la roue, lettres proposées</b> — inchangés</span><span>▸</span></div><div class="folded"><span><b>🔤 Voyelles</b> — inchangé</span><span>▸</span></div>
+    <div class="sec"><h3>🎡 Roue — composition</h3><p class="hint">Valeurs des Paramètres par défaut ; personnalisez seulement ce qui change pour cette question. Les durées de la roue restent celles des Paramètres.</p>${body}${status()}${preview()}</div><div class="save"><button>Enregistrer</button></div>`;
+}
+function render() {
+  document.getElementById("fB").innerHTML = sec("B");
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", b.dataset.s === st.s));
+}
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset.reset) { delete q[t.dataset.reset]; render(); return; }
+  if (t.dataset.resetall) { q = {}; render(); return; }
+  if (t.dataset.toggle && t.tagName === "BUTTON") { const k = t.dataset.toggle; if (k in q) delete q[k]; else q[k] = gNow[k]; render(); }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.type === "checkbox" && t.dataset.toggle) { const k = t.dataset.toggle; if (t.checked) q[k] = gNow[k]; else delete q[k]; render(); return; }
+  if (t.dataset && t.dataset.f) { const k = t.dataset.f; let v = Math.max(0, parseInt(t.value || "0", 10)); if (k === "X") v = Math.min(4, v); q[k] = v; render(); }
+});
+document.getElementById("states").addEventListener("click", e => { if (e.target.dataset.s) { st.s = e.target.dataset.s; setPreset(st.s); render(); } });
+setPreset("new"); render();
+</script>
+</body>
+</html>

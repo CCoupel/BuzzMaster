@@ -1,6 +1,33 @@
 # Changelog des Contrats API
 
 ---
+## [20261121-d] — v12.1.0 LOT-1 — ROUE : placement de la phrase sur le plateau (#310)
+
+`roue.md` §3.1 (règle « Placement »). Correctif livré `051e5d9a`. **Aucun champ ni payload ne change, aucun BREAKING.**
+
+- **[CHANGED]** Affichage seulement : la phrase est centrée verticalement dans les 4 lignes (décalage ⌊(4 − n) / 2⌋)
+  et chaque ligne horizontalement, par une règle client unique (`boardLayout.js`) partagée par l'aperçu de l'éditeur
+  et la TV / tablette. Les phrases de 1 ou 2 lignes, y compris celles des questions v12.0, s'affichent désormais à
+  partir de la 2ᵉ ligne sur la TV et la tablette (auparavant dès la 1ʳᵉ).
+
+---
+## [20261121-c] — v12.1.0 LOT-2 — ROUE : composition de la roue par question (#309)
+
+`roue.md` révision 8.1, **§16** (nouveau). Décisions utilisateur : retour QUALIF 12.1.0.1 n° 1 et choix sur le plan
+LOT-2 (surcharge champ par champ). **Aucun BREAKING** : une question sans surcharge garde la roue globale ; une question
+LOT-1 avec `ROUE_BONUS_COUNT` garde sa roue.
+
+- **[NEW]** `game-config.json` `wheel.bonus_count` (0–4, absent = 0) : nombre de BONUS de la roue globale ; carte
+  « Roue » en deux groupes, Points / Cases spéciales (§16.1).
+- **[NEW]** Question `ROUE` : `ROUE_WHEEL_MAX_POINTS`, `ROUE_WHEEL_STEP`, `ROUE_WHEEL_BANKRUPT_COUNT`,
+  `ROUE_WHEEL_LOSE_TURN_COUNT` — **présent = personnalisé, absent = global**, chacun seul ; champs de formulaire
+  `POST /questions` (vide = global) et refus `400 ROUE_WHEEL_INVALID` sur la composition effective (§16.2, §16.5).
+- **[CHANGED]** `ROUE_BONUS_COUNT` suit la même règle : absent = BONUS global (0 par défaut, comportement inchangé),
+  présent = personnalisé, `0` compris (entier nullable).
+- **[CHANGED]** Construction de la roue au `START` : composition effective champ par champ, durées toujours globales,
+  repli sur la roue globale si la composition effective est devenue invalide (§16.3).
+
+---
 ## [20261121-b] — v12.1.0 — ROUE : renvois §4 / §5 alignés sur §15.1.2 (#147)
 
 `roue.md` rév. 7.3, §4 (`ROUE_BOARD`) et §5 (tableau des étapes, `ROUE_STEP`) : `*` (case éclairée) aussi en

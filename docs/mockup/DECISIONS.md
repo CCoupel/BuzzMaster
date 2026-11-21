@@ -137,6 +137,7 @@
 - Valeurs toutes différentes ; un pas qui ne divise pas le maximum est corrigé, pas refusé ; PERDU à mi-tour. _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
 - Libellés fixés des cases spéciales : « 💸 BANQUE / ROUTE » et « ⏭ TOUR / PERDU ». _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
 
+- **v12.1.0 (#309)** : la carte passe à **5 paramètres** — maximum, pas, BANQUEROUTE, PERDU **et BONUS** (0–4) —, en deux groupes Points / Cases spéciales ; ce sont les **réglages par défaut** des questions ROUE. La règle « 4 paramètres » ci-dessus est remplacée par celle-ci. _(v12.1.0, wheel_bonus, GATE 2 LOT-2, 2026-11-21)_
 ## vplayer_roue (tablette)
 - Plateau sur toute la largeur ; paysage et portrait. _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
 
@@ -154,6 +155,8 @@
 
 ## admin_question_editor (Roue, v12.1.0)
 - Section Voyelles en cartes (moment, nombre, gain), jamais en liste déroulante ; compteur BONUS avec aperçu de la roue générée. _(v12.1.0, roue_vowels_bonus, GATE 2, 2026-11-21)_
+- Choix « Forme de la roue » (bandeau / arc) : **pas de vignettes en 4 couleurs** à côté des libellés (#311, décision utilisateur, retour QUALIF 12.1.0.1 n° 3). La maquette v12.0.0 `admin_question_editor__roue_phrase` ne fait plus foi sur ce point. _(v12.1.0, #311, 2026-11-21)_
+- Composition de la roue **champ par champ** : chaque paramètre (maximum, pas, Banqueroute, Perdu, BONUS) est lié au réglage global (🔗, valeur affichée non modifiable) ou délié et personnalisé seul (✏️, point de départ = valeur globale) ; jamais de personnalisation « tout ou rien », jamais de champs vides à remplir. _(v12.1.0, roue_wheel_fields, #309, GATE 2 LOT-2, 2026-11-21)_
 
 ## (toutes maquettes) — exemples exacts
 - Un exemple de maquette doit être exact : une consonne « absente » ne figure pas dans la phrase affichée. _(v12.0.0, #145, GATE 1.5, 2026-11-16)_

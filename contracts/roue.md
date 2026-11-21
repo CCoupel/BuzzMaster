@@ -12,6 +12,8 @@ bonus, roue définie par maximum et pas) ; `_work/tasks/planner-20261116-160000.
 la saisie, « Équipe suivante »)
 **Révision 7 — v12.1.0 (milestone #22)** : achat de voyelles (#147) et case BONUS (#308) — **§15**, qui prime sur les
 sections 3 à 12 pour ces deux points. Décisions : `.claude/workflow/cadrage-v12.1.0-decisions.md`.
+**Révision 8 — v12.1.0 LOT-2** : composition de la roue par question (#309) — **§16**, qui prime sur §10 et §15.2 pour la
+composition de la roue.
 **Hors périmètre** : round bonus final (#146) et round spécial (#148), fermés « not planned ».
 
 > Ce fichier est la **référence unique** pour `dev-backend` et `dev-frontend` sur le mode ROUE.
@@ -85,6 +87,12 @@ passe par l'action `BUTTON` existante). Non générable par IA.
   ligne après ligne. Un mot de plus de 14 caractères ou une phrase qui demande plus de 4 lignes est refusé.
 - **Une seule implémentation** de la mise en lignes : serveur. L'éditeur obtient l'aperçu par
   `POST /api/roue/preview` (§11.2) — aucune copie JavaScript de la règle.
+- **Placement (v12.1.0, #310)** : la phrase est **centrée verticalement** dans les 4 lignes du plateau — décalage
+  = ⌊(4 − n) / 2⌋ lignes vides avant la phrase de n lignes (1 ou 2 lignes : lignes 2 et suivantes ; 3 ou 4 lignes :
+  dès la ligne 1) — et **chaque ligne est centrée horizontalement** dans les 14 colonnes. Règle d'**affichage** client
+  unique (`web/src/components/roue/boardLayout.js`), partagée par l'aperçu de l'éditeur et la TV / tablette : l'aperçu
+  de l'éditeur montre exactement le placement de la TV. Le serveur ne fournit que les lignes de la phrase ;
+  **aucun champ ni payload ne change** (`ROUE_BOARD`, `POST /api/roue/preview` inchangés).
 
 Exemple : `Combien pour ce chien dans la vitrine` →
 ```
@@ -879,3 +887,99 @@ registre fermé `soundSiteRegistry`.
   copies de réglage) ; `ROUE_SPIN` refusé sans consonne restante, comme en v12.0.
 - `ROUE_LETTER` refuse toujours une voyelle (`VOWEL_NOT_AVAILABLE`) : l'achat après l'arrêt passe par `ROUE_BUY_VOWEL`.
 - Sous-phases, étapes et boutons v12.0 inchangés pour le tour classique (consonne, réponse, fin de tour).
+
+---
+
+## 16. v12.1.0 LOT-2 — Composition de la roue par question (#309)
+
+> Révision 8 (2026-11-21, retour QUALIF 12.1.0.1 n° 1 ; **rév. 8.1** : surcharge champ par champ, choix utilisateur
+> sur le plan LOT-2). Décisions : `.claude/workflow/cadrage-v12.1.0-decisions.md` « Retours QUALIF 12.1.0.1 » et
+> « LOT-2 #309 — choix utilisateur » (font foi) : **réglages globaux « Roue » = défauts, chaque paramètre de
+> composition personnalisable seul par question** — points maximum, pas, nombre de BANQUEROUTE, de TOUR PERDU
+> (« passe » = TOUR PERDU), de BONUS. Choix techniques marqués **[planner]**. **Aucun BREAKING**.
+
+### 16.1 Défaut global du nombre de BONUS — `game-config.json` `wheel`
+
+| Champ | Règle |
+|---|---|
+| `bonus_count` **[NEW]** | Nombre de cases BONUS de la roue globale. **0 à 4**, défaut **0** ; **absent = 0** (un `game-config.json` v12.0 / v12.1 LOT-1 se charge sans changement). Compté dans la limite de 64 cases (§10) ; hors bornes ou plus de 64 cases : refus `400`, rien n'est enregistré |
+
+`wheel_default` (bouton « Roue par défaut ») porte `bonus_count: 0`. La carte « Roue » des réglages présente ses
+paramètres en deux groupes, **Points** (points maximum, pas) et **Cases spéciales** (Banqueroute, Perdu, 🎁 BONUS) ;
+texte d'aide : « Réglages par défaut des questions ROUE ; chaque question peut en personnaliser un ou plusieurs. »
+
+### 16.2 Surcharge par question, champ par champ — `TypedContent` (`OwnedFields` du type `ROUE`)
+
+**Règle unique : champ présent = paramètre personnalisé pour cette question ; champ absent = le paramètre suit le
+réglage global.** Les 5 champs sont des entiers **nullables** (`*int` côté Go) : `0` est une valeur personnalisée
+valable (ex. 0 Banqueroute), distincte de « absent ».
+
+| Champ JSON | Type | Règle quand il est présent |
+|---|---|---|
+| `ROUE_WHEEL_MAX_POINTS` **[NEW]** | int | Mêmes règles que `max_points` (§10) |
+| `ROUE_WHEEL_STEP` **[NEW]** | int | Mêmes règles que `step` (§10) ; **corrigé** au diviseur le plus proche des points maximum **effectifs** (§16.3) au moment de l'enregistrement, jamais refusé ; la valeur enregistrée est la valeur corrigée **[planner]** |
+| `ROUE_WHEEL_BANKRUPT_COUNT` **[NEW]** | int | 0 ou plus |
+| `ROUE_WHEEL_LOSE_TURN_COUNT` **[NEW]** | int | 0 ou plus |
+| `ROUE_BONUS_COUNT` | int | Existant (§15.2.1), **même règle « présent = personnalisé »** : 0 à 4. Absent = BONUS global (`wheel.bonus_count`, 0 par défaut — donc aucun changement pour une question v12.0) |
+
+- **Compatibilité LOT-1** (décision 4, adaptée par l'utilisateur) : une question écrite par les QUALIF 12.1.0.x du
+  LOT-1 porte `ROUE_BONUS_COUNT` (jamais 0, le LOT-1 ne l'écrivait que s'il était positif) : elle a donc **seul son
+  BONUS personnalisé**, les autres paramètres suivent le global — c'est exactement sa roue du LOT-1. Aucune migration.
+- Une valeur personnalisée **égale** à la valeur globale reste personnalisée (elle ne suit plus le global) ; seul le
+  retour explicite au global (champ retiré) la fait suivre à nouveau **[planner]**.
+- Les durées (§10 : vitesse, durée maximale, freinage, retournement) restent **toujours globales**.
+- Les noms `ROUE_WHEEL_*` évitent toute confusion avec `ROUE_STEP` de `GameState` (étape du tour, §4).
+
+### 16.3 Composition effective et roue construite au `START`
+
+```
+pour chaque paramètre k ∈ {max_points, step, bankrupt_count, lose_turn_count, bonus_count} :
+    effectif[k] = champ de la question s'il est présent, sinon wheel[k] (réglage global courant)
+durées = toujours wheel.* (§10)
+```
+
+- Même normalisation et même construction qu'au §10.1 / §15.2.2 (une seule implémentation, `roue_wheel.go`) :
+  pas corrigé au diviseur le plus proche des points maximum effectifs.
+- **Composition effective devenue invalide** — un paramètre global a changé depuis l'enregistrement (pas ≥ maximum,
+  plus de 64 cases) ou fichier modifié à la main **[planner]** : au `START`, les BONUS sont d'abord réduits pour tenir
+  dans 64 cases (règle §15.2.2) ; si la composition reste invalide, **roue globale entière**, avec un journal. **Le
+  départ n'est jamais refusé.**
+- `GameState` : aucun champ nouveau ; `ROUE_WHEEL.SEGMENTS` reflète la composition effective.
+
+### 16.4 Éditeur (pour mémoire, maquette retenue au GATE)
+
+- Chaque paramètre est affiché **pré-rempli** : valeur de la question si elle est personnalisée, sinon valeur globale
+  courante, marquée comme telle.
+- Chaque paramètre se personnalise **seul** et revient **seul** au global (retour = champ retiré à l'enregistrement).
+- Les paramètres personnalisés sont signalés ; l'aperçu (`wheel-preview`) montre la composition effective.
+- La validation se fait sur la composition effective ; une composition qui n'est plus valable avec les réglages
+  globaux actuels est signalée à la réouverture de la question (message de `wheel-preview`).
+
+### 16.5 HTTP
+
+`POST /questions` (§11.1), champs de formulaire pour `type=ROUE` (tous relus à chaque enregistrement) :
+
+| Champ de formulaire | Champ enregistré | Refus `400` |
+|---|---|---|
+| `roue_wheel_max_points` | `ROUE_WHEEL_MAX_POINTS` | `ROUE_WHEEL_INVALID` (message du §10) |
+| `roue_wheel_step` | `ROUE_WHEEL_STEP` (valeur corrigée) | `ROUE_WHEEL_INVALID` |
+| `roue_wheel_bankrupt_count` | `ROUE_WHEEL_BANKRUPT_COUNT` | `ROUE_WHEEL_INVALID` |
+| `roue_wheel_lose_turn_count` | `ROUE_WHEEL_LOSE_TURN_COUNT` | `ROUE_WHEEL_INVALID` |
+| `roue_bonus_count` (existant) | `ROUE_BONUS_COUNT` | `ROUE_BONUS_COUNT_INVALID` (hors 0–4) |
+
+- **Champ de formulaire absent ou vide = paramètre au global** : le champ est **retiré** de la question. Valeur
+  présente = paramètre personnalisé, enregistré (y compris `0`).
+- Validation sur la **composition effective** (champs présents + réglages globaux courants), par le même code que
+  `wheel-preview` : pas ≥ maximum, maximum hors 2–1 000 000, valeur non entière ou négative, plus de 64 cases →
+  `400 ROUE_WHEEL_INVALID`, rien n'est écrit.
+- `POST /game-config.json` : `wheel.bonus_count` accepté et validé (§16.1). Les questions ne sont pas revalidées
+  (§16.3 couvre une composition devenue invalide).
+- `POST /api/roue/wheel-preview` : inchangé (accepte déjà `bonus_count`) — l'éditeur lui envoie la composition
+  effective.
+
+### 16.6 Non-régression
+
+- Question sans aucun des 5 champs, `wheel.bonus_count` absent : roue identique à v12.0.
+- Question LOT-1 avec `ROUE_BONUS_COUNT` seul : roue identique à celle du LOT-1 (§16.2).
+- `game-config.json` sans `bonus_count` : chargé sans erreur, 0 BONUS.
+- Durées, sous-phases, actions, achat de voyelles et case BONUS (§15) : inchangés.

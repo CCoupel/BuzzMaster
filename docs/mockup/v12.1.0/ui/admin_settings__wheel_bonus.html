@@ -1,0 +1,91 @@
+<!--
+mockup:
+  composant: admin_settings
+  feature: wheel_bonus
+  version: 12.1.0
+  type: ui
+  issue: "#309"
+  validee_le: 2026-11-21
+  proposition_retenue: "B — Points / Cases spéciales en deux groupes"
+  complete: ["v12.0.0/ui/admin_settings__wheel_config.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paramètres — carte « Roue » : BONUS global (#309) — version retenue</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --info:#0369a1; --infobg:#e0f2fe; --gold:#f59e0b; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-note { max-width:980px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); }
+.card { max-width:980px; margin:0 auto 2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+h3 { margin:0 0 .3rem; font-size:1.05rem; } h4 { margin:.9rem 0 .4rem; font-size:.82rem; color:var(--gray-700); }
+.hint { font-size:.78rem; color:var(--gray-500); margin:.2rem 0 .6rem; } .hint b { color:var(--gray-700); }
+.params { display:grid; grid-template-columns:repeat(5, 1fr); gap:.7rem; } @media (max-width:720px) { .params { grid-template-columns:repeat(2, 1fr); } }
+.param label { display:block; font-weight:700; font-size:.82rem; margin-bottom:.2rem; } .param small { display:block; color:var(--gray-500); font-size:.72rem; margin-top:.2rem; }
+.param.new label { color:#b45309; }
+input[type=number] { font:inherit; font-size:.9rem; padding:.4rem .5rem; border:1px solid var(--gray-300); border-radius:.4rem; width:100%; }
+.groups { display:grid; grid-template-columns:1fr 1.5fr; gap:.8rem; } @media (max-width:720px) { .groups { grid-template-columns:1fr; } }
+fieldset { border:1px solid var(--gray-200); border-radius:.6rem; padding:.6rem; margin:0; } legend { font-weight:800; font-size:.82rem; padding:0 .3rem; }
+.row2 { display:grid; grid-template-columns:repeat(2, 1fr); gap:.6rem; } .row3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:.6rem; }
+.sum { background:var(--gray-50); border:1px solid var(--gray-200); border-radius:.5rem; padding:.5rem .7rem; font-size:.82rem; margin-top:.7rem; }
+.strip { display:flex; gap:2px; overflow:hidden; border-radius:.4rem; }
+.strip span { flex:1 0 2.2rem; height:2.6rem; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:.66rem; font-weight:800; line-height:1.1; position:relative; }
+.strip span i { position:absolute; top:1px; left:3px; font-size:.55rem; font-style:normal; opacity:.6; }
+.strip span.s { background:#111827; color:#fff; } .strip span.b { background:var(--gold); color:#111827; }
+.views { display:grid; grid-template-columns:1.6fr 1fr; gap:1rem; align-items:start; } @media (max-width:720px) { .views { grid-template-columns:1fr; } }
+.btn { font:inherit; font-size:.84rem; font-weight:600; padding:.5rem .9rem; border-radius:.45rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); }
+.btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+.row { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+.dur { display:grid; grid-template-columns:14rem 6rem 1fr; gap:.6rem; align-items:center; font-size:.84rem; margin-bottom:.4rem; }
+.actions { display:flex; justify-content:space-between; gap:.5rem; margin-top:1rem; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<div class="mock-note">Version retenue <b>B — Points / Cases spéciales en deux groupes</b> (choix utilisateur, 2026-11-21). Paramètres › carte <b>🎡 Roue de la Fortune</b> (maquette v12.0.0 <code>admin_settings__wheel_config</code>, complétée). Ajout du <b>nombre de cases BONUS global</b> (0 à 4, défaut 0) : il devient, avec les 4 paramètres existants, la <b>roue par défaut</b> des questions ROUE, dont chaque question peut personnaliser un ou plusieurs paramètres (#309). Le texte d'aide change en conséquence ; le résumé, l'aperçu, « Tester », les durées et « Roue par défaut » (qui remet aussi 0 BONUS) sont inchangés. Exemple : 1000 · 50 · 2 Banqueroute · 1 Perdu · <b>1 BONUS</b> (23 cases).</div>
+<div class="card" id="cB"></div>
+<script>
+const W = { max:1000, step:50, B:2, P:1, X:1 };
+function build(max, step, B, P, X) {
+  const values = []; for (let v = max; v >= step; v -= step) { if (P >= 1 && max % 2 === 0 && v === max / 2) continue; values.push(v); }
+  const list = values.slice(); if (B >= 1) list.push(0);
+  let seq = []; for (let lo = 0, hi = list.length - 1, f = true; lo <= hi; f = !f) seq.push(f ? list[lo++] : list[hi--]);
+  if (B >= 1) seq = seq.filter(v => v !== 0);
+  const K = B + P + X, N = values.length + K, segs = new Array(N).fill(null), taken = new Array(N).fill(false);
+  const place = (i, k) => { if (i >= N) i %= N; while (i === 0 || taken[i]) i = (i + 1) % N; taken[i] = true; segs[i] = k; };
+  const kinds = []; let rB = B, rP = P, rX = X; if (rB > 0) { kinds.push("b"); rB--; }
+  while (rB > 0 || rP > 0 || rX > 0) { if (rP > 0) { kinds.push("p"); rP--; } if (rX > 0) { kinds.push("x"); rX--; } if (rB > 0) { kinds.push("b"); rB--; } }
+  taken[0] = true; kinds.forEach((k, j) => place(B >= 1 ? (j === 0 ? 1 : Math.floor(j * N / K)) : Math.floor((2 * j + 1) * N / (2 * K)), k)); taken[0] = false;
+  let si = 0; for (let i = 0; i < N && si < seq.length; i++) if (!segs[i]) segs[i] = seq[si++];
+  return segs;
+}
+const PAL = ["#fca5a5","#93c5fd","#86efac","#fde68a","#d8b4fe","#fdba74"];
+const segs = build(W.max, W.step, W.B, W.P, W.X);
+function strip() { return `<div class="strip">${segs.map((s, i) => `<span class="${s === "b" || s === "p" ? "s" : s === "x" ? "b" : ""}" style="${typeof s === "number" ? "background:" + PAL[i % 6] : ""}"><i>${i + 1}</i>${s === "b" ? "💸<small>BANQUE</small>" : s === "p" ? "⏭<small>PERDU</small>" : s === "x" ? "🎁<small>BONUS</small>" : s}</span>`).join("")}</div>`; }
+function ring() {
+  const n = segs.length, R = 90, cx = 100, cy = 100; let p = "";
+  segs.forEach((s, i) => { const a0 = (i / n) * 2 * Math.PI - Math.PI / 2, a1 = ((i + 1) / n) * 2 * Math.PI - Math.PI / 2;
+    const col = s === "b" || s === "p" ? "#111827" : s === "x" ? "#f59e0b" : PAL[i % 6];
+    p += `<path d="M${cx},${cy} L${cx + R * Math.cos(a0)},${cy + R * Math.sin(a0)} A${R},${R} 0 0 1 ${cx + R * Math.cos(a1)},${cy + R * Math.sin(a1)} Z" fill="${col}" stroke="#fff" stroke-width="1"/>`; });
+  return `<svg viewBox="0 0 200 200" width="200" height="200">${p}<circle cx="100" cy="100" r="22" fill="#fff"/></svg>`;
+}
+const P = { max:["Points maximum","valeur de la meilleure case"], step:["Pas","écart entre deux valeurs ; aussi la plus petite valeur"], B:["💸 Banqueroute","cases qui vident la cagnotte"], P:["⏭ Perdu","cases qui font passer le tour"], X:["🎁 BONUS","0 à 4 — cadeau géré par l'animateur, aucun point"] };
+const param = k => `<div class="param ${k === "X" ? "new" : ""}"><label>${P[k][0]}</label><input type="number" value="${W[k]}"><small>${P[k][1]}</small></div>`;
+function body(p) {
+  const params = p === "A" ? `<div class="params">${["max","step","B","P","X"].map(param).join("")}</div>`
+    : `<div class="groups"><fieldset><legend>Points</legend><div class="row2">${param("max")}${param("step")}</div></fieldset><fieldset><legend>Cases spéciales</legend><div class="row3">${param("B")}${param("P")}${param("X")}</div></fieldset></div>`;
+  return `<h3>🎡 Roue de la Fortune</h3><p class="hint"><b>Réglages par défaut des questions ROUE</b> ; chaque question peut en personnaliser un ou plusieurs (éditeur de question). La forme de la roue (bandeau ou arc) se choisit sur chaque question.</p>
+    ${params}
+    <div class="sum"><b>${segs.length} cases</b> : 19 gagnantes de <b>50</b> à <b>1000</b> par pas de 50 · <b>2</b> Banqueroute · <b>1</b> Perdu · <b>1</b> BONUS — une chance sur 5,8 de tomber sur une case spéciale · gain moyen d'une case : ${Math.round(segs.filter(s => typeof s === "number").reduce((a, b) => a + b, 0) / segs.length)}.</div>
+    <div class="row" style="margin-top:.6rem"><button class="btn">🎡 Tester</button><button class="btn" disabled>✋ Arrêter</button><span class="hint" style="margin:0">prête</span></div>
+    <div class="views"><div><h4>Roue générée, dans l'ordre (la dernière case rejoint la première)</h4>${strip()}<h4>Sur la TV — forme « bandeau »</h4><p class="hint">(aperçu animé existant, inchangé)</p></div><div><h4>Vue d'ensemble de la roue</h4>${ring()}</div></div>
+    <h4>Durées</h4><div class="dur"><span>Durée d'un tour de roue</span><input type="number" value="2.5"><span class="hint" style="margin:0">secondes (1 à 6)</span></div><div class="dur"><span>Durée maximale de rotation</span><input type="number" value="10"><span class="hint" style="margin:0">secondes (3 à 30)</span></div><div class="dur"><span>Durée du freinage</span><input type="number" value="4"><span class="hint" style="margin:0">secondes (1,5 à 8)</span></div>
+    <div class="actions"><button class="btn">↺ Roue par défaut (1000 · 50 · 2 · 1 · 0)</button><button class="btn primary">Enregistrer</button></div>`;
+}
+document.getElementById("cB").innerHTML = body("B");
+</script>
+</body>
+</html>
