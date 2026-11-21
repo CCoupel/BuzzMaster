@@ -468,7 +468,7 @@ Kinds : `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | L
 | `VOWEL_REVEALING` | Fin de `COUNT × FLIP_INTERVAL_MS` | `TURN` (même équipe), `ROUE_TURN_VOWEL` = `true`, aucun événement (v12.1.0) |
 | `LETTER` | `ROUE_BUY_VOWEL` (moment `AFTER` / `BOTH`, présente) | Débit, `ROUE_STOP_VOWEL` = `true`, `LIT` (v12.1.0) |
 | `LETTER` | `ROUE_BUY_VOWEL` (absente) | Débit, `TURN_END`, `VOWEL_MISS` (v12.1.0) |
-| `ANSWER` | `ROUE_BUY_VOWEL` (si `ROUE_STOP_VOWEL` et `AFTER` / `BOTH`, présente) | `LIT` (v12.1.0) |
+| `ANSWER` | `ROUE_BUY_VOWEL` (si `ROUE_STOP_VOWEL` et moment `AFTER` / `BOTH`, `ROUE_VOWELS_AFTER` = `MANY`, présente) | Débit, `ROUE_STOP_VOWEL` = `true`, `LIT` (v12.1.0) ; avec `ROUE_VOWELS_AFTER` = `ONE` : refus `VOWEL_LIMIT_REACHED` |
 | `ANSWER` | `ROUE_ANSWER` | Réponse validée : gain ajouté à la cagnotte, `SOLVED`, crédit ; aussi depuis `TURN` quand `ROUE_TURN_VOWEL` (v12.1.0) |
 | `ANSWER` / `TURN` sans consonne | `ROUE_NEXT {HAND}` | Gain ajouté, `TURN_END` (ou `TURN`), main selon `HAND` |
 | `TURN` | `ROUE_PASS` (hors `SOLO`) | Rotation immédiate, cagnotte conservée |
@@ -504,7 +504,7 @@ ROUE_NEXT_TEAM           string         // ANSWER / TURN_END seulement
 ROUE_NEXT_DEFAULT        string         // SAME | NEXT (bouton conseillé), ANSWER / TURN_END seulement
 ROUE_TEAM_BANK           map[string]int // cagnotte de manche
 ROUE_TURN_GAIN           int            // gain du tour, pas encore ajouté à la cagnotte
-ROUE_BOARD               RoueBoard      // { COLS: 14, ROWS: [...] } — "_" caché, "*" caché éclairé (sous-phase LIT)
+ROUE_BOARD               RoueBoard      // { COLS: 14, ROWS: [...] } — "_" caché, "*" caché éclairé (sous-phases LIT et VOWEL_LIT)
 ROUE_LETTERS             []RoueLetter   // lettres proposées : consonnes, et voyelles depuis v12.1.0 (LETTER, TEAM, HIT)
 ROUE_CONSONANTS_LEFT     bool
 ROUE_WHEEL               RoueWheel      // LAYOUT, durées, SPIN_UP_MS, FULL_SPEED, SEGMENTS, CURRENT, STOP
