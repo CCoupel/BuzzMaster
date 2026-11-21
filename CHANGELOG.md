@@ -29,9 +29,17 @@ Deux extensions de la Roue de la Fortune : l'achat de voyelles, et une case BONU
 - **Roue générée** — les cases BONUS s'ajoutent à la roue, avec les cases Banqueroute et Tour perdu. Avec 0 BONUS, la
   roue est identique à celle de la v12.0.0. Une roue de plus de 64 cases est refusée à l'enregistrement ; au lancement,
   le nombre de cases BONUS est réduit si la configuration a changé.
+- **Choix de la forme de la roue (#311)** — les vignettes à 4 couleurs des cartes « Bandeau » et « Arc » sont retirées ;
+  les cartes ne gardent que le texte.
 
 ### Fixed
 
+- **Phrase du plateau (#310)** — la phrase est centrée verticalement et horizontalement dans les 4 lignes du plateau.
+  L'aperçu de l'éditeur montre le même placement que la TV et la tablette, y compris pour les questions v12.0.0.
+- **Textes des cases (#313)** — les points, BANQUEROUTE et BONUS sont ajustés à la largeur de leur case, en bandeau
+  comme en arc, jusqu'à 64 cases.
+- **Plateau sur TV et tablette (#314)** — les 4 lignes du plateau tiennent dans la hauteur de l'écran ; la 4e ligne
+  n'est plus tronquée.
 - **Annonce de retournement d'une consonne (TV et tablette)** — l'annonce affichait « × 0 = +0 » depuis la v12.0.0. Seul
   l'affichage était faux : les points crédités étaient corrects. L'annonce affiche maintenant la valeur de la case et le
   gain réel du tour.

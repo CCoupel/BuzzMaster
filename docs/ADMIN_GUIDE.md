@@ -1252,13 +1252,13 @@ proposent la réponse. Une phrase = une manche.
 
 1. Dans l'éditeur de questions, choisir le type **Roue** (🎡).
 2. Saisir la **phrase à deviner** (lettres, chiffres, espaces, apostrophes, tirets, `. , ! ? :`). L'aperçu du plateau
-   se met à jour ; la phrase tient sur 4 lignes de 14 caractères, mots non coupés. Un mot de plus de 14 caractères
+   se met à jour et montre le placement exact de la TV (phrase centrée verticalement et horizontalement) ; la phrase tient sur 4 lignes de 14 caractères, mots non coupés. Un mot de plus de 14 caractères
    ou une phrase trop longue est refusée avec un message.
 3. Choisir la **catégorie** (comme une autre question) et, facultatif, la **présentation** : un indice public affiché
    à côté de la catégorie (80 caractères au plus). La présentation ne peut pas contenir la phrase.
 4. Choisir le **mode de rotation** : `SOLO`, `CHACUN_SON_TOUR` ou `TANT_QUE_JE_GAGNE` (défaut).
 5. Choisir la **règle des gains** : seule l'équipe gagnante reçoit sa cagnotte (défaut), ou toutes les équipes.
-6. Choisir la **forme de la roue** sur la TV (bandeau, défaut, ou arc) et si les **lettres déjà proposées** s'affichent
+6. Choisir la **forme de la roue** sur la TV (bandeau, défaut, ou arc ; cartes de texte) et si les **lettres déjà proposées** s'affichent
    sur la TV et les tablettes (défaut : oui).
 
 Une voyelle ne se propose pas comme une consonne : elle s'**achète** quand l'achat est activé sur la question (v12.1.0, voir ci-dessous).
