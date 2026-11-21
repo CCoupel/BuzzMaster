@@ -1,6 +1,13 @@
 # Changelog des Contrats API
 
 ---
+## [20261121-b] — v12.1.0 — ROUE : renvois §4 / §5 alignés sur §15.1.2 (#147)
+
+`roue.md` rév. 7.3, §4 (`ROUE_BOARD`) et §5 (tableau des étapes, `ROUE_STEP`) : `*` (case éclairée) aussi en
+`VOWEL_LIT`, `VOWEL_LIT` / `VOWEL_REVEALING` = étape 1 — renvoi vers §15.1.2, conforme à `roueStepOf`.
+**Aucun changement de comportement ni de protocole, aucun BREAKING** (revue code-reviewer).
+
+---
 ## [20261121] — v12.1.0 — ROUE : achat de voyelles (#147) et case BONUS (#308)
 
 `roue.md` révision 7.2, **§15** (nouveau) ; renvois en tête, §3.1, §4, §8.3. Décisions utilisateur du 2026-11-21
