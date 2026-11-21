@@ -22,7 +22,7 @@
 .roue-wheel-strip { height: 13vh; border-radius: 1.5vh; background: rgba(0, 0, 0, 0.35); border: 2px solid rgba(255, 255, 255, 0.15); }
 .roue-wheel-arc { height: 27vh; margin: 0; }
 .roue-wheel-strip .wheel-strip { --cell-w: 10vw; }
-.roue-wheel-strip .wheel-cell { font-size: 5.4vh; }
+.roue-wheel-strip .wheel-cell { --wheel-fs: 5.4vh; }
 
 /* Tablette (M5 révisée) : la roue remplace le bouton d'arrêt. Habillage de FortuneWheel seulement (géométrie de Wheel intacte). */
 .roue-vp { position: absolute; inset: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; overflow: hidden; color: #e5e7eb; }
@@ -55,9 +55,9 @@
 .roue-vp-glyph { display: none; position: absolute; left: 0; right: 0; bottom: 6%; text-align: center; font-size: 1rem; font-weight: 800; z-index: 4; pointer-events: none; }
 /* Bandeau : cases dimensionnées sur la zone (paysage : toute la hauteur ; portrait : bandeau de 120 px centré) */
 .roue-vp-zone .wheel-strip { --cell-w: clamp(52px, 16cqmin, 96px); }
-.roue-vp-zone .wheel-cell { font-size: clamp(16px, 9cqmin, 36px); }
+.roue-vp-zone .wheel-cell { --wheel-fs: clamp(16px, 9cqmin, 36px); }
 .roue-vp-zone .wheel-cell .wheel-icon { font-size: clamp(14px, 6cqmin, 24px); }
-.roue-vp-zone .wheel-cell .wheel-lab.multi { font-size: clamp(8px, 3.4cqmin, 11px); }
+.roue-vp-zone .wheel-cell .wheel-lab.multi { --wheel-mfs: clamp(8px, 3.4cqmin, 11px); }
 /* Arc : la partie haute du disque émerge de la zone */
 .roue-vp-zone .wheel-arc .wheel-svg { width: min(98cqw, 2.6 * 100cqh); height: min(98cqw, 2.6 * 100cqh); }
 @media (orientation: portrait) {

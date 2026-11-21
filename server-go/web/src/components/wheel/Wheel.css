@@ -33,10 +33,12 @@
   border-radius: 1vh;
   color: #111827;
   font-weight: 800;
-  font-size: 6vh;
+  /* Le texte tient dans la case : taille de base `--wheel-fs`, réduite selon le nombre de caractères `--n` (0,62 em par caractère, 90 % de la largeur). */
+  font-size: min(var(--wheel-fs, 6vh), calc(var(--cell-w) * 0.9 / (0.62 * var(--n, 1))));
   line-height: 1;
+  overflow: hidden;
 }
-.wheel-size-compact .wheel-cell { font-size: 28px; border-width: 2px; border-radius: 6px; }
+.wheel-size-compact .wheel-cell { --wheel-fs: 28px; border-width: 2px; border-radius: 6px; }
 .wheel-cell.special, .wheel-sector.special text { color: #fff; }
 .wheel-cell.special { background: #111827 !important; }
 .wheel-cell.disabled, .wheel-sector.disabled { opacity: 0.25; }
@@ -83,7 +85,7 @@
 /* Libellés longs / pictogramme (v12.0.0, #144) : « 💸 BANQUE / ROUTE », nombres à 4-5 chiffres. */
 .wheel-cell { flex-direction: column; }
 .wheel-cell .wheel-icon { font-size: 4.6vh; line-height: 1; }
-.wheel-cell .wheel-lab.multi { font-size: 1.7vh; letter-spacing: 0.06em; text-align: center; line-height: 1.05; margin-top: 0.25em; }
+.wheel-cell .wheel-lab.multi { font-size: min(var(--wheel-mfs, 1.7vh), calc(var(--cell-w) * 0.9 / (0.72 * var(--n, 1)))); letter-spacing: 0.06em; text-align: center; line-height: 1.05; margin-top: 0.25em; }
 .wheel-size-compact .wheel-cell .wheel-icon { font-size: 18px; }
-.wheel-size-compact .wheel-cell .wheel-lab.multi { font-size: 9px; }
+.wheel-size-compact .wheel-cell .wheel-lab.multi { --wheel-mfs: 9px; }
 .wheel-arc .wheel-icon { fill: #fff; }
