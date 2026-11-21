@@ -1,0 +1,179 @@
+{
+  "GAME": {
+    "ROUE_AWARDS": {},
+    "ROUE_BOARD": {
+      "COLS": 14,
+      "ROWS": [
+        "____ ____"
+      ]
+    },
+    "ROUE_BUY_VOWELS": true,
+    "ROUE_CONSONANTS_LEFT": true,
+    "ROUE_CURRENT_TEAM": "red",
+    "ROUE_CURRENT_TEAM_COLOR": [
+      255,
+      0,
+      0
+    ],
+    "ROUE_LAST_EVENT": {
+      "COUNT": 0,
+      "GAIN": 0,
+      "KIND": "",
+      "LETTER": "",
+      "SEQ": 0,
+      "TEAM": "",
+      "VALUE": 0
+    },
+    "ROUE_LETTERS": [],
+    "ROUE_NEXT_DEFAULT": "",
+    "ROUE_NEXT_TEAM": "",
+    "ROUE_SHOW_LETTERS": true,
+    "ROUE_STEP": 1,
+    "ROUE_STOP_VOWEL": false,
+    "ROUE_SUBPHASE": "TURN",
+    "ROUE_TEAMS": [
+      "red",
+      "blue"
+    ],
+    "ROUE_TEAM_BANK": {
+      "blue": 300,
+      "red": 1000
+    },
+    "ROUE_TURN_GAIN": 0,
+    "ROUE_TURN_VOWEL": false,
+    "ROUE_VOWELS_AFTER": "MANY",
+    "ROUE_VOWELS_BEFORE": "ONE",
+    "ROUE_VOWELS_LEFT": true,
+    "ROUE_VOWEL_GAIN": "REFUND",
+    "ROUE_VOWEL_PRICE": 300,
+    "ROUE_VOWEL_TIMING": "BOTH",
+    "ROUE_WHEEL": {
+      "CURRENT": -1,
+      "FLIP_INTERVAL_MS": 600,
+      "FULL_SPEED": false,
+      "LAYOUT": "strip",
+      "SEGMENTS": [
+        {
+          "ID": "s0",
+          "KIND": "value",
+          "VALUE": 1000
+        },
+        {
+          "ID": "s1",
+          "KIND": "bankrupt",
+          "VALUE": 0
+        },
+        {
+          "ID": "s2",
+          "KIND": "value",
+          "VALUE": 950
+        },
+        {
+          "ID": "s3",
+          "KIND": "value",
+          "VALUE": 50
+        },
+        {
+          "ID": "s4",
+          "KIND": "value",
+          "VALUE": 900
+        },
+        {
+          "ID": "s5",
+          "KIND": "lose_turn",
+          "VALUE": 0
+        },
+        {
+          "ID": "s6",
+          "KIND": "value",
+          "VALUE": 100
+        },
+        {
+          "ID": "s7",
+          "KIND": "value",
+          "VALUE": 850
+        },
+        {
+          "ID": "s8",
+          "KIND": "value",
+          "VALUE": 150
+        },
+        {
+          "ID": "s9",
+          "KIND": "value",
+          "VALUE": 800
+        },
+        {
+          "ID": "s10",
+          "KIND": "value",
+          "VALUE": 200
+        },
+        {
+          "ID": "s11",
+          "KIND": "bonus",
+          "VALUE": 0
+        },
+        {
+          "ID": "s12",
+          "KIND": "value",
+          "VALUE": 750
+        },
+        {
+          "ID": "s13",
+          "KIND": "value",
+          "VALUE": 250
+        },
+        {
+          "ID": "s14",
+          "KIND": "value",
+          "VALUE": 700
+        },
+        {
+          "ID": "s15",
+          "KIND": "value",
+          "VALUE": 300
+        },
+        {
+          "ID": "s16",
+          "KIND": "value",
+          "VALUE": 650
+        },
+        {
+          "ID": "s17",
+          "KIND": "bankrupt",
+          "VALUE": 0
+        },
+        {
+          "ID": "s18",
+          "KIND": "value",
+          "VALUE": 350
+        },
+        {
+          "ID": "s19",
+          "KIND": "value",
+          "VALUE": 600
+        },
+        {
+          "ID": "s20",
+          "KIND": "value",
+          "VALUE": 400
+        },
+        {
+          "ID": "s21",
+          "KIND": "value",
+          "VALUE": 550
+        },
+        {
+          "ID": "s22",
+          "KIND": "value",
+          "VALUE": 450
+        }
+      ],
+      "SPIN_MAX_MS": 10000,
+      "SPIN_PERIOD_MS": 2500,
+      "SPIN_UP_MS": 5000,
+      "STOP": null
+    },
+    "ROUE_WINNER": ""
+  }
+}
