@@ -32,7 +32,8 @@ describe('RoueBoard (#145)', () => {
   it('centre chaque ligne sur 14 colonnes', () => {
     // « LA » (2) : décalage (14-2)/2 = 6 → première lettre en colonne 7 (index 6) de la ligne
     const { container } = render(<RoueBoard rows={['LA']} />)
-    const first = cells(container).slice(0, 14)
+    // #310 (v12.1.0) : la phrase est aussi centrée verticalement — 1 ligne → ligne 2 sur 4 (index 1)
+    const first = cells(container).slice(14, 28)
     expect(first.findIndex(e => e.textContent === 'L')).toBe(6)
     expect(first.findIndex(e => e.textContent === 'A')).toBe(7)
   })

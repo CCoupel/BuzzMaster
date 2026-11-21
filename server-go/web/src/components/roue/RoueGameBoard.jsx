@@ -10,6 +10,7 @@
  * `reveal` (optionnel, admin/anim) : phrase complète — les cases cachées s'affichent en grisé.
  */
 import { useRef } from 'react'
+import { boardTopOffset } from './boardLayout'
 import './RoueGameBoard.css'
 
 export default function RoueGameBoard({ board, flipIntervalMs = 600, size = 'tv', colorOf, solution = null }) {
@@ -27,22 +28,25 @@ export default function RoueGameBoard({ board, flipIntervalMs = 600, size = 'tv'
     else if (rows.some(r => r.includes('*')) || before.join('') !== rows.join('')) flips.current = {}
   }
   const cells = []
-  const lines = [...rows]
+  // Phrase centrée verticalement dans les 4 lignes (#310) ; `ri` = ligne affichée, `sri` = ligne du serveur (retournements, solution).
+  const top = boardTopOffset(rows.length)
+  const lines = [...Array(top).fill(''), ...rows]
   while (lines.length < 4) lines.push('')
-  lines.slice(0, Math.max(4, rows.length)).forEach((r, ri) => {
+  lines.slice(0, Math.max(4, rows.length + top)).forEach((r, ri) => {
+    const sri = ri - top
     const pad = Math.floor((cols - r.length) / 2)
     for (let c = 0; c < cols; c++) {
       const idx = c - pad
       const ch = c < pad ? undefined : r[idx]
       const key = `${ri}-${c}`
       if (!ch || ch === ' ') { cells.push(<div key={key} className="rgb-cell" />); continue }
-      const flipRank = flips.current[`${ri}:${idx}`]
+      const flipRank = flips.current[`${sri}:${idx}`]
       const style = {}
       let cls = 'rgb-cell'
       let content = null
       if (ch === '_') {
         cls += ' tile'
-        const hidden = solution?.[ri]?.[idx]
+        const hidden = solution?.[sri]?.[idx]
         if (hidden && hidden !== ' ') content = <span className="rgb-ghost">{hidden}</span>
       } else if (ch === '*') cls += ' lit'
       else {
