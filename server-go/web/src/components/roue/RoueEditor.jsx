@@ -36,8 +36,8 @@ const FALLBACK_ERRORS = {
   ROUE_PHRASE_EMPTY: 'La phrase est vide.',
   ROUE_PHRASE_INVALID_CHAR: 'La phrase contient un caractère non admis.',
   ROUE_PHRASE_WORD_TOO_LONG: 'Un mot dépasse 14 caractères.',
-  ROUE_BONUS_COUNT_INVALID: 'Nombre de cases BONUS invalide (0 à 4, et la roue ne dépasse pas 64 cases).',
   ROUE_PHRASE_TOO_LONG: 'Phrase trop longue : 4 lignes au plus (14 caractères par ligne, mots non coupés).',
+  ROUE_BONUS_COUNT_INVALID: 'Nombre de cases BONUS invalide (0 à 4, et la roue ne dépasse pas 64 cases).',
 }
 
 /** Refus 400 de POST /questions (texte « ROUE_CODE: détail ») → message lisible ; autre texte inchangé. */
@@ -78,6 +78,8 @@ function BonusSection({ count, onChange }) {
   const [error, setError] = useState('')
   const seq = useRef(0)
   const show = active || count > 0
+  // Composant resté monté sur une autre question à 0 BONUS : pas d'aperçu inutile.
+  useEffect(() => { if (count === 0) setActive(false) }, [count])
   useEffect(() => {
     if (!show) return undefined
     const id = ++seq.current
