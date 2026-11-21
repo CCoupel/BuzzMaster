@@ -7,11 +7,6 @@
 .roue-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
 .roue-options-two { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 700px) { .roue-options, .roue-options-two { grid-template-columns: 1fr; } }
-.roue-layout-thumb { width: 86px; height: 48px; flex: 0 0 86px; border-radius: 0.3rem; background: #0b1020; position: relative; overflow: hidden; }
-.roue-layout-thumb[hidden] { display: none; }
-.roue-layout-thumb::before { content: ''; position: absolute; left: 10px; right: 10px; top: 7px; height: 16px; border-radius: 2px; background: repeating-linear-gradient(90deg, #1d4ed8 0 5px, transparent 5px 7px); }
-.roue-layout-thumb.strip::after { content: ''; position: absolute; left: 6px; right: 6px; bottom: 6px; height: 12px; border-radius: 3px; background: repeating-linear-gradient(90deg, #fca5a5 0 12px, #93c5fd 12px 24px, #86efac 24px 36px, #fde68a 36px 48px); }
-.roue-layout-thumb.arc::after { content: ''; position: absolute; left: -12px; right: -12px; bottom: -78px; height: 100px; border-radius: 50%; border: 12px solid #93c5fd; border-top-color: #fca5a5; border-left-color: #86efac; border-right-color: #fde68a; }
 
 /* 🎁 Cases BONUS (v12.1.0, #308) */
 .roue-bonus-line { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }

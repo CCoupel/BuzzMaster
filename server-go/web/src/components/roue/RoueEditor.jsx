@@ -79,7 +79,6 @@ function RadioCards({ name, options, value, onChange, two, disabled = false }) {
       {options.map(o => (
         <label key={o.value} className="memory-mode-option">
           <input type="radio" name={name} value={o.value} checked={value === o.value} disabled={disabled} onChange={() => onChange(o.value)} />
-          <span className={`roue-layout-thumb ${o.value}`} hidden={name !== 'roueWheelLayout'} aria-hidden="true" />
           <span className="memory-mode-label">
             <strong>{o.label}</strong>
             <small>{o.desc}</small>
