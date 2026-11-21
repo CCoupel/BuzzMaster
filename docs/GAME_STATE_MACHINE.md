@@ -453,16 +453,23 @@ Kinds : `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | L
 | Depuis | Déclencheur | Effet |
 |---|---|---|
 | `START` | — | Plateau construit, cagnottes à 0, `ROUE_WHEEL` figé (copie de la configuration), main à la première équipe, `TURN` |
-| `TURN` | `ROUE_SPIN` (si consonnes restantes) | `SPINNING`, `FULL_SPEED = false`, minuterie de montée `SPIN_UP_MS` armée (la durée maximale n'est pas encore armée) |
+| `TURN` | `ROUE_SPIN` (si consonnes restantes, ou sans consonne quand un achat après l'arrêt est possible, v12.1.0) | `SPINNING`, `FULL_SPEED = false`, minuterie de montée `SPIN_UP_MS` armée (la durée maximale n'est pas encore armée) |
 | `SPINNING` (montée) | Fin de `SPIN_UP_MS` | `FULL_SPEED = true`, minuterie `SPIN_MAX_MS` armée à cet instant |
 | `SPINNING` (montée) | `ROUE_STOP` (admin ou animateur) | Refusé `NOT_FULL_SPEED`, état et minuterie de montée inchangés |
 | `SPINNING` (montée) | Appui `BUTTON` (joueur, buzzer, tablette) | Ignoré en silence |
 | `SPINNING` (pleine vitesse) | Buzz de l'équipe qui a la main, `ROUE_STOP`, fin de `SPIN_MAX_MS` | Tirage uniforme d'une case, `STOPPING`, `FULL_SPEED = false` |
-| `STOPPING` | Fin de `DURATION_MS` | Application de la case : valeur → `LETTER` ; Banqueroute → cagnotte à 0, `TURN_END` ; Tour perdu → `TURN_END` |
+| `STOPPING` | Fin de `DURATION_MS` | Application de la case : valeur → `LETTER` ; Banqueroute → cagnotte à 0, `TURN_END` ; Tour perdu → `TURN_END` ; BONUS → `TURN` (même équipe, `ROUE_TURN_GAIN` = 0, événement `BONUS`, v12.1.0) |
 | `LETTER` | `ROUE_LETTER` | Présente → `LIT` ; absente ou déjà proposée → `TURN_END` ; voyelle ou non-lettre → refus, reste en `LETTER` |
 | `LIT` | `ROUE_FLIP` | `REVEALING` ; événement `FLIP` avec `COUNT` |
 | `REVEALING` | Fin de `COUNT × FLIP_INTERVAL_MS` | `ANSWER` |
-| `ANSWER` | `ROUE_ANSWER` | Réponse validée : gain ajouté à la cagnotte, `SOLVED`, crédit |
+| `TURN` | `ROUE_BUY_VOWEL` (moment `BEFORE` / `BOTH`, présente) | Débit du prix, `VOWEL_LIT` ; événement `VOWEL_HIT` (v12.1.0) |
+| `TURN` | `ROUE_BUY_VOWEL` (absente) | Débit, `TURN_END`, événement `VOWEL_MISS` (v12.1.0) |
+| `VOWEL_LIT` | `ROUE_FLIP` | `VOWEL_REVEALING` ; crédit du gain, événement `FLIP` (v12.1.0) |
+| `VOWEL_REVEALING` | Fin de `COUNT × FLIP_INTERVAL_MS` | `TURN` (même équipe), `ROUE_TURN_VOWEL` = `true`, aucun événement (v12.1.0) |
+| `LETTER` | `ROUE_BUY_VOWEL` (moment `AFTER` / `BOTH`, présente) | Débit, `ROUE_STOP_VOWEL` = `true`, `LIT` (v12.1.0) |
+| `LETTER` | `ROUE_BUY_VOWEL` (absente) | Débit, `TURN_END`, `VOWEL_MISS` (v12.1.0) |
+| `ANSWER` | `ROUE_BUY_VOWEL` (si `ROUE_STOP_VOWEL` et `AFTER` / `BOTH`, présente) | `LIT` (v12.1.0) |
+| `ANSWER` | `ROUE_ANSWER` | Réponse validée : gain ajouté à la cagnotte, `SOLVED`, crédit ; aussi depuis `TURN` quand `ROUE_TURN_VOWEL` (v12.1.0) |
 | `ANSWER` / `TURN` sans consonne | `ROUE_NEXT {HAND}` | Gain ajouté, `TURN_END` (ou `TURN`), main selon `HAND` |
 | `TURN` | `ROUE_PASS` (hors `SOLO`) | Rotation immédiate, cagnotte conservée |
 | toute sous-phase sauf `SOLVED` | `ROUE_REVEAL` | `SOLVED` sans gagnant, aucun crédit |
@@ -486,10 +493,10 @@ Appuis ignorés sans effet ni diffusion : buzzer d'une autre équipe, appui hors
 
 Tous présents, **sans `omitempty`**, jamais `null` pour les maps et tableaux, **jamais persistés** (remis à vide dans
 `Ready`, `stopUnsafe` et `InitGameWith`). Diffusés à admin, animateur, TV et tablettes ; jamais aux buzzers.
-Liste complète et types : `docs/DATA_MODELS.md` § « Modèles v12.0.0 — Roue de la Fortune ».
+Liste complète et types : `docs/DATA_MODELS.md` § « Modèles v12.0.0 — Roue de la Fortune » et § « Modèles v12.1.0 ».
 
 ```go
-ROUE_SUBPHASE            string         // "" | TURN | SPINNING | STOPPING | LETTER | LIT | REVEALING | ANSWER | TURN_END | SOLVED
+ROUE_SUBPHASE            string         // "" | TURN | SPINNING | STOPPING | LETTER | LIT | REVEALING | ANSWER | TURN_END | SOLVED | VOWEL_LIT | VOWEL_REVEALING (v12.1.0)
 ROUE_STEP                int            // 1..7 (0 hors tour)
 ROUE_TEAMS               []string       // ordre de rotation
 ROUE_CURRENT_TEAM        string         // équipe qui a la main
@@ -498,18 +505,28 @@ ROUE_NEXT_DEFAULT        string         // SAME | NEXT (bouton conseillé), ANSW
 ROUE_TEAM_BANK           map[string]int // cagnotte de manche
 ROUE_TURN_GAIN           int            // gain du tour, pas encore ajouté à la cagnotte
 ROUE_BOARD               RoueBoard      // { COLS: 14, ROWS: [...] } — "_" caché, "*" caché éclairé (sous-phase LIT)
-ROUE_LETTERS             []RoueLetter   // consonnes proposées (LETTER, TEAM, HIT)
+ROUE_LETTERS             []RoueLetter   // lettres proposées : consonnes, et voyelles depuis v12.1.0 (LETTER, TEAM, HIT)
 ROUE_CONSONANTS_LEFT     bool
 ROUE_WHEEL               RoueWheel      // LAYOUT, durées, SPIN_UP_MS, FULL_SPEED, SEGMENTS, CURRENT, STOP
 ROUE_LAST_EVENT          RoueEvent      // SEQ, KIND, TEAM, LETTER, COUNT, VALUE, GAIN
 ROUE_WINNER              string
 ROUE_AWARDS              map[string]int
+// v12.1.0 (#147) — voir DATA_MODELS.md
+ROUE_BUY_VOWELS         bool
+ROUE_VOWEL_TIMING       string
+ROUE_VOWELS_BEFORE      string
+ROUE_VOWELS_AFTER       string
+ROUE_VOWEL_PRICE        int
+ROUE_VOWEL_GAIN         string
+ROUE_VOWELS_LEFT        bool
+ROUE_TURN_VOWEL         bool
+ROUE_STOP_VOWEL         bool
 ```
 
 ### Actions WebSocket ROUE
 
 Détail (payloads, émetteurs, codes d'erreur) : `docs/WEBSOCKET_PROTOCOL.md` § « ROUE ». Résumé : `ROUE_SET_TEAMS`,
-`ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL`
+`ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`, `ROUE_BUY_VOWEL` (v12.1.0), `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT`, `ROUE_PASS`, `ROUE_REVEAL`
 (client → serveur) ; `ROUE_ERROR` (serveur → émetteur seul). L'arrêt par les joueurs passe par l'action `BUTTON`
 existante : aucun changement de protocole BuzzClick.
 
@@ -517,6 +534,8 @@ existante : aucun changement de protocole BuzzClick.
 
 - `internal/game/roue.go` : sous-phases, minuteries, transitions, crédit (sans logique dans `engine.go`).
 - `internal/game/roue_board.go` : repli des accents, mise en lignes, validation de la phrase.
+- `internal/game/roue_vowels.go` : achat de voyelles, réglages et débit (v12.1.0, contrat §15.1).
+- `internal/game/roue_bonus.go` : arrêt sur une case BONUS (v12.1.0, contrat §15.2).
 - `internal/game/roue_wheel.go` : construction de la roue (§10.1 du contrat), correction du pas.
 - `cmd/server/roue.go` : `handleRoueAction`, rappels LED, ambiance et sons (hors `main.go`).
 

@@ -1838,8 +1838,8 @@ repliés. Mise en lignes : 4 lignes de 14 colonnes au plus, mots non coupés, ca
 | `ROUE_NEXT_DEFAULT` | string | `ANSWER` / `TURN_END` : `SAME` ou `NEXT` (bouton conseillé) |
 | `ROUE_TEAM_BANK` | map équipe → int | Cagnotte de manche |
 | `ROUE_TURN_GAIN` | int | Gain du tour, pas encore ajouté à la cagnotte |
-| `ROUE_BOARD` | `{ "COLS": 14, "ROWS": string[] }` | `_` = lettre cachée, `*` = cachée et éclairée (sous-phase `LIT`, étape 5 de `ROUE_STEP`), autre = visible |
-| `ROUE_LETTERS` | `{ "LETTER", "TEAM", "HIT" }[]` | Consonnes proposées, dans l'ordre |
+| `ROUE_BOARD` | `{ "COLS": 14, "ROWS": string[] }` | `_` = lettre cachée, `*` = cachée et éclairée (sous-phases `LIT` et `VOWEL_LIT`, étape 5 de `ROUE_STEP`), autre = visible |
+| `ROUE_LETTERS` | `{ "LETTER", "TEAM", "HIT" }[]` | Lettres proposées, dans l'ordre : consonnes, et voyelles depuis v12.1.0 |
 | `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question |
 | `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |
 | `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE}`, `KIND` ∈ `value \| bankrupt \| lose_turn \| bonus` — `bonus` depuis v12.1.0, valeur 0), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`), `SPIN_UP_MS` (durée de la montée, posée au `START` = 2 × `SPIN_PERIOD_MS`, soit 1 tour, 5 s par défaut), `FULL_SPEED` (`true` seulement en `SPINNING` une fois la montée terminée ; `false` pendant la montée et hors `SPINNING`) |
@@ -1921,7 +1921,7 @@ Refus à l'enregistrement (`400`, rien n'est écrit) : `ROUE_VOWEL_TIMING_INVALI
 Les sous-phases `VOWEL_LIT` et `VOWEL_REVEALING` (`ROUE_STEP` = 1) sont ajoutées à `ROUE_SUBPHASE` : achat avant de
 tourner. L'achat après l'arrêt réutilise `LIT`, `REVEALING` et `ANSWER`.
 
-`ROUE_BOARD` et `ROUE_LETTERS` contiennent aussi les voyelles proposées. Une entrée est une voyelle si sa lettre est
+`ROUE_LETTERS` contient aussi les voyelles proposées (`ROUE_BOARD` ne montre que les voyelles présentes révélées). Une entrée est une voyelle si sa lettre est
 dans `A E I O U Y` ; le calcul de `ROUE_CONSONANTS_LEFT` les ignore.
 
 ### Roue générée

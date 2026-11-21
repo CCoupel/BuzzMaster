@@ -1261,8 +1261,7 @@ proposent la réponse. Une phrase = une manche.
 6. Choisir la **forme de la roue** sur la TV (bandeau, défaut, ou arc) et si les **lettres déjà proposées** s'affichent
    sur la TV et les tablettes (défaut : oui).
 
-Les voyelles (A, E, I, O, U, Y) ne se proposent pas gratuitement : elles s'**achètent** (v12.1.0, voir ci-dessous).
-Elles ne sont jamais proposées par la consonne de l'étape 4.
+Une voyelle ne se propose pas comme une consonne : elle s'**achète** quand l'achat est activé sur la question (v12.1.0, voir ci-dessous).
 
 ### Voyelles achetables et case BONUS (v12.1.0)
 
@@ -1270,7 +1269,7 @@ Réglages par question, dans l'éditeur de question Roue : la section « Voyelle
 
 **Voyelles** (activées par défaut, y compris pour les questions déjà créées) :
 
-1. **Interrupteur « Achat de voyelles »** : désactivé, la manche se joue comme en v12.0. Les autres réglages sont gardés
+1. **Interrupteur « Autoriser l'achat de voyelles »** : désactivé, la manche se joue comme en v12.0. Les autres réglages sont gardés
    pour une réactivation.
 2. **Moment de l'achat** :
    - « Avant de tourner » (défaut, comportement des questions existantes) : au début du tour, l'équipe achète une voyelle
