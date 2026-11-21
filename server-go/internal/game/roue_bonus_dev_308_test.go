@@ -1,23 +1,41 @@
 package game
 
-import "testing"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"testing"
+)
 
+// Golden wheels produced by the v12.0.0 BuildRoueWheel (before #308), frozen: B = Banqueroute, P = Tour perdu.
 func TestRoueBonusDev308_ZeroBonusIsV120Wheel(t *testing.T) {
-	for _, p := range []RoueWheelParams{
-		DefaultRoueWheelParams(),
-		{MaxPoints: 1000, Step: 50, BankruptCount: 0, LoseTurnCount: 0},
-		{MaxPoints: 500, Step: 100, BankruptCount: 3, LoseTurnCount: 2},
-	} {
-		a := BuildRoueWheel(p)
-		p.BonusCount = 0
-		b := BuildRoueWheel(p)
-		if len(a) != len(b) {
-			t.Fatal("size differs")
-		}
-		for i := range a {
-			if a[i] != b[i] {
-				t.Fatalf("case %d differs", i)
+	golden := []struct {
+		p    RoueWheelParams
+		want string
+	}{
+		{DefaultRoueWheelParams(), "1000 B 950 50 900 100 850 P 150 800 200 750 250 700 B 300 650 350 600 400 550 450"},
+		{RoueWheelParams{MaxPoints: 1000, Step: 100}, "1000 100 900 200 800 300 700 400 600 500"},
+		{RoueWheelParams{MaxPoints: 500, Step: 100, BankruptCount: 3, LoseTurnCount: 2}, "500 B P 400 B 100 P 300 B 200"},
+	}
+	for _, g := range golden {
+		var parts []string
+		for i, s := range BuildRoueWheel(g.p) {
+			if s.ID != fmt.Sprintf("s%d", i) {
+				t.Fatalf("ID %q at %d", s.ID, i)
 			}
+			switch s.Kind {
+			case RoueKindBankrupt:
+				parts = append(parts, "B")
+			case RoueKindLoseTurn:
+				parts = append(parts, "P")
+			case RoueKindValue:
+				parts = append(parts, strconv.Itoa(s.Value))
+			default:
+				t.Fatalf("unexpected kind %q", s.Kind)
+			}
+		}
+		if got := strings.Join(parts, " "); got != g.want {
+			t.Fatalf("v12.0 wheel changed:\n got  %s\n want %s", got, g.want)
 		}
 	}
 }
