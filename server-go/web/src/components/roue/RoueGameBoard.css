@@ -1,8 +1,15 @@
 /* RoueGameBoard — TV STATIQUE : overflow hidden, unités viewport (contrat CLAUDE.md « Contrainte Affichage TV »). */
-.rgb-board { display: grid; grid-template-columns: repeat(var(--rgb-cols, 14), var(--rgb-cs)); grid-auto-rows: var(--rgb-cs); gap: 0.5vh; justify-content: center; perspective: 800px; overflow: hidden; }
-.rgb-tv { --rgb-cs: 6vw; }
-.rgb-tv.rgb-arc { --rgb-cs: 4.9vw; }
-.rgb-tablet { --rgb-cs: calc((100vw - 28px) / 14 - 3px); gap: 3px; }
+.rgb-board { flex: 0 0 auto; display: grid; grid-template-columns: repeat(var(--rgb-cols, 14), var(--rgb-cs)); grid-auto-rows: var(--rgb-cs); gap: 0.5vh; justify-content: center; perspective: 800px; overflow: hidden; }
+/* Les 4 lignes tiennent TOUJOURS dans la hauteur disponible (retour QUALIF n°6) : la case est le plus petit de la taille « largeur » et de la
+   taille « hauteur » (4 lignes + 3 écarts dans la zone du plateau). Repli sans unités de conteneur : plafond en vh. */
+.rgb-tv { --rgb-cs: min(6vw, 10vh); }
+.rgb-tv.rgb-arc { --rgb-cs: min(4.9vw, 8.5vh); }
+.rgb-tablet { --rgb-cs: min(calc((100vw - 28px) / 14 - 3px), 10vh); gap: 3px; }
+@supports (height: 1cqh) {
+  .rgb-tv { --rgb-cs: min(6vw, calc((100cqh - 1.5vh) / 4)); }
+  .rgb-tv.rgb-arc { --rgb-cs: min(4.9vw, calc((100cqh - 1.5vh) / 4)); }
+  .rgb-tablet { --rgb-cs: min(calc((100cqw - 28px) / 14 - 3px), calc((40cqh - 9px) / 4)); }
+}
 .rgb-admin { --rgb-cs: 2.1rem; gap: 3px; }
 .rgb-cell { display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: calc(var(--rgb-cs) * 0.62); border-radius: 0.5vh; background: rgba(255, 255, 255, 0.04); color: #111827; }
 .rgb-cell.tile { background: #1d4ed8; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25); }

@@ -12,7 +12,7 @@
 .roue-head { display: flex; align-items: center; gap: 2vw; padding: 1.4vh 3vw 0.6vh; height: 7vh; flex: 0 0 auto; box-sizing: border-box; }
 .roue-cat { background: rgba(255, 255, 255, 0.12); border-radius: 999px; padding: 0.15em 1em; font-size: 2.6vh; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
 .roue-pres { font-size: 3.4vh; font-weight: 700; color: #fde68a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
-.roue-mid { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+.roue-mid { flex: 1; min-height: 0; container-type: size; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
 .roue-event { text-align: center; font-size: 2.8vh; font-weight: 800; height: 4.6vh; line-height: 4.6vh; white-space: nowrap; overflow: hidden; flex: 0 0 auto; }
 .roue-event em, .roue-vp-msg em { font-style: normal; color: #fbbf24; }
 .roue-letters { text-align: center; font-size: 2vh; color: #9ca3af; height: 3.4vh; line-height: 3.4vh; white-space: nowrap; overflow: hidden; flex: 0 0 auto; }
@@ -25,7 +25,7 @@
 .roue-wheel-strip .wheel-cell { --wheel-fs: 5.4vh; }
 
 /* Tablette (M5 révisée) : la roue remplace le bouton d'arrêt. Habillage de FortuneWheel seulement (géométrie de Wheel intacte). */
-.roue-vp { position: absolute; inset: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; overflow: hidden; color: #e5e7eb; }
+.roue-vp { container-type: size; position: absolute; inset: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; overflow: hidden; color: #e5e7eb; }
 .roue-vp-top { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; min-width: 0; }
 .roue-vp-me { border-radius: 999px; padding: 0.15rem 0.7rem; font-weight: 800; color: #fff; white-space: nowrap; }
 .roue-vp-bank { font-weight: 800; white-space: nowrap; margin-left: auto; }
@@ -70,6 +70,7 @@
 
 /* 🎁 BONUS (v12.1.0, #308) — bandeau doré posé sur le plateau (TV statique : aucun scroll) */
 .roue-bonus-wrap { position: relative; }
+.roue-vp .roue-bonus-wrap { flex: 0 0 auto; min-height: 0; }
 .roue-bonus-ribbon { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%) rotate(-3deg); background: linear-gradient(90deg, transparent, #f59e0b 15%, #fbbf24 50%, #f59e0b 85%, transparent); color: #111827; text-align: center; font-size: 9vh; font-weight: 900; letter-spacing: 0.08em; padding: 0.8vh 0; box-shadow: 0 0 4vh #f59e0b; pointer-events: none; overflow: hidden; }
 .roue-vp .roue-bonus-ribbon { font-size: 6vh; }
 
