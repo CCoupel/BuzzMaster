@@ -30,7 +30,7 @@ import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import EntracteFields from '../components/EntracteFields'
-import RoueEditor, { roueRefusalText } from '../components/roue/RoueEditor'
+import RoueEditor, { roueRefusalText, validVowelPrice } from '../components/roue/RoueEditor'
 import RoundGroup from '../components/RoundGroup'
 import RoundDeleteDialog from '../components/RoundDeleteDialog'
 import RoundAmbianceDialog from '../components/RoundAmbianceDialog'
@@ -136,6 +136,13 @@ export default function QuestionsPage() {
     roueWheelLayout: 'strip',
     roueShowLetters: true,
     roueBonusCount: 0, // v12.1.0 (#308)
+    // Voyelles (v12.1.0, #147) — défauts d'une question v12.0 : achat avant de tourner, plusieurs / plusieurs, 250, sans gain
+    roueBuyVowels: true,
+    roueVowelTiming: 'BEFORE',
+    roueVowelsBefore: 'MANY',
+    roueVowelsAfter: 'MANY',
+    roueVowelPrice: 250,
+    roueVowelGain: 'NONE',
     // ENTRACTE fields (#214, milestone v9.0.0) — second déclencheur du
     // mécanisme ENTRACTE existant (#119, EntracteConfigForm.jsx/#215) :
     // chaque occurrence du déroulé porte sa propre config, MÊME STRUCTURE
@@ -1222,6 +1229,13 @@ export default function QuestionsPage() {
       roueWheelLayout: question.ROUE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip',
       roueShowLetters: question.ROUE_SHOW_LETTERS !== false,
       roueBonusCount: Number.isInteger(question.ROUE_BONUS_COUNT) ? question.ROUE_BONUS_COUNT : 0, // absent = 0 (#308)
+      // Voyelles (#147) — absent = valeur par défaut (ROUE_BUY_VOWELS n'est écrit que pour false)
+      roueBuyVowels: question.ROUE_BUY_VOWELS !== false,
+      roueVowelTiming: question.ROUE_VOWEL_TIMING || 'BEFORE',
+      roueVowelsBefore: question.ROUE_VOWELS_BEFORE || 'MANY',
+      roueVowelsAfter: question.ROUE_VOWELS_AFTER || 'MANY',
+      roueVowelPrice: Number.isInteger(question.ROUE_VOWEL_PRICE) ? question.ROUE_VOWEL_PRICE : 250,
+      roueVowelGain: question.ROUE_VOWEL_GAIN || 'NONE',
       // ENTRACTE (#214) — ENTRACTE_CONFIG (nested, contrat backend
       // TypedContent.EntracteConfig) : mêmes défauts que la config globale
       // (EntracteConfigForm.jsx) si l'occurrence n'en porte pas encore.
@@ -1386,6 +1400,12 @@ export default function QuestionsPage() {
       roueWheelLayout: 'strip',
       roueShowLetters: true,
       roueBonusCount: 0, // v12.1.0 (#308)
+      roueBuyVowels: true,
+      roueVowelTiming: 'BEFORE',
+      roueVowelsBefore: 'MANY',
+      roueVowelsAfter: 'MANY',
+      roueVowelPrice: 250,
+      roueVowelGain: 'NONE',
       // ENTRACTE fields — voir commentaire de l'état initial (useState
       // ci-dessus) pour le détail des champs.
       entracteConfig: { title: 'ENTRACTE', subtitle: 'Retour dans 20mn', panelSize: 65, animPeriod: 10, animIntensity: 20, transitionMs: 2000 },
@@ -1670,7 +1690,7 @@ export default function QuestionsPage() {
     // For Memory, need question and at least 2 valid pairs
     // ROUE (#145) — pas d'énoncé : la phrase est validée par le serveur (aperçu) ; bouton désactivé tant qu'elle est refusée
     if (formData.type === 'ROUE') {
-      if (!formData.rouePhrase.trim() || !roueValid) return
+      if (!formData.rouePhrase.trim() || !roueValid || !validVowelPrice(formData.roueVowelPrice ?? 250)) return
     } else if (!formData.question) return
     if (formData.type === 'SPEEDY' && !formData.answer) return
     if (formData.type === 'ARDOISE' && !formData.answer) return
@@ -1980,6 +2000,12 @@ export default function QuestionsPage() {
       data.append('roue_gains_rule', formData.roueGainsRule)
       data.append('roue_wheel_layout', formData.roueWheelLayout === 'arc' ? 'arc' : 'strip')
       data.append('roue_show_letters', formData.roueShowLetters ? 'true' : 'false')
+      data.append('roue_buy_vowels', formData.roueBuyVowels === false ? 'false' : 'true')
+      data.append('roue_vowel_timing', formData.roueVowelTiming || 'BEFORE')
+      data.append('roue_vowels_before', formData.roueVowelsBefore || 'MANY')
+      data.append('roue_vowels_after', formData.roueVowelsAfter || 'MANY')
+      data.append('roue_vowel_price', String(formData.roueVowelPrice ?? 250).trim())
+      data.append('roue_vowel_gain', formData.roueVowelGain || 'NONE')
       data.append('roue_bonus_count', String(Number.isInteger(formData.roueBonusCount) ? formData.roueBonusCount : 0))
       data.append('answer', '—')
     } else if (formData.type === 'ENTRACTE') {
@@ -3853,7 +3879,7 @@ export default function QuestionsPage() {
                   variant={editingId ? 'primary' : 'fun'}
                   size="lg"
                   loading={isUploading}
-                  disabled={(formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)) || (formData.type === 'ROUE' && !roueValid)}
+                  disabled={(formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)) || (formData.type === 'ROUE' && (!roueValid || !validVowelPrice(formData.roueVowelPrice ?? 250)))}
                   title={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty) ? 'Corrigez la pénalité de mauvaise réponse' : (formData.type === 'ROUE' && !roueValid ? 'Saisissez une phrase acceptée par le plateau' : undefined)}
                   className="submit-btn"
                 >

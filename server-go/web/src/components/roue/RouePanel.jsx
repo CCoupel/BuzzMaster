@@ -9,11 +9,13 @@
 import { useEffect, useState } from 'react'
 import RoueSteps from './RoueSteps'
 import { RoueErrorLine, RoueKeyboard, RoueNextButtons, useSpinCountdown } from './RoueControls'
-import { currentSegment, fmtPts, isBonusEvent, roueGates, roueSolo, segmentLabel, teamCss } from './roueState'
+import { currentSegment, fmtPts, isBonusEvent, isVowel, roueGates, roueSolo, segmentLabel, teamCss, vowelInfo, VOWELS } from './roueState'
 import './RouePanel.css'
 
 const MODE_LABEL = { SOLO: 'Solo', CHACUN_SON_TOUR: 'Chacun son tour', TANT_QUE_JE_GAGNE: 'Tant que je gagne' }
 const GAINS_LABEL = { WINNER_ONLY: 'Seul le gagnant encaisse', ALL_TEAMS: 'Tout le monde encaisse' }
+const TIMING_LABEL = { BEFORE: 'avant de tourner', AFTER: "après l'arrêt", BOTH: 'avant et après' }
+const VGAIN_LABEL = { REFUND: 'Mise remboursée', PER_OCCURRENCE: 'Prix × nombre de lettres' }
 const fold = (c) => c.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
 
 /** Phrase solution (visible ici seulement) : noir = affichée sur la TV, jaune = éclairée, vert = en retournement. */
@@ -31,8 +33,8 @@ function Solution({ gs }) {
         const isLetter = /^[A-Z]$/.test(f)
         let cls = ''
         if (sub === 'SOLVED' || !isLetter) cls = 'rv'
-        else if (f === last && sub === 'LIT') cls = 'lit'
-        else if (f === last && sub === 'REVEALING') cls = 'new'
+        else if (f === last && (sub === 'LIT' || sub === 'VOWEL_LIT')) cls = 'lit'
+        else if (f === last && (sub === 'REVEALING' || sub === 'VOWEL_REVEALING')) cls = 'new'
         else if (hits.has(f)) cls = 'rv'
         return <span key={i} className={cls}>{ch}</span>
       })}
@@ -64,28 +66,86 @@ function TeamPicker({ gs, teamList, actions, waitReasons }) {
     </div>
   )
 }
-function Action({ gs, gates, actions, selected, setSelected }) {
+/** Clavier des voyelles + bouton « Acheter le X — prix » (étape 1 après « Acheter une voyelle », étape 6 « autre voyelle »). */
+function VowelBuy({ gs, actions, selected, setSelected, label, onDone }) {
+  const v = vowelInfo(gs)
+  const picked = VOWELS.includes(selected) ? selected : ''
+  return (
+    <div className="roue-vowbuy" data-testid="roue-vowel-buy">
+      <div className="roue-vow roue-vow-buy" role="group" aria-label="Voyelles">
+        <b className="roue-vow-label">{label || `Voyelle — ${fmtPts(v.price)} :`}</b>
+        {VOWELS.map(l => {
+          const played = (gs.ROUE_LETTERS || []).find(x => x.LETTER === l)
+          return (
+            <button key={l} type="button" className={`roue-key ${played ? (played.HIT ? 'hit' : 'miss') : (picked === l ? 'sel' : '')}`}
+              disabled={!!played} aria-pressed={picked === l} onClick={() => setSelected(l)}><b>{l}</b></button>
+          )
+        })}
+      </div>
+      <div className="roue-row">
+        <button type="button" className="roue-btn vow solid big" disabled={!picked}
+          onClick={() => { if (picked) { actions.buyVowel(picked); setSelected(''); onDone?.() } }}>
+          {picked ? `Acheter le ${picked} — ${fmtPts(v.price)}` : 'Choisissez une voyelle'}
+        </button>
+        {onDone && <button type="button" className="roue-btn ghost" onClick={() => { setSelected(''); onDone() }}>Annuler</button>}
+      </div>
+    </div>
+  )
+}
+
+/** Libellé du bouton d'achat à l'étape 1 selon les réglages et la cagnotte. */
+function buyLabel(v) {
+  if (!v.left) return 'Plus de voyelle à trouver'
+  if (v.limitBefore) return '1 voyelle par tour : déjà achetée'
+  if (!v.rich) return `Acheter une voyelle — ${fmtPts(v.price)} (cagnotte : ${fmtPts(v.bank)})`
+  return `🔤 Acheter une voyelle — ${fmtPts(v.price)}`
+}
+
+function Action({ gs, gates, actions, selected, setSelected, picking, setPicking }) {
+  const vi = vowelInfo(gs)
   const seg = currentSegment(gs)
   const cd = useSpinCountdown(gs)
   const team = gs.ROUE_CURRENT_TEAM
   const ev = gs.ROUE_LAST_EVENT || {}
   const gain = gs.ROUE_TURN_GAIN || 0
+  const submitLetter = (l) => { if (!l) return; if (isVowel(l)) { if (vi.canBuyAfter) actions.buyVowel(l) } else actions.letter(l) }
   switch (gs.ROUE_SUBPHASE) {
     case 'TURN':
-      if (!gs.ROUE_CONSONANTS_LEFT) {
+      if (!gs.ROUE_CONSONANTS_LEFT && !gates.canSpin) {
         return (<>
           <h5>Plus aucune consonne à trouver</h5>
           <div className="roue-row">
             <button type="button" className="roue-btn ok big" onClick={actions.answer}>✓ Réponse validée</button>
             <RoueNextButtons gs={gs} gates={gates} onNext={actions.next} />
+            {vi.showBefore && <button type="button" className="roue-btn vow big" disabled={!vi.canBuyBefore} onClick={() => setPicking(true)}>{buyLabel(vi)}</button>}
           </div>
+          {picking && vi.canBuyBefore && <VowelBuy gs={gs} actions={actions} selected={selected} setSelected={setSelected} onDone={() => setPicking(false)} />}
         </>)
       }
       return (<>
         {isBonusEvent(gs) && <div className="roue-bonus" role="status" data-testid="roue-bonus">🎁 BONUS ! — les {team} gardent la main. Remettez le cadeau, puis relancez la roue (aucun point compté).</div>}
-        <h5>1 — Lancer la roue</h5>
-        <div className="roue-row"><button type="button" className="roue-btn primary big" onClick={actions.spin}>🎡 Lancer la roue</button></div>
+        <h5>1 — {vi.before ? 'Lancer la roue ou acheter une voyelle' : 'Lancer la roue'}</h5>
+        <div className="roue-row">
+          <button type="button" className="roue-btn primary big" onClick={actions.spin} disabled={!gates.canSpin}>🎡 Lancer la roue</button>
+          {vi.showBefore && <button type="button" className="roue-btn vow big" disabled={!vi.canBuyBefore} onClick={() => setPicking(true)}>{buyLabel(vi)}</button>}
+          {gs.ROUE_TURN_VOWEL === true && <button type="button" className="roue-btn ok big" onClick={actions.answer}>✓ Réponse validée</button>}
+        </div>
+        {picking && vi.canBuyBefore && <VowelBuy gs={gs} actions={actions} selected={selected} setSelected={setSelected} onDone={() => setPicking(false)} />}
+        {vi.before && vi.canBuyBefore === false && vi.rich === false && vi.left && <p className="roue-hint">Cagnotte des {team} : {fmtPts(vi.bank)} — il faut {fmtPts(vi.price)} pour acheter une voyelle.</p>}
+        {!vi.before && vi.after && <p className="roue-hint">Voyelles : achat après l'arrêt de la roue seulement (étape 4), pour cette question.</p>}
         <p className="roue-hint">La roue se met à tourner sur la TV ; l'équipe qui a la main buzze pour l'arrêter.</p>
+      </>)
+    case 'VOWEL_LIT':
+      return (<>
+        <h5>1 — Voyelle {ev.LETTER} : {ev.COUNT} case{ev.COUNT > 1 ? 's' : ''} éclairée{ev.COUNT > 1 ? 's' : ''} sur le plateau</h5>
+        <div className="roue-row"><span>Payé : <span className="roue-cost">−{fmtPts(ev.VALUE)}</span></span></div>
+        <div className="roue-row roue-gap"><button type="button" className="roue-btn primary big" disabled={!gates.canFlip} onClick={actions.flip}>🔄 Retourner les cases</button></div>
+      </>)
+    case 'VOWEL_REVEALING':
+      return (<>
+        <h5>1 — Voyelle {ev.LETTER} : retournement</h5>
+        <div className="roue-row"><span>Les {ev.COUNT} case{ev.COUNT > 1 ? 's' : ''} se retournent une à une sur la TV…</span>{ev.GAIN > 0 && <span className="roue-gain">{ev.LETTER} : +{fmtPts(ev.GAIN)}</span>}</div>
+        <p className="roue-hint">Aucun geste : retour à l'étape 1 à la fin de l'animation, les {team} gardent la main.</p>
       </>)
     case 'SPINNING':
       return (<>
@@ -112,18 +172,24 @@ function Action({ gs, gates, actions, selected, setSelected }) {
     }
     case 'LETTER':
       return (<>
-        <h5>4 — Sélection de la consonne {seg && <span className="roue-seg">{segmentLabel(seg)}</span>}</h5>
-        <RoueKeyboard letters={gs.ROUE_LETTERS} enabled selected={selected} onSelect={setSelected} onSubmit={() => selected && actions.letter(selected)} />
+        <h5>4 — {vi.after ? 'Consonne ou voyelle' : 'Sélection de la consonne'} {seg && <span className="roue-seg">{segmentLabel(seg)}</span>}</h5>
+        <RoueKeyboard letters={gs.ROUE_LETTERS} enabled selected={selected} onSelect={setSelected} onSubmit={() => submitLetter(selected)}
+          vowelsLabel={vi.after ? `ou une voyelle — ${fmtPts(vi.price)} :` : null} vowelsEnabled={vi.canBuyAfter} />
+        {vi.after && <p className="roue-hint">Une voyelle remplace la consonne : la case {segmentLabel(seg)} n'est pas jouée.{vi.rich ? '' : ' Cagnotte insuffisante.'}</p>}
         <div className="roue-row roue-gap">
-          <button type="button" className="roue-btn primary big" disabled={!selected} onClick={() => selected && actions.letter(selected)}>
-            {selected ? `Valider la lettre ${selected}` : 'Choisissez une consonne'}
-          </button>
+          {selected && isVowel(selected) ? (
+            <button type="button" className="roue-btn vow solid big" disabled={!vi.canBuyAfter} onClick={() => submitLetter(selected)}>Acheter le {selected} — {fmtPts(vi.price)}</button>
+          ) : (
+            <button type="button" className="roue-btn primary big" disabled={!selected} onClick={() => submitLetter(selected)}>
+              {selected ? `Valider la lettre ${selected}` : `Choisissez une consonne${vi.after ? ' ou une voyelle' : ''}`}
+            </button>
+          )}
           <span className="roue-hint">ou tapez la lettre au clavier puis Entrée</span>
         </div>
       </>)
     case 'LIT':
       return (<>
-        <h5>5 — Consonne {ev.LETTER} : {ev.COUNT} case{ev.COUNT > 1 ? 's' : ''} éclairée{ev.COUNT > 1 ? 's' : ''} sur le plateau</h5>
+        <h5>5 — {isVowel(ev.LETTER) ? 'Voyelle' : 'Consonne'} {ev.LETTER} : {ev.COUNT} case{ev.COUNT > 1 ? 's' : ''} éclairée{ev.COUNT > 1 ? 's' : ''} sur le plateau</h5>
         <div className="roue-row"><span>Les cases du <b>{ev.LETTER}</b> sont éclairées sur la TV.</span></div>
         <div className="roue-row roue-gap"><button type="button" className="roue-btn primary big" onClick={actions.flip}>🔄 Retourner les cases</button></div>
       </>)
@@ -141,12 +207,15 @@ function Action({ gs, gates, actions, selected, setSelected }) {
           <span className="roue-hint">sinon, étape 7 :</span>
           <RoueNextButtons gs={gs} gates={gates} onNext={actions.next} />
         </div>
+        {vi.showAfter && (vi.limitAfter
+          ? <div className="roue-row"><button type="button" className="roue-btn vow big" disabled>1 voyelle par arrêt : déjà achetée</button></div>
+          : <VowelBuy gs={gs} actions={actions} selected={selected} setSelected={setSelected} label={`ou une autre voyelle — ${fmtPts(vi.price)} :`} />)}
         <p className="roue-hint">La réponse est un bonus : une réponse fausse ne fait pas perdre la main. Gain du tour en attente : <span className="roue-gain">+{fmtPts(gain)}</span>.</p>
       </>)
     case 'TURN_END': {
       const letter = (gs.ROUE_LETTERS || []).slice(-1)[0]
       const why = seg?.KIND === 'bankrupt' ? 'Banqueroute' : seg?.KIND === 'lose_turn' ? 'Tour perdu'
-        : letter && letter.HIT === false ? `Lettre ${letter.LETTER} absente` : null
+        : letter && letter.HIT === false ? (isVowel(letter.LETTER) ? `Voyelle ${letter.LETTER} absente — payée −${fmtPts(vi.price)}, tour perdu` : `Lettre ${letter.LETTER} absente`) : null
       return (<>
         <h5>7 — Fin du tour</h5>
         <div className="roue-row">
@@ -170,9 +239,10 @@ function Action({ gs, gates, actions, selected, setSelected }) {
 export default function RouePanel({ gameState, actions, error, teamList = [], waitReasons = [] }) {
   const gs = gameState
   const [selected, setSelected] = useState('')
+  const [picking, setPicking] = useState(false)
   const [confirmReveal, setConfirmReveal] = useState(false)
   const sub = gs.ROUE_SUBPHASE || ''
-  useEffect(() => { if (sub !== 'LETTER') setSelected('') }, [sub])
+  useEffect(() => { setSelected(''); setPicking(false) }, [sub]) // choix remis à zéro à chaque changement de sous-phase
   useEffect(() => { setConfirmReveal(false) }, [sub])
   const q = gs.question || {}
 
@@ -195,6 +265,8 @@ export default function RouePanel({ gameState, actions, error, teamList = [], wa
       <div className="roue-meta">
         <span className="roue-chip">Mode : <b>{MODE_LABEL[q.ROUE_MODE] || MODE_LABEL.TANT_QUE_JE_GAGNE}</b></span>
         <span className="roue-chip">Gains : <b>{GAINS_LABEL[q.ROUE_GAINS_RULE] || GAINS_LABEL.WINNER_ONLY}</b></span>
+        {vowelInfo(gs).enabled && <span className="roue-chip" data-testid="roue-vowel-chip">Voyelles : <b>{fmtPts(vowelInfo(gs).price)}</b> · {TIMING_LABEL[vowelInfo(gs).timing] || TIMING_LABEL.BEFORE}{vowelInfo(gs).gain !== 'NONE' ? ` · ${VGAIN_LABEL[vowelInfo(gs).gain] || ''}` : ''}</span>}
+        {q.ROUE_BONUS_COUNT > 0 && <span className="roue-chip">🎁 BONUS : <b>{q.ROUE_BONUS_COUNT} case{q.ROUE_BONUS_COUNT > 1 ? 's' : ''}</b></span>}
         {q.ROUE_PRESENTATION && <span className="roue-chip">Présentation : <b>{q.ROUE_PRESENTATION}</b></span>}
       </div>
       <Solution gs={gs} />
@@ -207,9 +279,9 @@ export default function RouePanel({ gameState, actions, error, teamList = [], wa
         ))}
       </div>
       {sub !== 'SOLVED' && current && <div className="roue-status"><span className="roue-dot" /> Les {current} ont la main{paused ? ' — manche en pause' : ''}</div>}
-      {sub !== 'SOLVED' && <RoueSteps step={gs.ROUE_STEP} />}
+      {sub !== 'SOLVED' && <RoueSteps step={gs.ROUE_STEP} before={vowelInfo(gs).before} after={vowelInfo(gs).after} />}
       <fieldset className="roue-act" disabled={paused}>
-        <Action gs={gs} gates={gates} actions={actions} selected={selected} setSelected={setSelected} />
+        <Action gs={gs} gates={gates} actions={actions} selected={selected} setSelected={setSelected} picking={picking} setPicking={setPicking} />
       </fieldset>
       <RoueErrorLine error={error} />
       <div className="roue-foot">

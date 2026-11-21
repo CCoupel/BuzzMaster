@@ -2,7 +2,9 @@
 import { ROUE_STEPS } from './roueState'
 import './RoueControls.css'
 
-export default function RoueSteps({ step = 0 }) {
+export default function RoueSteps({ step = 0, before = false, after = false }) {
+  // Libellés adaptés au moment d'achat des voyelles (v12.1.0, maquette admin retenue)
+  const label = (s) => (s.n === 1 && before ? 'Lancer la roue\nou voyelle' : s.n === 4 && after ? 'Consonne\nou voyelle' : s.name)
   return (
     <ol className="roue-steps" aria-label="Étapes du tour">
       {ROUE_STEPS.map(s => {
@@ -10,7 +12,7 @@ export default function RoueSteps({ step = 0 }) {
         return (
           <li key={s.n} className={`roue-step ${state}`} aria-current={state === 'cur' ? 'step' : undefined}>
             <b>{state === 'done' ? '✓' : s.n}</b>
-            {s.name.split('\n').map((l, i) => <span key={i}>{i > 0 && <br />}{l}</span>)}
+            {label(s).split('\n').map((l, i) => <span key={i}>{i > 0 && <br />}{l}</span>)}
           </li>
         )
       })}

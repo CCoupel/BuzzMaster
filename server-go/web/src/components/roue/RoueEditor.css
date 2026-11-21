@@ -22,3 +22,9 @@
 .roue-stepper button:disabled { opacity: 0.4; cursor: not-allowed; }
 .roue-stepper output { min-width: 2.4rem; text-align: center; font-weight: 800; font-size: 1.05rem; }
 .roue-bonus-preview { margin-top: 0.5rem; height: 3.4rem; overflow: hidden; border-radius: 0.5rem; background: rgba(0, 0, 0, 0.35); }
+
+/* 🔤 Voyelles (v12.1.0, #147) */
+.roue-dim { opacity: 0.45; }
+.roue-vowels-counts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3, 1rem); margin-bottom: 1rem; }
+.roue-vowels-counts > div > label { display: block; font-weight: 700; font-size: 0.88rem; margin-bottom: 0.35rem; }
+@media (max-width: 760px) { .roue-vowels-counts { grid-template-columns: 1fr; } }
