@@ -50,3 +50,20 @@ describe('vowelInfo / roueGates — achat de voyelles', () => {
     expect(txt).toContain('4 cases')
   })
 })
+
+describe('annonce de retournement avec le FLIP réel du moteur (VALUE 0) — review LOT-1.2 M1', () => {
+  const txt = (g) => roueAnnouncement(g).map(p => p.text ?? p.strong).join('')
+  const seg = { SEGMENTS: [{ KIND: 'value', VALUE: 500 }], CURRENT: 0 }
+  it('voyelle, gain NONE : pas de « × 0 = +0 »', () => {
+    expect(txt(gs({ ROUE_SUBPHASE: 'VOWEL_REVEALING', ROUE_LAST_EVENT: { KIND: 'FLIP', LETTER: 'E', COUNT: 3, VALUE: 0, GAIN: 0 } }))).toBe('E : 3 cases')
+  })
+  it('voyelle avec gain : « E : 3 cases = +750 »', () => {
+    expect(txt(gs({ ROUE_SUBPHASE: 'REVEALING', ROUE_LAST_EVENT: { KIND: 'FLIP', LETTER: 'E', COUNT: 3, VALUE: 0, GAIN: 750 } }))).toBe('E : 3 cases = +750')
+  })
+  it('consonne (FLIP VALUE 0, GAIN 0) : valeur de la case et gain du tour', () => {
+    expect(txt(gs({ ROUE_SUBPHASE: 'REVEALING', ROUE_WHEEL: seg, ROUE_TURN_GAIN: 1500, ROUE_LAST_EVENT: { KIND: 'FLIP', LETTER: 'R', COUNT: 3, VALUE: 0, GAIN: 0 } }))).toBe('R : 3 × 500 = +1 500')
+  })
+  it('TURN sans consonne, achat après possible : annonce « ou achetez une voyelle »', () => {
+    expect(txt(gs({ ROUE_CONSONANTS_LEFT: false, ROUE_VOWEL_TIMING: 'AFTER' }))).toBe('Plus de consonne : proposez la phrase ou achetez une voyelle')
+  })
+})

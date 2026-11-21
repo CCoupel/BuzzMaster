@@ -100,7 +100,9 @@ export function roueAnnouncement(gs, { mine = null } = {}) {
   switch (sub) {
     case 'TURN': {
       const v = vowelInfo(gs)
-      if (!gs.ROUE_CONSONANTS_LEFT && !v.afterPossible) return [t('Plus de consonne : proposez la phrase')]
+      if (!gs.ROUE_CONSONANTS_LEFT) {
+        return [t(v.afterPossible || v.canBuyBefore ? 'Plus de consonne : proposez la phrase ou achetez une voyelle' : 'Plus de consonne : proposez la phrase')]
+      }
       const hint = v.before ? [t(` — roue ou voyelle (${fmtPts(v.price)})`)] : []
       return mine === true ? [t('À votre équipe de jouer'), ...hint] : [t('Aux '), T(team.toUpperCase()), t(' de jouer'), ...hint]
     }
@@ -120,8 +122,16 @@ export function roueAnnouncement(gs, { mine = null } = {}) {
     case 'LIT':
       return [T(ev.LETTER || letter?.LETTER || ''), t(` : ${ev.COUNT || ''} case${(ev.COUNT || 0) > 1 ? 's' : ''}`)]
     case 'VOWEL_REVEALING':
-    case 'REVEALING':
-      return [T(ev.LETTER || ''), t(` : ${ev.COUNT || 0} × ${ev.VALUE || 0} = `), T(`+${fmtPts(ev.GAIN ?? gs.ROUE_TURN_GAIN)}`)]
+    case 'REVEALING': {
+      const cnt = ev.COUNT || 0
+      // Le FLIP du moteur porte VALUE = 0 : voyelle → gain de l'événement ; consonne → valeur de la case × cases, gain du tour en attente.
+      if (sub === 'VOWEL_REVEALING' || isVowel(ev.LETTER)) {
+        return [T(ev.LETTER || ''), t(` : ${cnt} case${cnt > 1 ? 's' : ''}${ev.GAIN > 0 ? ' = ' : ''}`), ...(ev.GAIN > 0 ? [T(`+${fmtPts(ev.GAIN)}`)] : [])]
+      }
+      const value = ev.VALUE || seg?.VALUE || 0
+      const gain = ev.GAIN > 0 ? ev.GAIN : (gs.ROUE_TURN_GAIN || 0)
+      return [T(ev.LETTER || ''), t(` : ${cnt} × ${value} = `), T(`+${fmtPts(gain)}`)]
+    }
     case 'ANSWER':
       return [t('Une réponse ? À voix haute')]
     case 'TURN_END': {

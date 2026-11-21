@@ -3666,7 +3666,7 @@ export default function QuestionsPage() {
                 {formData.type === 'ROUE' && (
                   <RoueEditor
                     values={formData}
-                    onChange={handleInputChange}
+                    onChange={(field, value) => handleInputChange(field, field === 'roueVowelPrice' && /^\d+$/.test(String(value)) ? Number(value) : value)} // prix typé en nombre dans l'état
                     onValidityChange={setRoueValid}
                   />
                 )}

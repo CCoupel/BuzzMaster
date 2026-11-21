@@ -128,8 +128,9 @@ function Action({ gs, gates, actions, selected, setSelected, picking, setPicking
         <div className="roue-row">
           <button type="button" className="roue-btn primary big" onClick={actions.spin} disabled={!gates.canSpin}>🎡 Lancer la roue</button>
           {vi.showBefore && <button type="button" className="roue-btn vow big" disabled={!vi.canBuyBefore} onClick={() => setPicking(true)}>{buyLabel(vi)}</button>}
-          {gs.ROUE_TURN_VOWEL === true && <button type="button" className="roue-btn ok big" onClick={actions.answer}>✓ Réponse validée</button>}
+          {(gs.ROUE_TURN_VOWEL === true || !gs.ROUE_CONSONANTS_LEFT) && <button type="button" className="roue-btn ok big" onClick={actions.answer}>✓ Réponse validée</button>}
         </div>
+        {!gs.ROUE_CONSONANTS_LEFT && <div className="roue-row roue-gap"><RoueNextButtons gs={gs} gates={gates} onNext={actions.next} /></div>}
         {picking && vi.canBuyBefore && <VowelBuy gs={gs} actions={actions} selected={selected} setSelected={setSelected} onDone={() => setPicking(false)} />}
         {vi.before && vi.canBuyBefore === false && vi.rich === false && vi.left && <p className="roue-hint">Cagnotte des {team} : {fmtPts(vi.bank)} — il faut {fmtPts(vi.price)} pour acheter une voyelle.</p>}
         {!vi.before && vi.after && <p className="roue-hint">Voyelles : achat après l'arrêt de la roue seulement (étape 4), pour cette question.</p>}
