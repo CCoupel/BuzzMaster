@@ -80,6 +80,13 @@ func (a *App) handleRoueAction(clientID string, msg *protocol.Message) {
 		} else {
 			err = a.engine.RoueLetter(p.Letter)
 		}
+	case protocol.ActionRoueBuyVowel:
+		var p protocol.RoueBuyVowelPayload
+		if jerr := json.Unmarshal(msg.Msg, &p); jerr != nil {
+			err = &game.RoueError{Code: game.RoueErrNotALetter, Message: "payload invalide"}
+		} else {
+			err = a.engine.RoueBuyVowel(p.Letter)
+		}
 	case protocol.ActionRoueFlip:
 		err = a.engine.RoueFlip()
 	case protocol.ActionRoueAnswer:

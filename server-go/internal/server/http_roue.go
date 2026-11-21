@@ -69,10 +69,50 @@ func applyRoueFields(r *http.Request, question map[string]interface{}) (int, str
 	if err := game.ValidateRoueBonusCount(bonusCount, wheelParamsFromConfig(config.GetGameSettings().Wheel)); err != nil {
 		return http.StatusBadRequest, err.Error()
 	}
+	// v12.1.0 #147: vowel purchase fields (contract §15.3), all re-read at each save; absent = default.
+	timing := strings.TrimSpace(r.FormValue("roue_vowel_timing"))
+	before := strings.TrimSpace(r.FormValue("roue_vowels_before"))
+	after := strings.TrimSpace(r.FormValue("roue_vowels_after"))
+	vgain := strings.TrimSpace(r.FormValue("roue_vowel_gain"))
+	price, priceGiven := 0, false
+	if v := strings.TrimSpace(r.FormValue("roue_vowel_price")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return http.StatusBadRequest, game.RoueErrVowelPriceInvalid + ": roue_vowel_price doit être un entier de 1 à 1000000"
+		}
+		price, priceGiven = n, true
+	}
+	if err := game.ValidateRoueVowelFields(timing, before, after, price, priceGiven, vgain); err != nil {
+		return http.StatusBadRequest, err.Error()
+	}
 	question["ROUE_PHRASE"] = phrase
 	if bonusCount > 0 { // not written for 0 (contract §15.2.1)
 		question["ROUE_BONUS_COUNT"] = bonusCount
 	}
+	// Written only for false: absent means true. The other settings are always written (kept for a re-activation).
+	if r.FormValue("roue_buy_vowels") == "false" {
+		question["ROUE_BUY_VOWELS"] = false
+	}
+	if timing == "" {
+		timing = game.RoueVowelTimingBefore
+	}
+	if before == "" {
+		before = game.RoueVowelsMany
+	}
+	if after == "" {
+		after = game.RoueVowelsMany
+	}
+	if !priceGiven {
+		price = game.RoueDefaultVowelPrice
+	}
+	if vgain == "" {
+		vgain = game.RoueVowelGainNone
+	}
+	question["ROUE_VOWEL_TIMING"] = timing
+	question["ROUE_VOWELS_BEFORE"] = before
+	question["ROUE_VOWELS_AFTER"] = after
+	question["ROUE_VOWEL_PRICE"] = price
+	question["ROUE_VOWEL_GAIN"] = vgain
 	if presentation != "" {
 		question["ROUE_PRESENTATION"] = presentation
 	}

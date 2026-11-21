@@ -90,6 +90,7 @@ var entracteExpectedAllowed = map[string]bool{
 	protocol.ActionRoueSpin:     false,
 	protocol.ActionRoueStop:     false,
 	protocol.ActionRoueLetter:   false,
+	protocol.ActionRoueBuyVowel: false, // v12.1.0 #147: same decision as ROUE_LETTER
 	protocol.ActionRoueFlip:     false,
 	protocol.ActionRoueAnswer:   false,
 	protocol.ActionRoueNext:     false,

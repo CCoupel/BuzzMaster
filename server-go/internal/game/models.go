@@ -401,7 +401,49 @@ type TypedContent struct {
 	RoueWheelLayout   string `json:"ROUE_WHEEL_LAYOUT,omitempty"` // strip (default) | arc
 	RoueShowLetters   *bool  `json:"ROUE_SHOW_LETTERS,omitempty"` // nil/true = shown, false = hidden
 	RoucePresentation string `json:"ROUE_PRESENTATION,omitempty"` // public hint, 80 chars max
-	RoueBonusCount    int    `json:"ROUE_BONUS_COUNT,omitempty"`  // v12.1.0 #308: BONUS cases added to the wheel, 0 (absent) to 4
+	// v12.1.0 #147 (contracts/roue.md §15.1.1): vowel purchase. RoueBuyVowels is written ONLY when false (absent = true).
+	RoueBuyVowels    *bool  `json:"ROUE_BUY_VOWELS,omitempty"`
+	RoueVowelTiming  string `json:"ROUE_VOWEL_TIMING,omitempty"`  // BEFORE (default) | AFTER | BOTH
+	RoueVowelsBefore string `json:"ROUE_VOWELS_BEFORE,omitempty"` // ONE | MANY (default)
+	RoueVowelsAfter  string `json:"ROUE_VOWELS_AFTER,omitempty"`  // ONE | MANY (default)
+	RoueVowelPrice   int    `json:"ROUE_VOWEL_PRICE,omitempty"`   // 1..1 000 000, absent = 250
+	RoueVowelGain    string `json:"ROUE_VOWEL_GAIN,omitempty"`    // NONE (default) | REFUND | PER_OCCURRENCE
+	RoueBonusCount   int    `json:"ROUE_BONUS_COUNT,omitempty"`   // v12.1.0 #308: BONUS cases added to the wheel, 0 (absent) to 4
+}
+
+// Effective vowel settings (contract §15.1.1: absent = default).
+func (tc TypedContent) EffectiveRoueBuyVowels() bool {
+	return tc.RoueBuyVowels == nil || *tc.RoueBuyVowels
+}
+func (tc TypedContent) EffectiveRoueVowelTiming() string {
+	if tc.RoueVowelTiming == "" {
+		return RoueVowelTimingBefore
+	}
+	return tc.RoueVowelTiming
+}
+func (tc TypedContent) EffectiveRoueVowelsBefore() string {
+	if tc.RoueVowelsBefore == "" {
+		return RoueVowelsMany
+	}
+	return tc.RoueVowelsBefore
+}
+func (tc TypedContent) EffectiveRoueVowelsAfter() string {
+	if tc.RoueVowelsAfter == "" {
+		return RoueVowelsMany
+	}
+	return tc.RoueVowelsAfter
+}
+func (tc TypedContent) EffectiveRoueVowelPrice() int {
+	if tc.RoueVowelPrice <= 0 {
+		return RoueDefaultVowelPrice
+	}
+	return tc.RoueVowelPrice
+}
+func (tc TypedContent) EffectiveRoueVowelGain() string {
+	if tc.RoueVowelGain == "" {
+		return RoueVowelGainNone
+	}
+	return tc.RoueVowelGain
 }
 
 // EffectiveRoueShowLetters reports whether the letters already proposed are
@@ -1006,10 +1048,20 @@ type GameState struct {
 	RoueLetters          []RoueLetter   `json:"ROUE_LETTERS"`
 	RoueShowLetters      bool           `json:"ROUE_SHOW_LETTERS"`
 	RoueConsonantsLeft   bool           `json:"ROUE_CONSONANTS_LEFT"`
-	RoueWheel            RoueWheel      `json:"ROUE_WHEEL"`
-	RoueLastEvent        RoueEvent      `json:"ROUE_LAST_EVENT"`
-	RoueWinner           string         `json:"ROUE_WINNER"`
-	RoueAwards           map[string]int `json:"ROUE_AWARDS"`
+	// v12.1.0 #147 (contracts/roue.md §15.1.2) — NO omitempty, copied from the question at START.
+	RoueBuyVowels    bool           `json:"ROUE_BUY_VOWELS"`
+	RoueVowelTiming  string         `json:"ROUE_VOWEL_TIMING"`
+	RoueVowelsBefore string         `json:"ROUE_VOWELS_BEFORE"`
+	RoueVowelsAfter  string         `json:"ROUE_VOWELS_AFTER"`
+	RoueVowelPrice   int            `json:"ROUE_VOWEL_PRICE"`
+	RoueVowelGain    string         `json:"ROUE_VOWEL_GAIN"`
+	RoueVowelsLeft   bool           `json:"ROUE_VOWELS_LEFT"`
+	RoueTurnVowel    bool           `json:"ROUE_TURN_VOWEL"`
+	RoueStopVowel    bool           `json:"ROUE_STOP_VOWEL"`
+	RoueWheel        RoueWheel      `json:"ROUE_WHEEL"`
+	RoueLastEvent    RoueEvent      `json:"ROUE_LAST_EVENT"`
+	RoueWinner       string         `json:"ROUE_WINNER"`
+	RoueAwards       map[string]int `json:"ROUE_AWARDS"`
 
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero

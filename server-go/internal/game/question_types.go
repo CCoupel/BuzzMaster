@@ -173,6 +173,7 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		OwnedFields: []string{
 			"ROUE_PHRASE", "ROUE_PRESENTATION", "ROUE_MODE", "ROUE_GAINS_RULE",
 			"ROUE_WHEEL_LAYOUT", "ROUE_SHOW_LETTERS", "ROUE_BONUS_COUNT",
+			"ROUE_BUY_VOWELS", "ROUE_VOWEL_TIMING", "ROUE_VOWELS_BEFORE", "ROUE_VOWELS_AFTER", "ROUE_VOWEL_PRICE", "ROUE_VOWEL_GAIN",
 		},
 		MediaSlots:           nil,
 		NestableInMotionCard: false, // contracts/roue.md §3

@@ -1713,7 +1713,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionRoueSetTeams, protocol.ActionRoueSpin, protocol.ActionRoueStop, protocol.ActionRoueLetter,
 		protocol.ActionRoueFlip, protocol.ActionRoueAnswer, protocol.ActionRoueNext, protocol.ActionRouePass,
-		protocol.ActionRoueReveal:
+		protocol.ActionRoueReveal, protocol.ActionRoueBuyVowel:
 		a.handleRoueAction(incoming.ClientID, msg)
 
 	case protocol.ActionQuestionSound:
@@ -4544,7 +4544,7 @@ var suspendedDuringLaunch = map[string]bool{
 	protocol.ActionMotionReveal: true, protocol.ActionMotionDone: true, protocol.ActionRafaleValidate: true,
 	protocol.ActionRafaleInvalidate: true, protocol.ActionRafaleSetTeams: true, protocol.ActionFlipMemoryCard: true,
 	protocol.ActionRoueSetTeams: true, protocol.ActionRoueSpin: true, protocol.ActionRoueStop: true,
-	protocol.ActionRoueLetter: true, protocol.ActionRoueFlip: true, protocol.ActionRoueAnswer: true,
+	protocol.ActionRoueLetter: true, protocol.ActionRoueBuyVowel: true, protocol.ActionRoueFlip: true, protocol.ActionRoueAnswer: true,
 	protocol.ActionRoueNext: true, protocol.ActionRouePass: true, protocol.ActionRoueReveal: true,
 	// points
 	protocol.ActionTeamPoints: true, protocol.ActionBumperPoints: true, protocol.ActionTeamPointsBatch: true,
