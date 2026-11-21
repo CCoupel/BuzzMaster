@@ -20,7 +20,7 @@ export default function RoueBoard({ rows = [], cols = 14, maxRows = 4 }) {
         className="roue-board"
         role="img"
         aria-label={rows.length ? `Plateau : ${rows.join(', ')}` : 'Plateau vide'}
-        style={{ gridTemplateColumns: `repeat(${cols}, var(--roue-cell, 26px))` }}
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, '--roue-cols': cols }}
       >
         {lines.map((row, ri) => {
           const pad = Math.floor((cols - row.length) / 2)
