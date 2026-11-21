@@ -12,7 +12,7 @@
 import { useRef } from 'react'
 import FortuneWheel from './FortuneWheel'
 import RoueGameBoard from './RoueGameBoard'
-import { fmtPts, roueAnnouncement, teamCss } from './roueState'
+import { fmtPts, isBonusEvent, roueAnnouncement, teamCss } from './roueState'
 import './RoueTv.css'
 
 function Announcement({ parts }) {
@@ -48,6 +48,7 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
   const showLetters = gs.ROUE_SHOW_LETTERS !== false
   const solved = sub === 'SOLVED'
   const flipMs = wheel?.FLIP_INTERVAL_MS || 600
+  const bonus = isBonusEvent(gs) // 🎁 BONUS (v12.1.0, #308) : bandeau sur le plateau
 
   if (isVPlayer) {
     const mine = !!teamName && teamName === current
@@ -69,7 +70,10 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
             {q.ROUE_PRESENTATION && <span className="roue-vp-pres">{q.ROUE_PRESENTATION}</span>}
           </div>
         )}
-        <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tablet" />
+        <div className="roue-bonus-wrap">
+          <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tablet" />
+          {bonus && <div className="roue-bonus-ribbon" role="status" data-testid="roue-bonus">🎁 BONUS !</div>}
+        </div>
         <div className="roue-vp-info">
           {solved ? (
             <div className="roue-vp-win">
@@ -112,7 +116,10 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
         {catMeta && <span className="roue-cat">{catMeta.icon} {catMeta.label}</span>}
         {q.ROUE_PRESENTATION && <span className="roue-pres">{q.ROUE_PRESENTATION}</span>}
       </div>
-      <div className="roue-mid"><RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tv" /></div>
+      <div className="roue-mid roue-bonus-wrap">
+        <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tv" />
+        {bonus && <div className="roue-bonus-ribbon" role="status" data-testid="roue-bonus">🎁 BONUS !</div>}
+      </div>
       <div className="roue-event"><Announcement parts={roueAnnouncement(gs)} /></div>
       {showLetters ? <Letters letters={gs.ROUE_LETTERS} /> : <div className="roue-letters" />}
       <div className={`roue-wheel-box roue-wheel-${layout}`}>

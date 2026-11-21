@@ -135,6 +135,7 @@ export default function QuestionsPage() {
     roueGainsRule: 'WINNER_ONLY',
     roueWheelLayout: 'strip',
     roueShowLetters: true,
+    roueBonusCount: 0, // v12.1.0 (#308)
     // ENTRACTE fields (#214, milestone v9.0.0) — second déclencheur du
     // mécanisme ENTRACTE existant (#119, EntracteConfigForm.jsx/#215) :
     // chaque occurrence du déroulé porte sa propre config, MÊME STRUCTURE
@@ -1220,6 +1221,7 @@ export default function QuestionsPage() {
       roueGainsRule: question.ROUE_GAINS_RULE || 'WINNER_ONLY',
       roueWheelLayout: question.ROUE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip',
       roueShowLetters: question.ROUE_SHOW_LETTERS !== false,
+      roueBonusCount: Number.isInteger(question.ROUE_BONUS_COUNT) ? question.ROUE_BONUS_COUNT : 0, // absent = 0 (#308)
       // ENTRACTE (#214) — ENTRACTE_CONFIG (nested, contrat backend
       // TypedContent.EntracteConfig) : mêmes défauts que la config globale
       // (EntracteConfigForm.jsx) si l'occurrence n'en porte pas encore.
@@ -1383,6 +1385,7 @@ export default function QuestionsPage() {
       roueGainsRule: 'WINNER_ONLY',
       roueWheelLayout: 'strip',
       roueShowLetters: true,
+      roueBonusCount: 0, // v12.1.0 (#308)
       // ENTRACTE fields — voir commentaire de l'état initial (useState
       // ci-dessus) pour le détail des champs.
       entracteConfig: { title: 'ENTRACTE', subtitle: 'Retour dans 20mn', panelSize: 65, animPeriod: 10, animIntensity: 20, transitionMs: 2000 },
@@ -1977,6 +1980,7 @@ export default function QuestionsPage() {
       data.append('roue_gains_rule', formData.roueGainsRule)
       data.append('roue_wheel_layout', formData.roueWheelLayout === 'arc' ? 'arc' : 'strip')
       data.append('roue_show_letters', formData.roueShowLetters ? 'true' : 'false')
+      data.append('roue_bonus_count', String(Number.isInteger(formData.roueBonusCount) ? formData.roueBonusCount : 0))
       data.append('answer', '—')
     } else if (formData.type === 'ENTRACTE') {
       // ENTRACTE (#214) — configuration du panneau PAR OCCURRENCE, envoyée

@@ -34,8 +34,12 @@ export function segmentLabel(seg) {
   if (!seg) return ''
   if (seg.KIND === 'bankrupt') return 'BANQUEROUTE'
   if (seg.KIND === 'lose_turn') return 'TOUR PERDU'
+  if (seg.KIND === 'bonus') return '🎁 BONUS'
   return String(seg.VALUE)
 }
+
+/** Arrêt sur une case BONUS (v12.1.0, #308, contrat §15.2.3) : bandeau tant que `ROUE_LAST_EVENT.KIND = BONUS`. */
+export const isBonusEvent = (gs) => gs?.ROUE_LAST_EVENT?.KIND === 'BONUS'
 
 /** Dernière lettre proposée (entrée de ROUE_LETTERS) ou null. */
 export function lastLetter(gs) {
@@ -57,6 +61,10 @@ export function roueAnnouncement(gs, { mine = null } = {}) {
   const letter = lastLetter(gs)
   const T = (strong) => ({ strong })
   const t = (text) => ({ text })
+  // BONUS (#308) : la main est rendue à la même équipe (nouveau tour en TURN) tant que l'événement dure.
+  if (sub === 'TURN' && ev.KIND === 'BONUS') {
+    return [T('🎁 BONUS'), t(mine === true ? ' — vous rejouez' : ' — les '), ...(mine === true ? [] : [T(team.toUpperCase()), t(' rejouent')])]
+  }
   switch (sub) {
     case 'TURN':
       if (!gs.ROUE_CONSONANTS_LEFT) return [t('Plus de consonne : proposez la phrase')]

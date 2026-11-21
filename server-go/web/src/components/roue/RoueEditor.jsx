@@ -10,10 +10,12 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import RoueBoard from './RoueBoard'
+import FortuneWheel from './FortuneWheel'
 import './RoueEditor.css'
 
 export const ROUE_PRESENTATION_MAX = 80
 const PREVIEW_DELAY_MS = 300
+export const ROUE_BONUS_MAX = 4 // contrat roue.md §15.2.1 : 0 à 4 cases BONUS
 
 const MODES = [
   { value: 'SOLO', label: 'SOLO', desc: 'Une équipe joue seule' },
@@ -34,6 +36,7 @@ const FALLBACK_ERRORS = {
   ROUE_PHRASE_EMPTY: 'La phrase est vide.',
   ROUE_PHRASE_INVALID_CHAR: 'La phrase contient un caractère non admis.',
   ROUE_PHRASE_WORD_TOO_LONG: 'Un mot dépasse 14 caractères.',
+  ROUE_BONUS_COUNT_INVALID: 'Nombre de cases BONUS invalide (0 à 4, et la roue ne dépasse pas 64 cases).',
   ROUE_PHRASE_TOO_LONG: 'Phrase trop longue : 4 lignes au plus (14 caractères par ligne, mots non coupés).',
 }
 
@@ -62,6 +65,68 @@ function RadioCards({ name, options, value, onChange, two }) {
           </span>
         </label>
       ))}
+    </div>
+  )
+}
+
+/** Cases BONUS (v12.1.0, #308, maquette C) : compteur 0 à 4 + aperçu de la roue générée par le serveur (`POST /api/roue/wheel-preview`
+ * avec `bonus_count`, section `wheel` lue sur GET /game-config.json). Aucune règle de placement n'est copiée ici.
+ * L'aperçu n'est demandé que si le compteur est > 0 ou a été touché (aucun appel réseau pour une question sans BONUS). */
+function BonusSection({ count, onChange }) {
+  const [active, setActive] = useState(count > 0)
+  const [wheel, setWheel] = useState(null) // { SEGMENTS, COUNT }
+  const [error, setError] = useState('')
+  const seq = useRef(0)
+  const show = active || count > 0
+  useEffect(() => {
+    if (!show) return undefined
+    const id = ++seq.current
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+    const timer = setTimeout(async () => {
+      try {
+        const cfgRes = await fetch('/game-config.json', { signal: ctrl?.signal })
+        const cfg = cfgRes.ok ? await cfgRes.json() : null
+        const w = cfg?.wheel
+        if (!w) throw new Error('config')
+        const res = await fetch('/api/roue/wheel-preview', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl?.signal,
+          body: JSON.stringify({ max_points: w.max_points, step: w.step, bankrupt_count: w.bankrupt_count, lose_turn_count: w.lose_turn_count, bonus_count: count }),
+        })
+        if (id !== seq.current) return
+        if (res.ok) { setWheel(await res.json()); setError('') } else {
+          let body = null
+          try { body = await res.json() } catch { /* corps non JSON */ }
+          setWheel(null)
+          setError(body?.MESSAGE || FALLBACK_ERRORS[body?.CODE] || 'Aperçu de la roue refusé.')
+        }
+      } catch (e) {
+        if (e?.name === 'AbortError' || id !== seq.current) return
+        setWheel(null)
+        setError('Aperçu de la roue indisponible.')
+      }
+    }, PREVIEW_DELAY_MS)
+    return () => { clearTimeout(timer); ctrl?.abort() }
+  }, [show, count])
+  const set = (v) => { setActive(true); onChange(Math.max(0, Math.min(ROUE_BONUS_MAX, v))) }
+  return (
+    <div className="memory-mode-selector roue-bonus-section">
+      <div className="roue-bonus-line">
+        <label htmlFor="roue-bonus-count">🎁 Cases BONUS</label>
+        <span className="roue-stepper" role="group" aria-label="Nombre de cases BONUS">
+          <button type="button" aria-label="Moins de cases BONUS" disabled={count <= 0} onClick={() => set(count - 1)}>−</button>
+          <output id="roue-bonus-count" data-testid="roue-bonus-count">{count}</output>
+          <button type="button" aria-label="Plus de cases BONUS" disabled={count >= ROUE_BONUS_MAX} onClick={() => set(count + 1)}>+</button>
+        </span>
+        <small className="roue-hint">0 à 4 — ajoutées aux cases des Paramètres. Arrêt sur BONUS : aucun point, l'équipe rejoue ; le cadeau est géré par l'animateur.</small>
+      </div>
+      {show && (error
+        ? <p className="roue-hint err" role="alert">✗ {error}</p>
+        : wheel && (
+          <>
+            <div className="roue-bonus-preview" data-testid="roue-bonus-preview"><FortuneWheel wheel={{ SEGMENTS: wheel.SEGMENTS, LAYOUT: 'strip', CURRENT: -1 }} subphase="" size="compact" /></div>
+            <p className="roue-hint">Aperçu de la roue générée ({wheel.COUNT ?? wheel.SEGMENTS?.length} cases) — calculé par le serveur.</p>
+          </>
+        ))}
     </div>
   )
 }
@@ -180,6 +245,8 @@ export default function RoueEditor({ values, onChange, onValidityChange }) {
         <RadioCards name="roueWheelLayout" options={LAYOUTS} value={roueWheelLayout} onChange={(v) => onChange('roueWheelLayout', v)} two />
         <p className="roue-hint">Présentation de la roue sur la TV pour cette question. Les cases de la roue se règlent dans les Paramètres.</p>
       </div>
+
+      <BonusSection count={Number.isInteger(values.roueBonusCount) ? values.roueBonusCount : 0} onChange={(v) => onChange('roueBonusCount', v)} />
 
       <div className="rafale-alpha-option">
         <button

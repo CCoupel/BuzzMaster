@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react'
 import { useGame } from '../../hooks/GameContext'
 import { RoueErrorLine, RoueKeyboard, useSpinCountdown } from './RoueControls'
-import { currentSegment, fmtPts, makeRoueActions, roueGates, segmentLabel, teamCss } from './roueState'
+import { currentSegment, fmtPts, isBonusEvent, makeRoueActions, roueGates, segmentLabel, teamCss } from './roueState'
 import './AnimRoue.css'
 
 const fold = (c) => c.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
@@ -66,6 +66,7 @@ export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
         {q.ROUE_PRESENTATION && <span className="anim-roue-chip">« {q.ROUE_PRESENTATION} »</span>}
         {current && sub !== 'SOLVED' && <span className="anim-roue-hand" style={{ background: colorOf(current) }}>▶ {current}</span>}
       </div>
+      {isBonusEvent(gs) && <div className="anim-roue-bonus" role="status" data-testid="anim-roue-bonus">🎁 BONUS !</div>}
       <Phrase gs={gs} colorOf={colorOf} />
 
       {live && (
@@ -100,7 +101,7 @@ export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
           </div>
         </div>
         <div className="anim-roue-panel">
-          <div className={`anim-roue-case${!seg && !cd.spinning ? ' none' : ''}${cd.spinning ? ' spin' : ''}`}>
+          <div className={`anim-roue-case${!seg && !cd.spinning ? ' none' : ''}${cd.spinning ? ' spin' : ''}${seg?.KIND === 'bonus' && !cd.spinning ? ' gold' : ''}`}>
             <small>Case de la roue</small>
             {cd.spinning ? (cd.fullSpeed ? `la roue tourne · ${Math.ceil(cd.remainingMs / 1000)} s` : 'la roue prend de la vitesse…') : seg ? segmentLabel(seg) : '—'}
           </div>

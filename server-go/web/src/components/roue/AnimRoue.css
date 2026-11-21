@@ -34,3 +34,7 @@
 .anim-roue-team.active { outline: 2px solid var(--c); font-weight: 800; background: #fff; }
 .anim-roue-team .v { font-weight: 800; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) { .anim-roue-body { grid-template-columns: 1fr; } .anim-roue-steps { grid-template-columns: repeat(4, 1fr); } }
+
+/* 🎁 BONUS (v12.1.0, #308) */
+.anim-roue-bonus { background: linear-gradient(90deg, #f59e0b, #fbbf24); color: #111827; font-weight: 900; font-size: 1.2rem; text-align: center; border-radius: 0.6rem; padding: 0.4rem; margin-bottom: 0.6rem; }
+.anim-roue-case.gold { background: linear-gradient(180deg, #fbbf24, #f59e0b); color: #111827; }

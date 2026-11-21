@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react'
 import RoueSteps from './RoueSteps'
 import { RoueErrorLine, RoueKeyboard, RoueNextButtons, useSpinCountdown } from './RoueControls'
-import { currentSegment, fmtPts, roueGates, roueSolo, segmentLabel, teamCss } from './roueState'
+import { currentSegment, fmtPts, isBonusEvent, roueGates, roueSolo, segmentLabel, teamCss } from './roueState'
 import './RouePanel.css'
 
 const MODE_LABEL = { SOLO: 'Solo', CHACUN_SON_TOUR: 'Chacun son tour', TANT_QUE_JE_GAGNE: 'Tant que je gagne' }
@@ -82,6 +82,7 @@ function Action({ gs, gates, actions, selected, setSelected }) {
         </>)
       }
       return (<>
+        {isBonusEvent(gs) && <div className="roue-bonus" role="status" data-testid="roue-bonus">🎁 BONUS ! — les {team} gardent la main. Remettez le cadeau, puis relancez la roue (aucun point compté).</div>}
         <h5>1 — Lancer la roue</h5>
         <div className="roue-row"><button type="button" className="roue-btn primary big" onClick={actions.spin}>🎡 Lancer la roue</button></div>
         <p className="roue-hint">La roue se met à tourner sur la TV ; l'équipe qui a la main buzze pour l'arrêter.</p>

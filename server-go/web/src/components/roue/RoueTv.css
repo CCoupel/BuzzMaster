@@ -67,3 +67,8 @@
 .game-display:has(.roue-tv), .game-display:has(.roue-vp) { padding: 0; }
 .roue-tv { flex: 1 1 auto; }
 .roue-vp { z-index: 2; }
+
+/* 🎁 BONUS (v12.1.0, #308) — bandeau doré posé sur le plateau (TV statique : aucun scroll) */
+.roue-bonus-wrap { position: relative; }
+.roue-bonus-ribbon { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%) rotate(-3deg); background: linear-gradient(90deg, transparent, #f59e0b 15%, #fbbf24 50%, #f59e0b 85%, transparent); color: #111827; text-align: center; font-size: 9vh; font-weight: 900; letter-spacing: 0.08em; padding: 0.8vh 0; box-shadow: 0 0 4vh #f59e0b; pointer-events: none; overflow: hidden; }
+.roue-vp .roue-bonus-ribbon { font-size: 6vh; }
