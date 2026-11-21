@@ -29,13 +29,17 @@ Deux extensions de la Roue de la Fortune : l'achat de voyelles, et une case BONU
 - **Roue générée** — les cases BONUS s'ajoutent à la roue, avec les cases Banqueroute et Tour perdu. Avec 0 BONUS, la
   roue est identique à celle de la v12.0.0. Une roue de plus de 64 cases est refusée à l'enregistrement ; au lancement,
   le nombre de cases BONUS est réduit si la configuration a changé.
+- **Phrase du plateau sur TV et tablette (#310)** — la phrase est centrée verticalement et horizontalement dans les
+  4 lignes du plateau : 1 ligne → ligne 2 ; 2 lignes → lignes 2 et 3 ; 3 lignes → lignes 1 à 3 ; 4 lignes inchangées.
+  L'aperçu de l'éditeur montre ce même placement. Changement voulu : il touche aussi les questions v12.0.0 de 1 ou
+  2 lignes, dont la phrase descend.
 - **Choix de la forme de la roue (#311)** — les vignettes à 4 couleurs des cartes « Bandeau » et « Arc » sont retirées ;
   les cartes ne gardent que le texte.
 
 ### Fixed
 
-- **Phrase du plateau (#310)** — la phrase est centrée verticalement et horizontalement dans les 4 lignes du plateau.
-  L'aperçu de l'éditeur montre le même placement que la TV et la tablette, y compris pour les questions v12.0.0.
+- **Aperçu de la phrase dans l'éditeur (#310)** — l'aperçu débordait de sa colonne ; il tient maintenant dans sa colonne,
+  plateau centré.
 - **Textes des cases (#313)** — les points, BANQUEROUTE et BONUS sont ajustés à la largeur de leur case, en bandeau
   comme en arc, jusqu'à 64 cases.
 - **Plateau sur TV et tablette (#314)** — les 4 lignes du plateau tiennent dans la hauteur de l'écran ; la 4e ligne
@@ -49,6 +53,8 @@ Deux extensions de la Roue de la Fortune : l'achat de voyelles, et une case BONU
 - Les questions de la v12.0.0 gardent leur déroulé, sauf l'achat de voyelles, activé par défaut « avant de tourner » :
   les équipes peuvent acheter une voyelle au début du tour. Pour garder le comportement v12.0.0, désactiver l'interrupteur de la question.
 - 0 case BONUS : roue identique à la v12.0.0.
+- Affichage TV et tablettes des questions v12.0.0 de 1 ou 2 lignes : la phrase est désormais centrée verticalement
+  (1 ligne sur la ligne 2 ; 2 lignes sur les lignes 2 et 3). Aucune donnée ne change.
 
 ## [12.0.0] - 2026-11-17 — Roue de la Fortune (#144, #145)
 

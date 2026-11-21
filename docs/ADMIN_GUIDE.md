@@ -1258,7 +1258,7 @@ proposent la réponse. Une phrase = une manche.
    à côté de la catégorie (80 caractères au plus). La présentation ne peut pas contenir la phrase.
 4. Choisir le **mode de rotation** : `SOLO`, `CHACUN_SON_TOUR` ou `TANT_QUE_JE_GAGNE` (défaut).
 5. Choisir la **règle des gains** : seule l'équipe gagnante reçoit sa cagnotte (défaut), ou toutes les équipes.
-6. Choisir la **forme de la roue** sur la TV (bandeau, défaut, ou arc ; cartes de texte) et si les **lettres déjà proposées** s'affichent
+6. Choisir la **forme de la roue** sur la TV (bandeau, défaut, ou arc) ; les cartes « Bandeau » et « Arc » n'affichent plus de vignette, seulement leur titre et leur description et si les **lettres déjà proposées** s'affichent
    sur la TV et les tablettes (défaut : oui).
 
 Une voyelle ne se propose pas comme une consonne : elle s'**achète** quand l'achat est activé sur la question (v12.1.0, voir ci-dessous).
