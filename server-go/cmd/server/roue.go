@@ -43,6 +43,9 @@ func (a *App) setupRoueCallbacks() {
 			a.notifySound(audio.CueGagne)
 			a.startScoreFlash(n.Team, n.Points)
 			a.broadcastAwardedTeams()
+		case game.RoueNoticeBonus: // #308: no points, so neither score flash nor ambiance pulse
+			a.sendLEDSetComet(n.Team)
+			a.notifySound(audio.CueRafaleBonne) // existing "bonne réponse" cue
 		}
 	}
 	a.engine.RoueCategoryMeta = func(category string) game.CategoryMeta {

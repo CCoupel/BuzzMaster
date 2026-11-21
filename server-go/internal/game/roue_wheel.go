@@ -15,7 +15,11 @@ const (
 	RoueKindValue    = "value"
 	RoueKindBankrupt = "bankrupt"
 	RoueKindLoseTurn = "lose_turn"
+	RoueKindBonus    = "bonus" // v12.1.0 #308: no gain, the team replays
 )
+
+// RoueMaxBonusCount bounds ROUE_BONUS_COUNT (contract §15.2.1).
+const RoueMaxBonusCount = 4
 
 // RoueMaxSegments is the limit of the Wheel component.
 const RoueMaxSegments = 64
@@ -37,6 +41,7 @@ type RoueWheelParams struct {
 	Step           int
 	BankruptCount  int
 	LoseTurnCount  int
+	BonusCount     int // v12.1.0 #308: not a game-config.json field, it comes from the question (ROUE_BONUS_COUNT)
 	SpinPeriodMs   int
 	SpinMaxMs      int
 	StopDurationMs int
@@ -128,20 +133,50 @@ func NormalizeRoueWheelParams(p RoueWheelParams) (out RoueWheelParams, adjustedF
 		p.Step = best
 		adjustedFrom = entered
 	}
-	n := p.MaxPoints/p.Step + p.BankruptCount + p.LoseTurnCount
-	if p.LoseTurnCount >= 1 && p.MaxPoints%2 == 0 && (p.MaxPoints/2)%p.Step == 0 {
-		n-- // the TOUR PERDU takes the place of the MAX/2 value
-	}
+	n := RoueWheelSize(p)
 	if n > RoueMaxSegments {
 		return p, 0, fmt.Errorf("la roue aurait %d cases, la limite est de %d", n, RoueMaxSegments)
 	}
 	return p, adjustedFrom, nil
 }
 
+// RoueWheelSize is the number of cases of the wheel for parameters whose step divides the maximum (BONUS
+// cases included, contract §15.2.2).
+func RoueWheelSize(p RoueWheelParams) int {
+	n := p.MaxPoints/p.Step + p.BankruptCount + p.LoseTurnCount + p.BonusCount
+	if p.LoseTurnCount >= 1 && p.MaxPoints%2 == 0 && (p.MaxPoints/2)%p.Step == 0 {
+		n-- // the TOUR PERDU takes the place of the MAX/2 value
+	}
+	return n
+}
+
+// RoueMaxBonusFor returns how many BONUS cases fit (0..RoueMaxBonusCount) in 64 cases for NORMALISED parameters.
+func RoueMaxBonusFor(p RoueWheelParams) int {
+	p.BonusCount = 0
+	room := RoueMaxSegments - RoueWheelSize(p)
+	return clampInt(room, 0, RoueMaxBonusCount)
+}
+
+// ValidateRoueBonusCount checks ROUE_BONUS_COUNT against the wheel of the current configuration (contract §15.2.2):
+// 0 to 4 and no more than 64 cases. p is normalised here.
+func ValidateRoueBonusCount(n int, p RoueWheelParams) error {
+	if n < 0 || n > RoueMaxBonusCount {
+		return &RoueError{RoueErrBonusCountInvalid, "roue_bonus_count doit être un entier de 0 à 4"}
+	}
+	np, _, err := NormalizeRoueWheelParams(p)
+	if err != nil {
+		np, _, _ = NormalizeRoueWheelParams(DefaultRoueWheelParams())
+	}
+	if n > RoueMaxBonusFor(np) {
+		return &RoueError{RoueErrBonusCountInvalid, "roue_bonus_count ferait dépasser 64 cases de la roue"}
+	}
+	return nil
+}
+
 // BuildRoueWheel generates the segments of the wheel for NORMALISED
 // parameters (contract §10.1 — the examples there are test cases).
 func BuildRoueWheel(p RoueWheelParams) []RoueSegment {
-	max, step, B, P := p.MaxPoints, p.Step, p.BankruptCount, p.LoseTurnCount
+	max, step, B, P, X := p.MaxPoints, p.Step, p.BankruptCount, p.LoseTurnCount, p.BonusCount
 
 	// 1. Values, strongest first; the TOUR PERDU takes the place of MAX/2.
 	var values []int
@@ -180,7 +215,7 @@ func BuildRoueWheel(p RoueWheelParams) []RoueSegment {
 	}
 
 	// 3. Special cases.
-	K := B + P
+	K := B + P + X
 	N := len(values) + K
 	segs := make([]RoueSegment, N)
 	taken := make([]bool, N)
@@ -195,15 +230,19 @@ func BuildRoueWheel(p RoueWheelParams) []RoueSegment {
 		segs[idx] = RoueSegment{Kind: kind}
 	}
 	var kinds []string
-	remB, remP := B, P
+	remB, remP, remX := B, P, X
 	if remB > 0 {
 		kinds = append(kinds, RoueKindBankrupt)
 		remB--
 	}
-	for remB > 0 || remP > 0 {
+	for remB > 0 || remP > 0 || remX > 0 {
 		if remP > 0 {
 			kinds = append(kinds, RoueKindLoseTurn)
 			remP--
+		}
+		if remX > 0 {
+			kinds = append(kinds, RoueKindBonus)
+			remX--
 		}
 		if remB > 0 {
 			kinds = append(kinds, RoueKindBankrupt)

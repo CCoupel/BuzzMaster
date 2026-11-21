@@ -172,7 +172,7 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		// and TIME are unused by ROUE — the phrase never goes into ANSWER.
 		OwnedFields: []string{
 			"ROUE_PHRASE", "ROUE_PRESENTATION", "ROUE_MODE", "ROUE_GAINS_RULE",
-			"ROUE_WHEEL_LAYOUT", "ROUE_SHOW_LETTERS",
+			"ROUE_WHEEL_LAYOUT", "ROUE_SHOW_LETTERS", "ROUE_BONUS_COUNT",
 		},
 		MediaSlots:           nil,
 		NestableInMotionCard: false, // contracts/roue.md §3

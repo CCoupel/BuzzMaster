@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"buzzcontrol/internal/config"
@@ -56,7 +57,22 @@ func applyRoueFields(r *http.Request, question map[string]interface{}) (int, str
 	if err := game.ValidateRoueFields(presentation, mode, gainsRule, layout); err != nil {
 		return http.StatusBadRequest, err.Error()
 	}
+	// v12.1.0 #308: BONUS cases, 0 (absent) to 4, within 64 cases of the current wheel configuration.
+	bonusCount := 0
+	if v := strings.TrimSpace(r.FormValue("roue_bonus_count")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return http.StatusBadRequest, game.RoueErrBonusCountInvalid + ": roue_bonus_count doit être un entier de 0 à 4"
+		}
+		bonusCount = n
+	}
+	if err := game.ValidateRoueBonusCount(bonusCount, wheelParamsFromConfig(config.GetGameSettings().Wheel)); err != nil {
+		return http.StatusBadRequest, err.Error()
+	}
 	question["ROUE_PHRASE"] = phrase
+	if bonusCount > 0 { // not written for 0 (contract §15.2.1)
+		question["ROUE_BONUS_COUNT"] = bonusCount
+	}
 	if presentation != "" {
 		question["ROUE_PRESENTATION"] = presentation
 	}
@@ -167,14 +183,26 @@ func (h *HTTPServer) handleRoueWheelPreview(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var body config.WheelConfig
+	var body struct {
+		config.WheelConfig
+		BonusCount int `json:"bonus_count"` // v12.1.0 #308, optional (absent = 0)
+	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
 		writeRoueWheelError(w, "paramètres invalides : "+err.Error())
 		return
 	}
-	np, adjusted, err := game.NormalizeRoueWheelParams(wheelParamsFromConfig(body))
+	np, adjusted, err := game.NormalizeRoueWheelParams(wheelParamsFromConfig(body.WheelConfig))
 	if err != nil {
 		writeRoueWheelError(w, err.Error())
+		return
+	}
+	if body.BonusCount < 0 || body.BonusCount > game.RoueMaxBonusCount {
+		writeRoueWheelError(w, "bonus_count doit être un entier de 0 à 4")
+		return
+	}
+	np.BonusCount = body.BonusCount
+	if game.RoueWheelSize(np) > game.RoueMaxSegments {
+		writeRoueWheelError(w, "la roue aurait plus de 64 cases avec ces cases BONUS")
 		return
 	}
 	segs := game.BuildRoueWheel(np)

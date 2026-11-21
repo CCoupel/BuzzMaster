@@ -401,6 +401,7 @@ type TypedContent struct {
 	RoueWheelLayout   string `json:"ROUE_WHEEL_LAYOUT,omitempty"` // strip (default) | arc
 	RoueShowLetters   *bool  `json:"ROUE_SHOW_LETTERS,omitempty"` // nil/true = shown, false = hidden
 	RoucePresentation string `json:"ROUE_PRESENTATION,omitempty"` // public hint, 80 chars max
+	RoueBonusCount    int    `json:"ROUE_BONUS_COUNT,omitempty"`  // v12.1.0 #308: BONUS cases added to the wheel, 0 (absent) to 4
 }
 
 // EffectiveRoueShowLetters reports whether the letters already proposed are

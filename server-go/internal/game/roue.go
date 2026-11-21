@@ -59,6 +59,7 @@ const (
 	RoueEvTurnEnd      = "TURN_END"
 	RoueEvPass         = "PASS"
 	RoueEvReveal       = "REVEAL"
+	RoueEvBonus        = "BONUS" // v12.1.0 #308
 )
 
 // ROUE notices (OnRoueNotice) — what the application layer turns into sounds,
@@ -66,6 +67,7 @@ const (
 const (
 	RoueNoticeBad    = "BAD"    // letter absent / repeated, BANQUEROUTE: the existing "mauvaise réponse" sound
 	RoueNoticeCredit = "CREDIT" // a team was credited (Team, Points): the existing gain sound + comet + flash
+	RoueNoticeBonus  = "BONUS"  // v12.1.0 #308: stop on a BONUS case — the existing "bonne réponse" sound + comet, no flash
 )
 
 // RoueNotice is one side effect of a transition for the application layer.
@@ -389,6 +391,14 @@ func (e *Engine) startRoueRoundUnsafe() {
 	if perr != nil {
 		params, _, _ = NormalizeRoueWheelParams(DefaultRoueWheelParams())
 	}
+	params.BonusCount = q.RoueBonusCount
+	if params.BonusCount < 0 {
+		params.BonusCount = 0
+	}
+	if max := RoueMaxBonusFor(params); params.BonusCount > max { // configuration changed since the question was saved: never refuse the start
+		log.Printf("[Engine] ROUE: question %s asks %d BONUS cases, reduced to %d to stay within %d cases", q.ID, params.BonusCount, max, RoueMaxSegments)
+		params.BonusCount = max
+	}
 	segs := BuildRoueWheel(params)
 	rt := &roueRuntime{
 		rows: layout.Rows, revealed: map[rune]bool{},
@@ -559,6 +569,8 @@ func (e *Engine) roueFinishStoppingUnsafe(fx *roueFx) {
 	case RoueKindLoseTurn:
 		e.roueEventUnsafe(RoueEvLoseTurn, team, "", 0, 0, 0)
 		e.roueEnterTurnEndUnsafe(false, false)
+	case RoueKindBonus:
+		e.roueBonusStopUnsafe(team, fx)
 	default:
 		e.roueEventUnsafe(RoueEvLandValue, team, "", 0, seg.Value, 0)
 		e.roueSetSubUnsafe(RoueSubLetter)
