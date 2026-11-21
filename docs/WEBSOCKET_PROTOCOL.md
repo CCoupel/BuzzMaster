@@ -714,6 +714,7 @@ Contrat : `contracts/roue.md` §8 et §9. Les actions sont dans la liste blanche
 | `ROUE_SPIN` | `{}` | `STARTED` + `TURN` + consonnes restantes | admin, anim |
 | `ROUE_STOP` | `{}` | `STARTED` + `SPINNING` (« Forcer l'arrêt ») **et `ROUE_WHEEL.FULL_SPEED = true`** ; pendant la montée : `ROUE_ERROR` `NOT_FULL_SPEED`, admin comme animateur | admin, anim |
 | `ROUE_LETTER` | `{ "LETTER": "T" }` | `STARTED` + `LETTER` | admin, anim |
+| `ROUE_BUY_VOWEL` (v12.1.0) | `{ "LETTER": "E" }` | `STARTED` + `TURN` (moment `BEFORE` / `BOTH`) ; `LETTER` (moment `AFTER` / `BOTH`) ; `ANSWER` quand `ROUE_STOP_VOWEL` (`AFTER` / `BOTH`). Contrôles dans l'ordre, refus `ROUE_ERROR` (§15.1.6 du contrat) ; débit `ROUE_TEAM_BANK` | admin, anim |
 | `ROUE_FLIP` | `{}` | `STARTED` + `LIT` (« Retourner les cases ») | admin, anim |
 | `ROUE_ANSWER` | `{}` | `STARTED` + `ANSWER` ; aussi `TURN` sans consonne restante (« Réponse validée ») | admin, anim |
 | `ROUE_NEXT` | `{ "HAND": "SAME" \| "NEXT" }` | `STARTED` + `TURN_END` ou `ANSWER` ; aussi `TURN` sans consonne restante. `NEXT` refusé en `SOLO` | admin, anim |
@@ -721,8 +722,8 @@ Contrat : `contracts/roue.md` §8 et §9. Les actions sont dans la liste blanche
 | `ROUE_REVEAL` | `{}` | `STARTED`, sous-phase différente de `SOLVED` | admin seul |
 
 - `/ws/tv` et `/ws/player` n'envoient aucune action `ROUE_*` : la tablette envoie seulement `BUTTON`.
-- `/ws/anim` envoie les six actions des boutons de la tablette animateur (`ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`,
-  `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT`). Jamais `ROUE_SET_TEAMS`, `ROUE_PASS` ni `ROUE_REVEAL`.
+- `/ws/anim` envoie les sept actions des boutons de la tablette animateur (`ROUE_SPIN`, `ROUE_STOP`, `ROUE_LETTER`,
+  `ROUE_BUY_VOWEL` (v12.1.0), `ROUE_FLIP`, `ROUE_ANSWER`, `ROUE_NEXT`). Jamais `ROUE_SET_TEAMS`, `ROUE_PASS` ni `ROUE_REVEAL`.
 - Admin et animateur peuvent commander en même temps : la première action valable pour la sous-phase courante
   s'applique, la suivante est refusée (`WRONG_SUBPHASE`), sans double application.
 - Montée (`ROUE_WHEEL.FULL_SPEED = false`, `SPIN_UP_MS` = 1 tour : `2 × SPIN_PERIOD_MS`, 5 s par défaut) : personne ne peut arrêter la roue, pas même l'admin.
@@ -748,6 +749,9 @@ Exemple (admin, étape 4) :
   `CODE` ∈ `VOWEL_NOT_AVAILABLE` (voyelle, non disponible en v12.0) | `NOT_A_LETTER` | `WRONG_SUBPHASE` |
   `NOT_ALLOWED` | `INVALID_TEAMS` (équipe inconnue ou en double dans `ROUE_SET_TEAMS` ; jamais un nombre d'équipes) |
   `NOT_FULL_SPEED` (`ROUE_STOP` pendant la montée de la roue, admin ou animateur).
+  Codes ajoutés en v12.1.0 (achat de voyelles, §15.1.7) : `NOT_A_VOWEL` (consonne saisie comme voyelle),
+  `VOWELS_DISABLED`, `VOWEL_NOT_NOW` (mauvais moment, y compris après une consonne), `VOWEL_LIMIT_REACHED`,
+  `INSUFFICIENT_BANK`, `LETTER_ALREADY_PROPOSED` (refusé sans débit), `NO_VOWEL_LEFT`.
 
 ### Confidentialité de la phrase
 
@@ -2062,3 +2066,26 @@ L'élargissement de la liste blanche pour permettre l'entrée **directe** des jo
 - [Contrat question-types.md](../contracts/question-types.md) — discriminant de type MEMOTION, portée des actions, invariant de scope
 - [Contrat websocket-actions.md](../contracts/websocket-actions.md) — allow-list entrante par ClientType, table complète des actions
 - [Contrat rafale.md](../contracts/rafale.md) — Mode RAFALE, actions entrantes/sortantes, sérialisation réponse
+
+### Achat de voyelles et case BONUS — v12.1.0 (#147, #308)
+
+Contrat : `contracts/roue.md` §15. Pas de nouveau canal : `ROUE_BUY_VOWEL` suit le patron des autres actions `ROUE_*`.
+
+**Requête** (admin ou animateur, liste blanche `inbound_allowlist.go`) :
+
+```json
+{ "ACTION": "ROUE_BUY_VOWEL", "MSG": { "LETTER": "E" } }
+```
+
+**Effet** : un événement par action, `ROUE_LAST_EVENT` :
+- achat présent avant de tourner → `VOWEL_HIT` puis, après le retournement (`ROUE_FLIP`), `FLIP` ;
+- achat présent après l'arrêt → même chemin, `ROUE_STOP_VOWEL` = `true` ;
+- achat absent → `VOWEL_MISS` et `ROUE_SUBPHASE` = `TURN_END` (aucun événement `TURN_END`, règle de cause).
+
+**Case BONUS** : arrêt sur une case `bonus` → événement `BONUS` `{ TEAM }`, `ROUE_SUBPHASE` = `TURN` (même équipe).
+Le bandeau « 🎁 BONUS ! » reste affiché sur TV et tablettes tant que `ROUE_LAST_EVENT.KIND` = `BONUS`.
+
+**Confidentialité** : la phrase reste absente de tous les messages `/ws/tv` et tablettes ; les voyelles proposées
+sont dans `ROUE_LETTERS` et `ROUE_BOARD`, comme les consonnes.
+
+**Aperçu** : `POST /api/roue/wheel-preview` accepte un champ facultatif `bonus_count` (0 à 4, absent = 0).

@@ -354,10 +354,52 @@ STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulem
 | `ANSWER` | 6 | Étape « Réponse » : `ROUE_ANSWER` (un bouton) ou directement un bouton de l'étape 7 |
 | `TURN_END` | 7 | Fin du tour : gain ajouté à la cagnotte ; `ROUE_NEXT` avec `HAND` = `SAME` ou `NEXT` |
 | `SOLVED` | 0 | Phrase résolue ou dévoilée (`ROUE_REVEAL`) ; fin de manche, action `STOP` existante |
+| `VOWEL_LIT` | 1 | *(v12.1.0)* Voyelle achetée **avant de tourner** : ses cases sont éclairées, retournement à l'admin / l'animateur |
+| `VOWEL_REVEALING` | 1 | *(v12.1.0)* Retournement de la voyelle achetée avant de tourner ; fin → `TURN` (même équipe) |
 
 > **Numérotation de `ROUE_STEP`** : le contrat fixe les étapes 1 à 7 sans chiffrer `LETTER`, `LIT` et `SOLVED`. Le
 > backend affecte `LETTER` = 4, `LIT` et `REVEALING` = 5, `SOLVED` = 0 (fonction `roueStepOf`,
 > `internal/game/roue.go`). Ces valeurs sont les valeurs livrées.
+
+### Achat de voyelles et case BONUS (v12.1.0, #147, #308)
+
+Contrat : `contracts/roue.md` §15. Les réglages sont par question ; sans réglage, la manche se joue comme en v12.0,
+**sauf l'achat de voyelles, activé par défaut** (moment « avant de tourner »).
+
+**Achat avant de tourner** (`ROUE_VOWEL_TIMING` = `BEFORE` ou `BOTH`, étape 1) — la voyelle est payée, puis :
+
+```
+TURN ─ROUE_BUY_VOWEL (présente)─► VOWEL_LIT ─ROUE_FLIP─► VOWEL_REVEALING ─fin du retournement─► TURN (même équipe)
+  └─ROUE_BUY_VOWEL (absente)─► TURN_END   (voyelle perdue, tour perdu)
+```
+
+- Au retour en `TURN`, `ROUE_TURN_VOWEL` vaut `true` : « Réponse validée » est ouverte à l'étape 1.
+- Avec `ROUE_VOWELS_BEFORE` = `ONE`, une seule voyelle par tour (`VOWEL_LIMIT_REACHED` ensuite).
+- Le lancer de roue (`ROUE_SPIN`) referme cette fenêtre : l'achat « avant » ne revient qu'au `TURN` suivant.
+
+**Achat après l'arrêt** (`ROUE_VOWEL_TIMING` = `AFTER` ou `BOTH`) — la voyelle **remplace la consonne** de l'étape 4 :
+
+```
+LETTER ─ROUE_BUY_VOWEL (présente)─► LIT ─ROUE_FLIP─► REVEALING ─fin─► ANSWER (étape 6)
+  └─ROUE_BUY_VOWEL (absente)─► TURN_END   (tour perdu)
+ANSWER (ROUE_STOP_VOWEL) ─ROUE_BUY_VOWEL (présente, si ROUE_VOWELS_AFTER = MANY)─► LIT …
+```
+
+- `ROUE_STOP_VOWEL` vaut `true` après une voyelle présente achetée à l'arrêt ; aucune consonne n'est alors acceptée
+  jusqu'au prochain lancer. L'étape 6 propose « Acheter une autre voyelle » en `MANY`.
+- Une case BANQUEROUTE ou TOUR PERDU mène à `TURN_END`, une case BONUS à `TURN` : aucun achat « après » sur ces cases.
+- Avec `AFTER` ou `BOTH`, la roue peut être lancée sans consonne restante tant qu'un achat après l'arrêt reste possible.
+
+**Gain et débit** : la cagnotte de manche est débitée du prix à l'achat, dans tous les cas. Le gain d'une voyelle présente
+(`ROUE_VOWEL_GAIN`) est crédité à la cagnotte au retournement (`FLIP`), aux deux moments. Une voyelle absente fait perdre
+le tour. Aucun score de partie n'est modifié avant la résolution.
+
+**Case BONUS** (`ROUE_BONUS_COUNT`, 0 par défaut) — arrêt sur une case `bonus` : aucun gain, aucune lettre, aucune
+cagnotte modifiée. Événement `BONUS` ; l'équipe garde la main (nouveau `TURN`, `ROUE_TURN_GAIN` = 0). Le cadeau est
+géré hors système par l'animateur.
+
+**Événements `ROUE_LAST_EVENT` ajoutés** : `VOWEL_HIT` (achat présent, débit), `VOWEL_MISS` (achat absent, fin de tour),
+`BONUS` (arrêt sur une case BONUS). `FLIP` est émis aussi pour une voyelle retournée.
 
 ### Les 7 étapes et le bandeau
 
@@ -404,7 +446,7 @@ L'admin ou l'animateur décide. Le serveur indique seulement le bouton **conseil
 - l'événement `TURN_END` n'est émis que par `ROUE_NEXT` reçu en `ANSWER`, ou en `TURN` sans consonne restante ;
 - `ROUE_NEXT` reçu en `TURN_END` n'émet aucun événement.
 
-Kinds : `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | LETTER_REPEAT | FLIP | ANSWER_OK | TURN_END | PASS | REVEAL`.
+Kinds : `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | LETTER_REPEAT | FLIP | ANSWER_OK | TURN_END | PASS | REVEAL`, plus `VOWEL_HIT | VOWEL_MISS | BONUS` (v12.1.0).
 
 ### Transitions principales
 

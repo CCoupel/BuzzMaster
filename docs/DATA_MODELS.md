@@ -1829,7 +1829,7 @@ repliés. Mise en lignes : 4 lignes de 14 colonnes au plus, mots non coupés, ca
 
 | Champ | Type JSON | Contenu |
 |---|---|---|
-| `ROUE_SUBPHASE` | string | `""` \| `TURN` \| `SPINNING` \| `STOPPING` \| `LETTER` \| `LIT` \| `REVEALING` \| `ANSWER` \| `TURN_END` \| `SOLVED` |
+| `ROUE_SUBPHASE` | string | `""` \| `TURN` \| `SPINNING` \| `STOPPING` \| `LETTER` \| `LIT` \| `REVEALING` \| `ANSWER` \| `TURN_END` \| `SOLVED` \| `VOWEL_LIT` \| `VOWEL_REVEALING` (v12.1.0) |
 | `ROUE_STEP` | int | 1 à 7 ; 0 hors tour (voir `GAME_STATE_MACHINE.md`) |
 | `ROUE_TEAMS` | string[] | Équipes participantes, ordre de rotation |
 | `ROUE_CURRENT_TEAM` | string | Équipe qui a la main (`""` hors manche) |
@@ -1842,7 +1842,7 @@ repliés. Mise en lignes : 4 lignes de 14 colonnes au plus, mots non coupés, ca
 | `ROUE_LETTERS` | `{ "LETTER", "TEAM", "HIT" }[]` | Consonnes proposées, dans l'ordre |
 | `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question |
 | `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |
-| `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE}`, `KIND` ∈ `value \| bankrupt \| lose_turn`), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`), `SPIN_UP_MS` (durée de la montée, posée au `START` = 2 × `SPIN_PERIOD_MS`, soit 1 tour, 5 s par défaut), `FULL_SPEED` (`true` seulement en `SPINNING` une fois la montée terminée ; `false` pendant la montée et hors `SPINNING`) |
+| `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE}`, `KIND` ∈ `value \| bankrupt \| lose_turn \| bonus` — `bonus` depuis v12.1.0, valeur 0), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`), `SPIN_UP_MS` (durée de la montée, posée au `START` = 2 × `SPIN_PERIOD_MS`, soit 1 tour, 5 s par défaut), `FULL_SPEED` (`true` seulement en `SPINNING` une fois la montée terminée ; `false` pendant la montée et hors `SPINNING`) |
 | `ROUE_LAST_EVENT` | objet | `{ SEQ, KIND, TEAM, LETTER, COUNT, VALUE, GAIN }` — au plus un événement par action |
 | `ROUE_WINNER` | string | Équipe qui a résolu (`""` sinon) |
 | `ROUE_AWARDS` | map équipe → int | Points crédités à la résolution |
@@ -1882,3 +1882,49 @@ Struct Go `config.WheelConfig` (`internal/config/gameconfig.go`). Une section ab
 La roue (`SEGMENTS`) n'est pas saisie : elle est générée par le serveur (`internal/game/roue_wheel.go`, contrat §10.1)
 et figée dans `ROUE_WHEEL` au `START`. La forme de la roue n'est pas dans la configuration : c'est `ROUE_WHEEL_LAYOUT`
 de la question. `GET /game-config.json` renvoie `wheel` et `wheel_default` (lecture seule) ; `POST` remplace la section.
+
+## Modèles v12.1.0 — Achat de voyelles (#147) et case BONUS (#308)
+
+Contrat : `contracts/roue.md` §15. Tous les ajouts sont des champs, valeurs d'énumération et actions nouvelles ; une
+question v12.0 se lit sans changement (défauts ci-dessous).
+
+### Question de type `ROUE` (`TypedContent`, `OwnedFields`)
+
+| Champ JSON | Type | Défaut (absent) | Règle |
+|---|---|---|---|
+| `ROUE_BUY_VOWELS` | bool | `true` | Achat de voyelles autorisé ; écrit seulement pour `false` |
+| `ROUE_VOWEL_TIMING` | string | `BEFORE` | `BEFORE` \| `AFTER` \| `BOTH` (moment de l'achat) |
+| `ROUE_VOWELS_BEFORE` | string | `MANY` | `ONE` \| `MANY`, par tour, avant de tourner |
+| `ROUE_VOWELS_AFTER` | string | `MANY` | `ONE` \| `MANY`, par arrêt de la roue |
+| `ROUE_VOWEL_PRICE` | int | 250 | 1 à 1 000 000 |
+| `ROUE_VOWEL_GAIN` | string | `NONE` | `NONE` \| `REFUND` \| `PER_OCCURRENCE` (gain d'une voyelle présente) |
+| `ROUE_BONUS_COUNT` | int | 0 | 0 à 4 ; écrit seulement si non nul |
+
+Refus à l'enregistrement (`400`, rien n'est écrit) : `ROUE_VOWEL_TIMING_INVALID`, `ROUE_VOWELS_BEFORE_INVALID`,
+`ROUE_VOWELS_AFTER_INVALID`, `ROUE_VOWEL_PRICE_INVALID`, `ROUE_VOWEL_GAIN_INVALID`, `ROUE_BONUS_COUNT_INVALID`
+(hors 0 à 4, ou roue de plus de 64 cases).
+
+### GameState ROUE — champs ajoutés (sans `omitempty`, jamais persistés)
+
+| Champ | Type JSON | Contenu |
+|---|---|---|
+| `ROUE_BUY_VOWELS` | bool | Copie du réglage au `START` (`false` hors manche) |
+| `ROUE_VOWEL_TIMING` | string | Moment effectif, copié au `START` (`""` hors manche) |
+| `ROUE_VOWELS_BEFORE` | string | Nombre effectif avant de tourner (`""` hors manche) |
+| `ROUE_VOWELS_AFTER` | string | Nombre effectif après l'arrêt (`""` hors manche) |
+| `ROUE_VOWEL_PRICE` | int | Prix effectif (0 hors manche) |
+| `ROUE_VOWEL_GAIN` | string | Option effective (`""` hors manche) |
+| `ROUE_VOWELS_LEFT` | bool | Il reste au moins une voyelle ni révélée ni proposée (pendant de `ROUE_CONSONANTS_LEFT`) |
+| `ROUE_TURN_VOWEL` | bool | Une voyelle présente achetée avant de tourner a été révélée dans ce tour ; remis à `false` à chaque entrée dans un tour |
+| `ROUE_STOP_VOWEL` | bool | Une voyelle présente a été achetée après l'arrêt courant ; remis à `false` à `ROUE_SPIN` et à chaque entrée dans un tour |
+
+Les sous-phases `VOWEL_LIT` et `VOWEL_REVEALING` (`ROUE_STEP` = 1) sont ajoutées à `ROUE_SUBPHASE` : achat avant de
+tourner. L'achat après l'arrêt réutilise `LIT`, `REVEALING` et `ANSWER`.
+
+`ROUE_BOARD` et `ROUE_LETTERS` contiennent aussi les voyelles proposées. Une entrée est une voyelle si sa lettre est
+dans `A E I O U Y` ; le calcul de `ROUE_CONSONANTS_LEFT` les ignore.
+
+### Roue générée
+
+- `ROUE_WHEEL.SEGMENTS[].KIND` accepte `bonus` (valeur 0, pas de gain). Placement et limite de 64 cases : contrat §15.2.2.
+- `ROUE_LAST_EVENT.KIND` accepte `VOWEL_HIT`, `VOWEL_MISS`, `BONUS` (et `FLIP` pour une voyelle).

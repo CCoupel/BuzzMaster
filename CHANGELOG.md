@@ -2,6 +2,46 @@
 
 Historique des versions du projet BuzzControl.
 
+## [12.1.0] - YYYY-MM-DD — Roue de la Fortune : extensions (#147, #308)
+
+Deux extensions de la Roue de la Fortune : l'achat de voyelles, et une case BONUS dont l'effet est géré par l'animateur.
+
+### Added
+
+- **Achat de voyelles (#147)** — une voyelle s'achète sur la cagnotte de manche, au prix réglé par question (1 à
+  1 000 000, 250 par défaut). Moment : « Avant de tourner », « Après l'arrêt de la roue » (la voyelle remplace la
+  consonne de la case tirée) ou « Les deux ». Nombre : « 1 voyelle » ou « Plusieurs voyelles », réglé séparément pour
+  chaque moment. Gain d'une voyelle présente : « Sans gain », « Mise remboursée » ou « Prix × nombre de lettres ». Une
+  voyelle absente fait perdre le tour. Activé par défaut, y compris pour les questions existantes.
+- **Case BONUS (#308)** — 0 à 4 cases BONUS par question (0 par défaut). Arrêt sur BONUS : bandeau « 🎁 BONUS ! » sur la
+  TV et les tablettes, son « bonne réponse » et comète LED ; l'équipe garde la main. Aucun gain n'est calculé par le
+  système : le cadeau est géré par l'animateur, et des points éventuels passent par l'attribution manuelle.
+- **Éditeur de question Roue** — section « Voyelles » (interrupteur, moment, nombres, prix, gain, exemple) et compteur
+  de cases BONUS, avec aperçu de la roue.
+- **Actions WebSocket** — `ROUE_BUY_VOWEL` (admin et animateur), 7 codes `ROUE_ERROR` ajoutés (`NOT_A_VOWEL`,
+  `VOWELS_DISABLED`, `VOWEL_NOT_NOW`, `VOWEL_LIMIT_REACHED`, `INSUFFICIENT_BANK`, `LETTER_ALREADY_PROPOSED`,
+  `NO_VOWEL_LEFT`). Événements `ROUE_LAST_EVENT` : `VOWEL_HIT`, `VOWEL_MISS`, `BONUS`.
+- **Documentation** — `docs/GAME_STATE_MACHINE.md`, `docs/DATA_MODELS.md`, `docs/WEBSOCKET_PROTOCOL.md` et
+  `docs/ADMIN_GUIDE.md` décrivent les voyelles et la case BONUS.
+
+### Changed
+
+- **Roue générée** — les cases BONUS s'ajoutent à la roue, avec les cases Banqueroute et Tour perdu. Avec 0 BONUS, la
+  roue est identique à celle de la v12.0.0. Une roue de plus de 64 cases est refusée à l'enregistrement ; au lancement,
+  le nombre de cases BONUS est réduit si la configuration a changé.
+
+### Fixed
+
+- **Annonce de retournement d'une consonne (TV et tablette)** — l'annonce affichait « × 0 = +0 » depuis la v12.0.0. Seul
+  l'affichage était faux : les points crédités étaient corrects. L'annonce affiche maintenant la valeur de la case et le
+  gain réel du tour.
+
+### Compatibilité
+
+- Les questions de la v12.0.0 gardent leur déroulé, sauf l'achat de voyelles, activé par défaut « avant de tourner » :
+  les équipes peuvent acheter une voyelle au début du tour. Pour garder le comportement v12.0.0, désactiver l'interrupteur de la question.
+- 0 case BONUS : roue identique à la v12.0.0.
+
 ## [12.0.0] - 2026-11-17 — Roue de la Fortune (#144, #145)
 
 Nouveau type de question **Roue de la Fortune** : une phrase à deviner, des équipes qui tournent la roue, proposent des

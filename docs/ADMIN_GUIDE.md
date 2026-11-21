@@ -1261,8 +1261,44 @@ proposent la réponse. Une phrase = une manche.
 6. Choisir la **forme de la roue** sur la TV (bandeau, défaut, ou arc) et si les **lettres déjà proposées** s'affichent
    sur la TV et les tablettes (défaut : oui).
 
-Les voyelles (A, E, I, O, U, Y) ne peuvent pas être proposées : elles ne sont jamais proposées en v12.0. Elles
-apparaissent seulement à la résolution.
+Les voyelles (A, E, I, O, U, Y) ne se proposent pas gratuitement : elles s'**achètent** (v12.1.0, voir ci-dessous).
+Elles ne sont jamais proposées par la consonne de l'étape 4.
+
+### Voyelles achetables et case BONUS (v12.1.0)
+
+Réglages par question, dans l'éditeur de question Roue : la section « Voyelles », et le compteur de cases BONUS.
+
+**Voyelles** (activées par défaut, y compris pour les questions déjà créées) :
+
+1. **Interrupteur « Achat de voyelles »** : désactivé, la manche se joue comme en v12.0. Les autres réglages sont gardés
+   pour une réactivation.
+2. **Moment de l'achat** :
+   - « Avant de tourner » (défaut, comportement des questions existantes) : au début du tour, l'équipe achète une voyelle
+     avant de lancer la roue ;
+   - « Après l'arrêt de la roue » : la voyelle **remplace la consonne** de la case tirée, qui n'est alors pas jouée ;
+   - « Les deux ».
+3. **Nombre de voyelles**, un réglage par moment : « 1 voyelle » ou « Plusieurs voyelles » (défaut : plusieurs).
+   « Plusieurs » : l'équipe enchaîne tant que sa cagnotte le permet et que chaque voyelle est présente. Le réglage
+   « avant de tourner » est grisé si le moment ne l'utilise pas, et de même pour « après l'arrêt ».
+4. **Prix** d'une voyelle, en points de cagnotte de manche (1 à 1 000 000, défaut 250).
+5. **Gain d'une voyelle présente**, 3 options :
+   - « Sans gain » (défaut) : la voyelle est révélée, rien n'est ajouté ;
+   - « Mise remboursée » : le prix est recrédité à la cagnotte ;
+   - « Prix × nombre de lettres » : par exemple 3 E à 250 rapportent 750.
+
+Dans tous les cas, la voyelle est **payée** à l'achat, sur la cagnotte de manche. Une voyelle **absente** est payée
+quand même et **fait perdre le tour**. Une voyelle déjà proposée ne se rachète pas (refus, sans débit). Quand toutes les
+voyelles sont dites, le bouton « Plus de voyelle à trouver » est grisé.
+
+**Case BONUS** (0 par défaut) : nombre de cases BONUS à ajouter à la roue, de 0 à 4, réglé par question. L'aperçu de la
+roue se met à jour. Les cases BONUS se placent avec les cases spéciales (Banqueroute, Tour perdu).
+
+- Arrêt sur BONUS : la TV et les tablettes affichent « 🎁 BONUS ! ». Le système **ne calcule aucun gain** : l'équipe
+  garde la main et relance la roue.
+- Le cadeau est **géré hors système** par l'animateur. Si l'équipe doit recevoir des points, utiliser l'attribution
+  manuelle des scores.
+- Une roue de plus de 64 cases est refusée à l'enregistrement. Si les paramètres de la roue changent après
+  l'enregistrement, le nombre de cases BONUS est réduit au lancement pour tenir dans 64 cases (un message le signale dans le journal).
 
 ### Régler la roue
 
