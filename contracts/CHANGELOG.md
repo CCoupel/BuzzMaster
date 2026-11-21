@@ -1,6 +1,35 @@
 # Changelog des Contrats API
 
 ---
+## [20261121] — v12.1.0 — ROUE : achat de voyelles (#147) et case BONUS (#308)
+
+`roue.md` révision 7.2, **§15** (nouveau) ; renvois en tête, §3.1, §4, §8.3. Décisions utilisateur du 2026-11-21
+(`.claude/workflow/cadrage-v12.1.0-decisions.md`, révision GATE 2 comprise). **Aucun BREAKING** : champs, valeurs et
+actions ajoutés seulement. Changement de comportement par défaut **voulu** : l'achat de voyelles est activé pour les
+questions existantes (moment « avant de tourner »).
+
+- **[NEW]** Action `ROUE_BUY_VOWEL { LETTER }` (admin, animateur), selon le **moment** réglé sur la question :
+  avant de tourner (`TURN` → `VOWEL_LIT` → `ROUE_FLIP` → `VOWEL_REVEALING` → `TURN`) et/ou après l'arrêt, à la place
+  de la consonne (`LETTER` → `LIT` → `REVEALING` → `ANSWER`, puis voyelle suivante depuis `ANSWER`) ; 1 ou plusieurs
+  voyelles selon le réglage de chaque moment ; voyelle absente → `TURN_END` ; débit de la cagnotte de manche, gain
+  crédité au retournement (§15.1).
+- **[NEW]** Sous-phases `VOWEL_LIT`, `VOWEL_REVEALING` (`ROUE_STEP` = 1) ; événements `VOWEL_HIT`, `VOWEL_MISS`, `BONUS` ;
+  codes `ROUE_ERROR` `NOT_A_VOWEL`, `VOWELS_DISABLED`, `VOWEL_NOT_NOW`, `VOWEL_LIMIT_REACHED`, `INSUFFICIENT_BANK`, `LETTER_ALREADY_PROPOSED`,
+  `NO_VOWEL_LEFT`.
+- **[NEW]** `GameState` : `ROUE_BUY_VOWELS`, `ROUE_VOWEL_TIMING`, `ROUE_VOWELS_BEFORE`, `ROUE_VOWELS_AFTER`,
+  `ROUE_VOWEL_PRICE`, `ROUE_VOWEL_GAIN`, `ROUE_VOWELS_LEFT`, `ROUE_TURN_VOWEL`, `ROUE_STOP_VOWEL`.
+- **[NEW]** Question `ROUE` : `ROUE_BUY_VOWELS` (absent = activé), `ROUE_VOWEL_TIMING` (`BEFORE` | `AFTER` | `BOTH`,
+  absent = `BEFORE`), `ROUE_VOWELS_BEFORE` / `ROUE_VOWELS_AFTER` (`ONE` | `MANY`, absent = `MANY`), `ROUE_VOWEL_PRICE` (absent = 250), `ROUE_VOWEL_GAIN` (`NONE` | `REFUND` | `PER_OCCURRENCE`, absent =
+  `NONE`), `ROUE_BONUS_COUNT` (0–4, absent = 0) ; champs de formulaire `POST /questions` et refus `400` associés (§15.3).
+- **[CHANGED]** `ROUE_FLIP` accepté aussi en `VOWEL_LIT` ; `ROUE_ANSWER` accepté aussi en `TURN` quand
+  `ROUE_TURN_VOWEL` ; `ROUE_SPIN` accepté sans consonne restante quand un achat après l'arrêt est possible ;
+  `ROUE_LETTERS` contient aussi les voyelles ; `*` de `ROUE_BOARD` aussi en `VOWEL_LIT`. Rétrocompatible (les clients
+  sont servis par le même binaire).
+- **[NEW]** Case de roue `KIND: "bonus"` : aucun gain, l'équipe garde la main et rejoue un tour ; nombre par question ;
+  `bonus_count = 0` → roue identique à v12.0 (§15.2).
+- **[CHANGED]** `POST /api/roue/wheel-preview` — champ facultatif `bonus_count`. Additif.
+
+---
 ## [20261117-c] — v12.0.0 — ROUE : montée en 1 tour, essai « Tester » des réglages (#144, LOT-1)
 
 `roue.md` §4, §5, §5.1, §6, §10, §10.2 (nouveau), §11.3 ; `wheel-component.md` §5, §8. Décisions utilisateur de la

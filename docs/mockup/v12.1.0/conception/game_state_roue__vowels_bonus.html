@@ -1,0 +1,86 @@
+<!--
+mockup:
+  composant: game_state_roue
+  feature: vowels_bonus
+  version: 12.1.0
+  type: conception
+  issue: "#147 #308"
+  validee_le: 2026-11-21
+  proposition_retenue: "B — Horizontal · Couloirs Avant / Roue / Lettre (rév. 3 : plusieurs voyelles après l'arrêt, réglages 1 / plusieurs)"
+  complete: ["v12.0.0/conception/game_state_roue__subphases.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conception — Roue : sous-phases, achat de voyelles et case BONUS (#147 #308) — version retenue</title>
+<style>
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#f3f4f6; color:#111827; }
+.mock-note { max-width:1280px; margin:.8rem auto .6rem; padding:0 1rem; font-size:.82rem; color:#6b7280; line-height:1.45; } .mock-note b { color:#374151; }
+.canvas { max-width:1280px; margin:0 auto 1rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:.6rem; overflow:auto; }
+svg { display:block; margin:0 auto; height:auto; } svg text { font-family: Inter, system-ui, sans-serif; }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; font-size:.78rem; color:#4b5563; max-width:1280px; margin:0 auto .6rem; padding:0 1rem; }
+.legend i { display:inline-block; width:1.6rem; height:.25rem; vertical-align:middle; margin-right:.35rem; border-radius:2px; }
+table { max-width:1280px; margin:0 auto 2rem; border-collapse:collapse; font-size:.8rem; background:#fff; border-radius:.6rem; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+td, th { padding:.4rem .7rem; border-bottom:1px solid #eef0f3; text-align:left; vertical-align:top; } th { background:#f9fafb; font-size:.74rem; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; }
+.wrap { max-width:1280px; margin:0 auto; padding:0 1rem; }
+</style>
+</head>
+<body>
+<div class="mock-note">Version retenue <b>B — Couloirs Avant / Roue / Lettre</b> (GATE 2 n° 2), mise à jour avec les règles de la révision 3 : <b>plusieurs voyelles après l'arrêt</b> possibles et deux réglages <b>« 1 / plusieurs »</b> (un pour chaque moment). Contrat : <b>roue.md §5 et §15 rév. 7.2</b>. Gris : tour v12.0 inchangé. <b style="color:#b45309">Orange</b> : achat <b>avant de tourner</b>. <b style="color:#0f766e">Vert d'eau</b> : achat <b>après l'arrêt</b>, à la place de la consonne (la case tirée n'est pas jouée). <b style="color:#d97706">Pointillés dorés</b> : arrêt sur <b>BONUS</b>. Gain d'une voyelle présente crédité à la cagnotte au retournement, aux deux moments. Voyelle absente : tour perdu. <code>ROUE_REVEAL</code> (toute sous-phase → <code>SOLVED</code>) n'est pas dessiné.</div>
+<div class="legend"><span><i style="background:#9ca3af"></i>v12.0</span><span><i style="background:#d97706"></i>achat avant de tourner</span><span><i style="background:#0f766e"></i>achat après l'arrêt</span><span><i style="background:none;border-top:3px dashed #f59e0b;height:0"></i>BONUS</span></div>
+<div class="canvas" id="c"></div>
+<div class="wrap"><table>
+  <tr><th>Réglage de la question</th><th>Avant de tourner (étape 1)</th><th>Après l'arrêt (étapes 4 → 6)</th></tr>
+  <tr><td><b>Moment</b> = Avant de tourner (défaut)</td><td>Achat possible</td><td>— (consonne seulement, v12.0)</td></tr>
+  <tr><td><b>Moment</b> = Après l'arrêt</td><td>—</td><td>Achat possible à la place de la consonne</td></tr>
+  <tr><td><b>Moment</b> = Les deux</td><td>Achat possible</td><td>Achat possible</td></tr>
+  <tr><td><b>Nombre</b> = Plusieurs (défaut)</td><td>Retour à TURN : une autre voyelle, la roue, ou « Réponse validée »</td><td>À l'étape 6 : une autre voyelle, « Réponse validée », ou fin du tour</td></tr>
+  <tr><td><b>Nombre</b> = 1</td><td>Une voyelle par tour : ensuite la roue ou « Réponse validée »</td><td>Une voyelle par arrêt : ensuite étape 6 sans achat</td></tr>
+</table></div>
+<script>
+const N = {
+  TURN:["TURN","étape 1",0], SPINNING:["SPINNING","étape 2",0], STOPPING:["STOPPING","étape 3",0], LETTER:["LETTER","étape 4 · consonne ou voyelle",0],
+  LIT:["LIT","étape 5",0], REVEALING:["REVEALING","étape 5",0], ANSWER:["ANSWER","étape 6",0], TURN_END:["TURN_END","étape 7",0],
+  SOLVED:["SOLVED","fin de manche",0], VOWEL_LIT:["VOWEL_LIT","étape 1 · voyelle avant",1], VOWEL_REVEALING:["VOWEL_REVEALING","étape 1 · voyelle avant",1],
+};
+// [de, vers, libellé, type, clé de courbure] 0 = v12.0, 1 = avant, 2 = BONUS, 3 = après
+const E = [
+  ["TURN","SPINNING","ROUE_SPIN",0], ["SPINNING","STOPPING","buzz / arrêt / durée max",0], ["STOPPING","LETTER","case valeur",0],
+  ["STOPPING","TURN_END","Banqueroute / Perdu",0], ["LETTER","LIT","consonne présente",0], ["LETTER","TURN_END","consonne absente / répétée",0],
+  ["LIT","REVEALING","ROUE_FLIP",0], ["REVEALING","ANSWER","fin du retournement",0], ["ANSWER","SOLVED","Réponse validée",0],
+  ["ANSWER","TURN","ROUE_NEXT",0], ["TURN_END","TURN","ROUE_NEXT",0],
+  ["TURN","VOWEL_LIT","voyelle présente · −prix",1], ["VOWEL_LIT","VOWEL_REVEALING","ROUE_FLIP · +gain cagnotte",1],
+  ["VOWEL_REVEALING","TURN","fin · même équipe (plusieurs : rachat)",1], ["TURN","TURN_END","voyelle absente · −prix",1], ["TURN","SOLVED","Réponse validée (après voyelle)",1],
+  ["LETTER","LIT","voyelle présente · −prix · case non jouée",3,"LETTER>LIT#v"], ["LETTER","TURN_END","voyelle absente · −prix",3,"LETTER>TURN_END#v"],
+  ["ANSWER","LIT","voyelle suivante (plusieurs) · −prix",3,"ANSWER>LIT#v"], ["ANSWER","TURN_END","voyelle suivante absente",3,"ANSWER>TURN_END#v"],
+  ["STOPPING","TURN","🎁 BONUS · rejoue",2],
+];
+const W = 1280, H = 600;
+const P = { TURN:[110,95], VOWEL_LIT:[400,95], VOWEL_REVEALING:[680,95], SPINNING:[320,270], STOPPING:[580,270], LETTER:[150,480], LIT:[420,480], REVEALING:[660,480], ANSWER:[900,480], TURN_END:[1120,330], SOLVED:[1160,555] };
+const BEND = { "VOWEL_REVEALING>TURN":-50, "TURN>SOLVED":-170, "TURN>TURN_END":-60, "ANSWER>TURN":-240, "TURN_END>TURN":-120, "STOPPING>TURN":40, "LETTER>LIT":-30, "LETTER>LIT#v":40, "LETTER>TURN_END":-60, "LETTER>TURN_END#v":-120, "STOPPING>TURN_END":-20, "ANSWER>LIT#v":70, "ANSWER>TURN_END#v":40, "ANSWER>SOLVED":-20 };
+const LANES = [[30,130,"Avant de tourner — étape 1"],[210,120,"Roue — étapes 2 et 3"],[380,200,"Lettre — étapes 4 à 7 (consonne, ou voyelle après l'arrêt)"]];
+const BW = 160, BH = 52, COL = ["#9ca3af","#d97706","#f59e0b","#0f766e"];
+function clip(c, t) { const dx = t[0] - c[0], dy = t[1] - c[1]; if (!dx && !dy) return c; const s = Math.min(Math.abs((BW / 2) / (dx || 1e-9)), Math.abs((BH / 2) / (dy || 1e-9))); return [c[0] + dx * s, c[1] + dy * s]; }
+let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" style="max-width:100%"><defs>${COL.map((c, i) => `<marker id="m${i}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="${c}"/></marker>`).join("")}</defs>`;
+LANES.forEach(([y, h, t], i) => { s += `<rect x="10" y="${y}" width="${W - 20}" height="${h}" rx="14" fill="${["#fffbeb","#f3f4f6","#f0fdfa"][i]}"/><text x="24" y="${y + 18}" font-size="12.5" font-weight="800" fill="#6b7280">${t}</text>`; });
+E.forEach(([a, b, lab, ty, key]) => {
+  const A = P[a], B = P[b], bend = BEND[key || (a + ">" + b)] || 0;
+  const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2, dx = B[0] - A[0], dy = B[1] - A[1], len = Math.hypot(dx, dy) || 1;
+  const C = [mx - dy / len * bend, my + dx / len * bend], S = clip(A, C), T = clip(B, C);
+  s += `<path d="M${S[0]},${S[1]} Q${C[0]},${C[1]} ${T[0]},${T[1]}" fill="none" stroke="${COL[ty]}" stroke-width="${ty ? 2.6 : 1.8}" ${ty === 2 ? 'stroke-dasharray="7 5"' : ""} marker-end="url(#m${ty})"/>`;
+  const lx = .25 * S[0] + .5 * C[0] + .25 * T[0], ly = .25 * S[1] + .5 * C[1] + .25 * T[1], w = lab.length * 6 + 10;
+  s += `<rect x="${lx - w / 2}" y="${ly - 9}" width="${w}" height="17" rx="4" fill="#fff" opacity=".93"/><text x="${lx}" y="${ly + 4}" font-size="11" text-anchor="middle" fill="${ty ? COL[ty] : "#4b5563"}" font-weight="${ty ? 700 : 500}">${lab}</text>`;
+});
+Object.entries(N).forEach(([id, [name, sub, isNew]]) => {
+  const [x, y] = P[id];
+  const fill = isNew ? "#fef3c7" : id === "SOLVED" ? "#dcfce7" : id === "TURN" ? "#e0e7ff" : id === "LETTER" || id === "ANSWER" ? "#ccfbf1" : "#fff";
+  const stroke = isNew ? "#d97706" : id === "TURN" ? "#4f46e5" : id === "LETTER" || id === "ANSWER" ? "#0f766e" : "#9ca3af";
+  s += `<rect x="${x - BW / 2}" y="${y - BH / 2}" width="${BW}" height="${BH}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="2"/><text x="${x}" y="${y - 3}" font-size="13" font-weight="800" text-anchor="middle" fill="#111827">${name}</text><text x="${x}" y="${y + 14}" font-size="10" text-anchor="middle" fill="#6b7280">${sub}</text>`;
+});
+document.getElementById("c").innerHTML = s + `</svg>`;
+</script>
+</body>
+</html>

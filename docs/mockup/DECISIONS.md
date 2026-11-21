@@ -140,5 +140,20 @@
 ## vplayer_roue (tablette)
 - Plateau sur toute la largeur ; paysage et portrait. _(v12.0.0, #144, GATE 1.5, 2026-11-16)_
 
+## Roue de la Fortune — mécanique (v12.1.0)
+- Pas de manche « bonus final », pas de round spécial, pas de lettres offertes (R S T L N E) : #146 et #148 fermées « not planned ». _(v12.1.0, cadrage, 2026-11-21)_
+- Case **BONUS** gérée **hors système** par l'animateur : aucun gain, aucun chrono, aucun doublement ; arrêt sur BONUS = bandeau « BONUS ! », l'équipe garde la main et rejoue. Nombre de cases par question (compteur 0–4), jamais une liste de cases. _(v12.1.0, #308, 2026-11-21)_
+- Achat de voyelles : **réglages par question** — moment (avant de tourner / après l'arrêt à la place de la consonne / les deux, défaut « avant ») et nombre « 1 / plusieurs » pour chaque moment. « Une seule voyelle après l'arrêt » imposée par le système : **refusé** (réglable). Voyelle absente = tour perdu. _(v12.1.0, #147, GATE 2 n° 1 et 2, 2026-11-21)_
+
+## admin_game_roue / anim_roue (v12.1.0)
+- Admin : achat avant de tourner = deuxième bouton à l'étape 1 à côté de « Lancer la roue » ; après l'arrêt = voyelles à l'étape 4 à la place de la consonne, voyelle suivante à l'étape 6. _(v12.1.0, vowels_bonus, GATE 2, 2026-11-21)_
+- Animateur : voyelles dans le clavier (rangée sous les consonnes) + bouton « Acheter » ; la rangée des boutons d'étape ne change pas (pas de 9ᵉ bouton). _(v12.1.0, vowels_bonus, GATE 2, 2026-11-21)_
+
+## tv_roue_started (v12.1.0)
+- Ligne des lettres = **alphabet complet** (26 lettres : jouées, absentes barrées, restantes grisées ; voyelles distinguées en doré). Annonce BONUS = **bandeau doré en travers du plateau**. _(v12.1.0, vowels_bonus, GATE 2, 2026-11-21)_
+
+## admin_question_editor (Roue, v12.1.0)
+- Section Voyelles en cartes (moment, nombre, gain), jamais en liste déroulante ; compteur BONUS avec aperçu de la roue générée. _(v12.1.0, roue_vowels_bonus, GATE 2, 2026-11-21)_
+
 ## (toutes maquettes) — exemples exacts
 - Un exemple de maquette doit être exact : une consonne « absente » ne figure pas dans la phrase affichée. _(v12.0.0, #145, GATE 1.5, 2026-11-16)_
