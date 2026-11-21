@@ -107,14 +107,37 @@ describe('Action ROUE_BUY_VOWEL et portes (roueGates)', () => {
 
 describe('Annonces TV / tablette', () => {
   const text = (parts) => parts.map(p => p.strong ?? p.text).join('')
-  it('VOWEL_LIT et VOWEL_REVEALING annoncent la lettre et les cases (comme LIT / REVEALING)', () => {
-    const ev = { ...NO_EVENT, SEQ: 4, KIND: 'VOWEL_HIT', LETTER: 'O', COUNT: 2, VALUE: 250, GAIN: 500 }
-    expect(text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'VOWEL_LIT', ROUE_LAST_EVENT: ev })))).toMatch(/O.*2 cases/)
-    expect(text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'VOWEL_REVEALING', ROUE_LAST_EVENT: { ...ev, KIND: 'FLIP' } })))).toMatch(/O/)
+  // Événements réels du moteur : VOWEL_HIT { VALUE = prix, GAIN = gain à venir } puis FLIP { COUNT, VALUE = 0, GAIN = gain crédité } (roue.go).
+  const hit = (gain) => ({ ...NO_EVENT, SEQ: 4, KIND: 'VOWEL_HIT', TEAM: 'Rouges', LETTER: 'O', COUNT: 2, VALUE: 250, GAIN: gain })
+  const flip = (gain, letter = 'O', count = 2) => ({ ...NO_EVENT, SEQ: 5, KIND: 'FLIP', TEAM: 'Rouges', LETTER: letter, COUNT: count, VALUE: 0, GAIN: gain })
+  const rev = (ev, sub = 'VOWEL_REVEALING', over = {}) => text(roueAnnouncement(gs({ ROUE_SUBPHASE: sub, ROUE_LAST_EVENT: ev, ...over })))
+
+  it('VOWEL_LIT annonce la lettre et les cases éclairées', () => {
+    expect(text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'VOWEL_LIT', ROUE_LAST_EVENT: hit(500) })))).toMatch(/O.*2 cases/)
   })
-  it('l\'annonce n\'invente jamais de gain de consonne pour une voyelle sans gain', () => {
-    const ev = { ...NO_EVENT, SEQ: 4, KIND: 'FLIP', LETTER: 'O', COUNT: 2, VALUE: 250, GAIN: 0 }
-    expect(text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'VOWEL_REVEALING', ROUE_LAST_EVENT: ev })))).not.toMatch(/\+\s?[1-9]/)
+
+  it('FLIP réel (VALUE 0) d\'une voyelle avec gain : « O : 2 cases = +500 », jamais « × 0 »', () => {
+    const t = rev(flip(500))
+    expect(t).toMatch(/O : 2 cases = \+500/)
+    expect(t).not.toMatch(/×/)
+  })
+
+  it('FLIP réel d\'une voyelle sans gain (NONE) : aucun « × 0 » ni « +0 »', () => {
+    const t = rev(flip(0))
+    expect(t).toMatch(/O/)
+    expect(t).toMatch(/2 cases/)
+    expect(t).not.toMatch(/× 0|\+\s?0/)
+  })
+
+  it('même annonce après l\'arrêt (sous-phase REVEALING, lettre voyelle)', () => {
+    expect(rev(flip(250), 'REVEALING')).toMatch(/O : 2 cases = \+250/)
+    expect(rev(flip(0), 'REVEALING')).not.toMatch(/× 0|\+\s?0/)
+  })
+
+  it('FLIP réel d\'une consonne : valeur de la case × cases = gain du tour en attente, jamais « × 0 = +0 »', () => {
+    const t = rev(flip(0, 'T', 3), 'REVEALING', { ROUE_TURN_GAIN: 1500, ROUE_WHEEL: { ...gs().ROUE_WHEEL, CURRENT: 0 } })
+    expect(t).toMatch(/T : 3 × 500 = \+1.?500/)
+    expect(t).not.toMatch(/× 0|= \+0/)
   })
 })
 
@@ -188,7 +211,7 @@ describe('RouePanel (admin) — achat de voyelles', () => {
     fireEvent.click(btnLike(/Retourner/)[0])
     expect(a.flip).toHaveBeenCalledTimes(1)
     unmount()
-    render(<RouePanel gameState={gs({ ROUE_SUBPHASE: 'VOWEL_REVEALING', ROUE_LAST_EVENT: { ...ev, KIND: 'FLIP' }, ROUE_LETTERS: [{ LETTER: 'O', HIT: true }] })} actions={a} />)
+    render(<RouePanel gameState={gs({ ROUE_SUBPHASE: 'VOWEL_REVEALING', ROUE_LAST_EVENT: { ...ev, KIND: 'FLIP', VALUE: 0, GAIN: 0 }, ROUE_LETTERS: [{ LETTER: 'O', HIT: true }] })} actions={a} />)
     expect(btnLike(/Retourner/).filter(b => !b.disabled).length).toBe(0)
   })
 
