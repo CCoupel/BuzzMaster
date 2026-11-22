@@ -106,6 +106,9 @@ func NormalizeRoueWheelParams(p RoueWheelParams) (out RoueWheelParams, adjustedF
 	if p.Step >= p.MaxPoints {
 		return p, 0, fmt.Errorf("step doit être strictement inférieur à max_points")
 	}
+	if p.BonusCount < 0 || p.BonusCount > RoueMaxBonusCount {
+		return p, 0, fmt.Errorf("bonus_count doit être un entier de 0 à %d", RoueMaxBonusCount)
+	}
 	if p.BankruptCount < 0 || p.LoseTurnCount < 0 {
 		return p, 0, fmt.Errorf("bankrupt_count et lose_turn_count ne peuvent pas être négatifs")
 	}
@@ -171,6 +174,43 @@ func ValidateRoueBonusCount(n int, p RoueWheelParams) error {
 		return &RoueError{RoueErrBonusCountInvalid, "roue_bonus_count ferait dépasser 64 cases de la roue"}
 	}
 	return nil
+}
+
+// RoueEffectiveParams is the composition of the wheel of a question (contract §16.3): each of the 5 composition
+// parameters is the question's own value when present, else the global one; the durations are always global. The
+// result is NORMALISED. Pure function. fallback is true when the composition stayed invalid even without BONUS cases:
+// the whole global wheel is returned. BONUS cases are first reduced to fit in 64 cases (the caller can compare
+// result.BonusCount with the requested one to log it). The start of a round is never refused.
+func RoueEffectiveParams(tc TypedContent, global RoueWheelParams) (p RoueWheelParams, fallback bool) {
+	g, _, err := NormalizeRoueWheelParams(global)
+	if err != nil {
+		g, _, _ = NormalizeRoueWheelParams(DefaultRoueWheelParams())
+	}
+	eff := g
+	if tc.RoueWheelMaxPoints != nil {
+		eff.MaxPoints = *tc.RoueWheelMaxPoints
+	}
+	if tc.RoueWheelStep != nil {
+		eff.Step = *tc.RoueWheelStep
+	}
+	if tc.RoueWheelBankruptCount != nil {
+		eff.BankruptCount = *tc.RoueWheelBankruptCount
+	}
+	if tc.RoueWheelLoseTurnCount != nil {
+		eff.LoseTurnCount = *tc.RoueWheelLoseTurnCount
+	}
+	if tc.RoueBonusCount != nil {
+		eff.BonusCount = *tc.RoueBonusCount
+	}
+	eff.BonusCount = clampInt(eff.BonusCount, 0, RoueMaxBonusCount)
+	wanted := eff.BonusCount
+	eff.BonusCount = 0
+	np, _, nerr := NormalizeRoueWheelParams(eff)
+	if nerr != nil {
+		return g, true
+	}
+	np.BonusCount = clampInt(wanted, 0, RoueMaxBonusFor(np))
+	return np, false
 }
 
 // BuildRoueWheel generates the segments of the wheel for NORMALISED

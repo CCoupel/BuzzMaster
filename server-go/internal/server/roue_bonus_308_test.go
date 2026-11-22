@@ -26,15 +26,15 @@ func TestRoueBonus308_Upload_AbsentFieldMeansZeroAndIsNotWritten(t *testing.T) {
 	}
 }
 
-// 0 explicite : accepté, non écrit (omitempty).
-func TestRoueBonus308_Upload_ZeroIsAcceptedAndNotWritten(t *testing.T) {
+// 0 explicite : accepté ; depuis #309 (contrat §16.2) « présent = personnalisé » : 0 est écrit (BONUS personnalisé à 0).
+func TestRoueBonus308_Upload_ZeroIsAcceptedAndWrittenAsCustomised(t *testing.T) {
 	s, _ := setupTestHTTPServer(t)
 	w, saved := postRoue145(t, s, map[string]string{"roue_bonus_count": "0"})
 	if w.Code != http.StatusOK {
 		t.Fatalf("attendu 200, got %d : %s", w.Code, w.Body.String())
 	}
-	if _, present := saved["ROUE_BONUS_COUNT"]; present {
-		t.Errorf("ROUE_BONUS_COUNT = 0 ne doit pas être écrit : %v", saved["ROUE_BONUS_COUNT"])
+	if got, ok := saved["ROUE_BONUS_COUNT"].(float64); !ok || got != 0 {
+		t.Errorf("ROUE_BONUS_COUNT = 0 doit être écrit (personnalisé) : %v", saved["ROUE_BONUS_COUNT"])
 	}
 }
 

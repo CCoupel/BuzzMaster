@@ -75,7 +75,7 @@ func TestRoueBonusDev308_StopOnBonus(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"red": {Name: "red", Color: []int{255, 0, 0}}, "blue": {Name: "blue", Color: []int{0, 0, 255}}})
 	q := &Question{ID: "r", Question: "Roue", Type: QuestionTypeRoue,
-		TypedContent: TypedContent{RouePhrase: "Toto tata", RoueBonusCount: 1}}
+		TypedContent: TypedContent{RouePhrase: "Toto tata", RoueBonusCount: intpDev309(1)}}
 	e.Ready("r", q)
 	if err := e.RoueSetTeams([]string{"red", "blue"}); err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestRoueBonusDev308_ReducedAtStart(t *testing.T) {
 	e.RoueWheelParamsFn = func() RoueWheelParams {
 		return RoueWheelParams{MaxPoints: 3100, Step: 50}
 	}
-	e.Ready("r", &Question{ID: "r", Question: "Roue", Type: QuestionTypeRoue, TypedContent: TypedContent{RouePhrase: "Toto", RoueBonusCount: 4}})
+	e.Ready("r", &Question{ID: "r", Question: "Roue", Type: QuestionTypeRoue, TypedContent: TypedContent{RouePhrase: "Toto", RoueBonusCount: intpDev309(4)}})
 	_ = e.RoueSetTeams([]string{"red"})
 	e.StartImmediate(0)
 	t.Cleanup(e.Stop)
@@ -131,3 +131,5 @@ func TestRoueBonusDev308_ReducedAtStart(t *testing.T) {
 		t.Fatalf("%d cases", n)
 	}
 }
+
+func intpDev309(n int) *int { return &n }

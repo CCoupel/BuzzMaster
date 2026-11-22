@@ -21,7 +21,7 @@ func roueBonusEngine308(t *testing.T, bonus int, mode string, p RoueWheelParams,
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"red": {Name: "red", Color: []int{255, 0, 0}}, "blue": {Name: "blue", Color: []int{0, 0, 255}}})
 	q := &Question{ID: "roue308", Question: "Roue de la Fortune", Type: QuestionTypeRoue,
-		TypedContent: TypedContent{RouePhrase: "Toto tata", RoueMode: mode, RoueBonusCount: bonus}}
+		TypedContent: TypedContent{RouePhrase: "Toto tata", RoueMode: mode, RoueBonusCount: &bonus}}
 	e.Ready("roue308", q)
 	if len(teams) == 0 {
 		teams = []string{"red", "blue"}

@@ -24,7 +24,7 @@ func (a *App) setupRoueCallbacks() {
 	a.engine.RoueWheelParamsFn = func() game.RoueWheelParams { // game-config.json `wheel`, read at each START
 		w := config.GetGameSettings().Wheel
 		return game.RoueWheelParams{
-			MaxPoints: w.MaxPoints, Step: w.Step, BankruptCount: w.BankruptCount, LoseTurnCount: w.LoseTurnCount,
+			MaxPoints: w.MaxPoints, Step: w.Step, BankruptCount: w.BankruptCount, LoseTurnCount: w.LoseTurnCount, BonusCount: w.BonusCount,
 			SpinPeriodMs: w.SpinPeriodMs, SpinMaxMs: w.SpinMaxMs, StopDurationMs: w.StopDurationMs, FlipIntervalMs: w.FlipIntervalMs,
 		}
 	}

@@ -408,7 +408,13 @@ type TypedContent struct {
 	RoueVowelsAfter  string `json:"ROUE_VOWELS_AFTER,omitempty"`  // ONE | MANY (default)
 	RoueVowelPrice   int    `json:"ROUE_VOWEL_PRICE,omitempty"`   // 1..1 000 000, absent = 250
 	RoueVowelGain    string `json:"ROUE_VOWEL_GAIN,omitempty"`    // NONE (default) | REFUND | PER_OCCURRENCE
-	RoueBonusCount   int    `json:"ROUE_BONUS_COUNT,omitempty"`   // v12.1.0 #308: BONUS cases added to the wheel, 0 (absent) to 4
+	// v12.1.0 #309 (contract §16.2): present = customised for this question, absent = follows the global setting.
+	// Nullable: a customised 0 is valid. A LOT-1 file (ROUE_BONUS_COUNT > 0 only) loads as a customised BONUS count.
+	RoueWheelMaxPoints     *int `json:"ROUE_WHEEL_MAX_POINTS,omitempty"`
+	RoueWheelStep          *int `json:"ROUE_WHEEL_STEP,omitempty"`
+	RoueWheelBankruptCount *int `json:"ROUE_WHEEL_BANKRUPT_COUNT,omitempty"`
+	RoueWheelLoseTurnCount *int `json:"ROUE_WHEEL_LOSE_TURN_COUNT,omitempty"`
+	RoueBonusCount   *int   `json:"ROUE_BONUS_COUNT,omitempty"`   // v12.1.0 #308: BONUS cases added to the wheel, 0 (absent) to 4
 }
 
 // Effective vowel settings (contract §15.1.1: absent = default).

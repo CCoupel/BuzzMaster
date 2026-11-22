@@ -411,17 +411,17 @@ func (e *Engine) startRoueRoundUnsafe() {
 	if params.MaxPoints == 0 {
 		params = DefaultRoueWheelParams()
 	}
-	params, _, perr := NormalizeRoueWheelParams(params)
-	if perr != nil {
-		params, _, _ = NormalizeRoueWheelParams(DefaultRoueWheelParams())
+	requested := 0
+	if q.RoueBonusCount != nil {
+		requested = *q.RoueBonusCount
+	} else {
+		requested = params.BonusCount
 	}
-	params.BonusCount = q.RoueBonusCount
-	if params.BonusCount < 0 {
-		params.BonusCount = 0
-	}
-	if max := RoueMaxBonusFor(params); params.BonusCount > max { // configuration changed since the question was saved: never refuse the start
-		log.Printf("[Engine] ROUE: question %s asks %d BONUS cases, reduced to %d to stay within %d cases", q.ID, params.BonusCount, max, RoueMaxSegments)
-		params.BonusCount = max
+	params, fallback := RoueEffectiveParams(q.TypedContent, params)
+	if fallback {
+		log.Printf("[Engine] ROUE: wheel composition of question %s invalid with the current settings, global wheel used", q.ID)
+	} else if params.BonusCount < clampInt(requested, 0, RoueMaxBonusCount) {
+		log.Printf("[Engine] ROUE: question %s asks %d BONUS cases, reduced to %d to stay within %d cases", q.ID, requested, params.BonusCount, RoueMaxSegments)
 	}
 	segs := BuildRoueWheel(params)
 	rt := &roueRuntime{
