@@ -2,6 +2,45 @@
 
 Historique des versions du projet BuzzControl.
 
+## [12.2.0] - 2026-11-22 — Roue de la Fortune : BONUS sur case à points (#316, #317)
+
+La case BONUS ne prend plus sa propre place sur la roue : elle est posée sur une case à points, marquée 🎁. Arrêter la
+roue sur cette case joue la valeur de la case, sans relance. Le BONUS peut être éphémère (par défaut) ou permanent.
+
+### Added
+
+- **BONUS posé sur une case à points (#316)** — la case marquée 🎁 garde sa valeur : l'équipe joue un tour normal sur
+  ce montant (consonne, ou voyelle après l'arrêt). Le cadeau reste géré par l'animateur ; le système n'attribue aucun
+  point pour le BONUS lui-même. Les marques sont tirées au hasard à chaque lancement de manche, réparties entre les
+  cases spéciales, et ne touchent jamais une case BANQUEROUTE, TOUR PERDU ni une autre marque.
+- **BONUS éphémère ou permanent (#317)** — réglage global (carte « Roue » des Paramètres, défaut : éphémère) et
+  réglage par question (interrupteur « une seule fois par manche » dans la composition de la roue). En éphémère, la
+  marque disparaît après le choix de la lettre ou de la voyelle, jusqu'à la fin de la manche : la case redevient une
+  case à points normale, avec un fondu. En permanent, la marque reste.
+- **Refus « trop de BONUS »** — l'enregistrement refuse une composition qui dépasse le nombre de BONUS possible pour la
+  roue (4 au plus, et la place disponible entre les cases spéciales). L'aperçu le signale aussi.
+
+### Changed
+
+- **Arrêt sur BONUS** : plus de nouveau tour. L'équipe joue la case comme une case à points ; l'événement `BONUS` remplace
+  `LAND_VALUE` et le bandeau « 🎁 BONUS ! » s'efface au choix de la lettre ou de la voyelle.
+- **Nombre de cases** : les BONUS ne s'ajoutent plus à la roue. La limite de 64 cases porte sur les cases à points,
+  BANQUEROUTE et TOUR PERDU ; une marque BONUS ne fait pas grossir la roue.
+- **Au lancement** : si la configuration a changé et que le nombre de BONUS n'est plus permis, il est réduit au maximum
+  possible ; le départ n'est jamais refusé. Un message le signale dans le journal.
+- **Banqueroute et Tour perdu** : placement, nombre et valeurs inchangés. Les BONUS ne déplacent aucune de ces cases.
+
+### Compatibility
+
+- Changement interne du protocole `GameState` : `ROUE_WHEEL.SEGMENTS[].KIND` ne vaut plus `bonus`, et la case porte un
+  champ `BONUS`. Aucun client externe n'est concerné : l'interface est embarquée dans le binaire et les buzzers ne
+  reçoivent pas `ROUE_WHEEL`.
+- Aucune donnée enregistrée n'est réécrite. Une question v12.1.0 avec des BONUS les garde, désormais posés sur des cases à
+  points : sa roue perd autant de cases qu'elle comptait de BONUS. Sans réglage explicite, elle suit le réglage global
+  (éphémère).
+- Les questions v12.1.0 sans BONUS ne changent pas. Un fichier `game-config.json` sans réglage de mode est lu sans erreur
+  et reste éphémère.
+
 ## [12.1.0] - 2026-11-22 — Roue de la Fortune : extensions (#147, #308, #309)
 
 Extensions de la Roue de la Fortune : l'achat de voyelles, une case BONUS dont l'effet est géré par l'animateur, et la composition de la roue par question (#309).

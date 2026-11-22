@@ -1290,16 +1290,34 @@ Dans tous les cas, la voyelle est **payée** à l'achat, sur la cagnotte de manc
 quand même et **fait perdre le tour**. Une voyelle déjà proposée ne se rachète pas (refus, sans débit). Quand toutes les
 voyelles sont dites, le bouton « Plus de voyelle à trouver » est grisé.
 
-**Case BONUS** : nombre de cases BONUS à ajouter à la roue, de 0 à 4, réglé dans la section « 🎡 Roue — composition » de
-la question (voir ci-dessous). Par défaut, il suit le réglage global (0). Les cases BONUS se placent avec les cases
-spéciales (Banqueroute, Tour perdu).
+**Case BONUS** : nombre de marques BONUS, de 0 à 4, réglé dans la section « 🎡 Roue — composition » de la question (voir
+ci-dessous). Par défaut, il suit le réglage global (0). Les marques se posent sur des cases à points (v12.2.0 : elles ne
+s'ajoutent pas à la roue).
 
-- Arrêt sur BONUS : la TV et les tablettes affichent « 🎁 BONUS ! ». Le système **ne calcule aucun gain** : l'équipe
-  garde la main et relance la roue.
+- Arrêt sur BONUS : la TV et les tablettes affichent « 🎁 BONUS ! ». Le système **ne calcule aucun gain** et l'équipe
+  ne relance pas la roue : elle joue la case comme une case à points (v12.2.0, voir ci-dessous).
 - Le cadeau est **géré hors système** par l'animateur. Si l'équipe doit recevoir des points, utiliser l'attribution
   manuelle des scores.
 - Une roue de plus de 64 cases est refusée à l'enregistrement. Si les paramètres de la roue changent après
   l'enregistrement, le nombre de cases BONUS est réduit au lancement pour tenir dans 64 cases (un message le signale dans le journal).
+
+### BONUS sur case à points et mode éphémère (v12.2.0)
+
+Contrat : `contracts/roue.md` §17. Les cases BONUS ne sont plus des cases de la roue : une case BONUS est une **marque 🎁
+posée sur une case à points**. La roue ne grossit pas : les BONUS ne comptent pas dans les 64 cases.
+
+- **Arrêt sur une case marquée** : l'équipe joue la case comme une case à points, au montant de la case (consonne, ou
+  voyelle après l'arrêt si le réglage le permet). Elle ne relance pas la roue. Le bandeau « 🎁 BONUS ! — case … » reste à
+  l'écran jusqu'au choix de la lettre. Le cadeau reste géré par l'animateur ; aucun point n'est attribué au BONUS.
+- **Placement** : les marques sont tirées au hasard à chaque lancement de manche, réparties entre les cases spéciales
+  (Banqueroute, Tour perdu) et jamais voisines d'elles ou d'une autre marque. Banqueroute et Tour perdu ne bougent pas.
+- **Mode éphémère (défaut)** : après le choix de la lettre ou de la voyelle, la marque disparaît et la case redevient une
+  case à points normale, avec un fondu, jusqu'à la fin de la manche. La manche suivante tire une nouvelle roue.
+- **Mode permanent** : la marque reste ; chaque arrêt sur la case redonne le même effet.
+- **Maximum de BONUS** : 4 au plus, et au plus le nombre que la roue peut accueillir sans coller les BONUS aux cases
+  spéciales (exemple : roue par défaut, 4 ; roue 1000 / 100 avec 2 Banqueroutes et 1 Perdu, 2). Au-delà,
+  l'enregistrement est refusé avec le message « Trop de BONUS » ; au lancement, le nombre est réduit (un message le
+  signale dans le journal). Le départ n'est jamais refusé.
 
 ### Composition de la roue par question (v12.1.0)
 
@@ -1312,6 +1330,8 @@ Points maximum, Pas, 💸 Banqueroute, ⏭ Perdu et 🎁 BONUS.
   au global. Une valeur personnalisée égale au global reste personnalisée.
 - Les durées de la roue restent globales.
 - Le pas est corrigé au diviseur le plus proche du maximum à l'enregistrement, comme dans les réglages globaux.
+- Le mode du BONUS (v12.2.0) se règle sous 🎁 BONUS, à droite du nombre : « une seule fois par manche » (activé =
+  éphémère, défaut). Il est grisé tant que la question n'a pas de BONUS, et suit le global tant qu'il n'est pas personnalisé.
 - L'aperçu de la roue affiche la composition effective.
 - Une composition refusée (par exemple plus de 64 cases) n'est pas enregistrée : « Roue refusée » s'affiche avec le
   motif, et la question n'est pas enregistrée.
@@ -1331,13 +1351,14 @@ un ou plusieurs.
 | Pas | Points | Écart entre deux valeurs | 50 |
 | Banqueroute | Cases spéciales | Nombre de cases BANQUEROUTE | 2 |
 | Tour perdu | Cases spéciales | Nombre de cases TOUR PERDU (placée à mi-tour) | 1 |
-| 🎁 BONUS | Cases spéciales | Nombre de cases BONUS, 0 à 4 (cadeau géré par l'animateur, aucun point) | 0 |
+| 🎁 BONUS | Cases spéciales | Nombre de marques BONUS, 0 à 4, posées sur des cases à points (cadeau géré par l'animateur, aucun point) | 0 |
+| 🎁 BONUS, mode | Cases spéciales | Interrupteur « une seule fois par manche » : activé = éphémère (la marque disparaît après son premier tirage, jusqu'à la fin de la manche) ; désactivé = permanent | Éphémère |
 
-- Le total est de 64 cases au plus. Au-delà, l'enregistrement est refusé et rien n'est modifié.
+- Le total est de 64 cases au plus (les BONUS ne s'y ajoutent pas). Au-delà, l'enregistrement est refusé et rien n'est modifié.
 - **Pas corrigé** : si le pas ne divise pas le maximum, il est ramené au diviseur le plus proche (par exemple 30 → 25
   pour un maximum de 100). L'interface affiche « Pas ajusté à … ».
 - L'aperçu de la roue se calcule sur le serveur ; il se met à jour au fil de la saisie.
-- « Roue par défaut » rétablit 1000 / 50 / 2 / 1 / 0 (22 cases).
+- « Roue par défaut » rétablit 1000 / 50 / 2 / 1 / 0 (22 cases) et le mode éphémère.
 - Une modification ne touche pas une manche en cours : la roue est figée au lancement de la manche.
 
 **Durées de la roue** (carte « Roue », en secondes) : durée d'un tour de roue (1 à 6 s), durée maximale de rotation (3 à
