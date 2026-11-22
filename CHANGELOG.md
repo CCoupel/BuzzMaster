@@ -13,8 +13,8 @@ Extensions de la Roue de la Fortune : l'achat de voyelles, une case BONUS dont l
   consonne de la case tirée) ou « Les deux ». Nombre : « 1 voyelle » ou « Plusieurs voyelles », réglé séparément pour
   chaque moment. Gain d'une voyelle présente : « Sans gain », « Mise remboursée » ou « Prix × nombre de lettres ». Une
   voyelle absente fait perdre le tour. Activé par défaut, y compris pour les questions existantes.
-- **Case BONUS (#308)** — 0 à 4 cases BONUS, réglées par défaut selon le réglage global (0) et personnalisables par question (#309). Arrêt sur BONUS : bandeau « 🎁 BONUS ! » sur la
-  TV et les tablettes, son « bonne réponse » et comète LED ; l'équipe garde la main. Aucun gain n'est calculé par le
+- **Case BONUS (#308)** — 0 à 4 cases BONUS, réglées par défaut selon le réglage global (0) et personnalisables par
+  question (#309). Arrêt sur BONUS : bandeau « 🎁 BONUS ! » sur la TV et les tablettes, son « bonne réponse » et comète LED ; l'équipe garde la main. Aucun gain n'est calculé par le
   système : le cadeau est géré par l'animateur, et des points éventuels passent par l'attribution manuelle.
 - **Éditeur de question Roue** — section « Voyelles » (interrupteur, moment, nombres, prix, gain, exemple) et section
   « 🎡 Roue — composition » (Points maximum, Pas, Banqueroute, Perdu, BONUS), avec aperçu de la roue.

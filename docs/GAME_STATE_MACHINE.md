@@ -394,7 +394,7 @@ ANSWER (ROUE_STOP_VOWEL) ─ROUE_BUY_VOWEL (présente, si ROUE_VOWELS_AFTER = MA
 (`ROUE_VOWEL_GAIN`) est crédité à la cagnotte au retournement (`FLIP`), aux deux moments. Une voyelle absente fait perdre
 le tour. Aucun score de partie n'est modifié avant la résolution.
 
-**Case BONUS** (`ROUE_BONUS_COUNT`, 0 par défaut) — arrêt sur une case `bonus` : aucun gain, aucune lettre, aucune
+**Case BONUS** (`ROUE_BONUS_COUNT` ou, à défaut, `wheel.bonus_count` ; 0 par défaut) — arrêt sur une case `bonus` : aucun gain, aucune lettre, aucune
 cagnotte modifiée. Événement `BONUS` ; l'équipe garde la main (nouveau `TURN`, `ROUE_TURN_GAIN` = 0). Le cadeau est
 géré hors système par l'animateur.
 

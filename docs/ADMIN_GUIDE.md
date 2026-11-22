@@ -1246,7 +1246,8 @@ Le champ SSID2/Mot de passe 2 permet de configurer un reseau WiFi de secours :
 > Fonctionnalité livrée dans la v12.0.0.
 
 Une question **Roue** fait jouer une phrase à deviner. Les équipes tournent la roue, proposent une consonne, puis
-proposent la réponse. Une phrase = une manche.
+proposent la réponse. Une phrase = une manche. Depuis la v12.1.0, elles peuvent aussi acheter des voyelles et tomber
+sur des cases BONUS (voir « Voyelles achetables et case BONUS » ci-dessous).
 
 ### Créer une question Roue
 
