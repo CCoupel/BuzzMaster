@@ -9,7 +9,7 @@
 @media (max-width: 700px) { .roue-options, .roue-options-two { grid-template-columns: 1fr; } }
 
 /* 🎁 Cases BONUS (v12.1.0, #308) */
-.roue-bonus-preview { margin-top: 0.5rem; height: 4.4rem; overflow: hidden; border-radius: 0.5rem; background: rgba(0, 0, 0, 0.35); }
+.roue-bonus-preview { margin-top: 0.5rem; height: 4.4rem; min-height: 64px; overflow: hidden; border-radius: 0.5rem; background: rgba(0, 0, 0, 0.35); }
 
 /* 🔤 Voyelles (v12.1.0, #147) */
 .roue-dim { opacity: 0.45; }

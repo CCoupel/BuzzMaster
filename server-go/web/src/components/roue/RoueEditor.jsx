@@ -394,7 +394,7 @@ export default function RoueEditor({ values, onChange, onValidityChange, onWheel
       <div className="memory-mode-selector">
         <label>Forme de la roue</label>
         <RadioCards name="roueWheelLayout" options={LAYOUTS} value={roueWheelLayout} onChange={(v) => onChange('roueWheelLayout', v)} two />
-        <p className="roue-hint">Présentation de la roue sur la TV pour cette question. Les cases de la roue se règlent dans les Paramètres.</p>
+        <p className="roue-hint">Présentation de la roue sur la TV pour cette question. Les cases de la roue se règlent plus bas, dans « Roue — composition » (valeurs des Paramètres par défaut).</p>
       </div>
 
       <VowelsSection values={values} onChange={onChange} />

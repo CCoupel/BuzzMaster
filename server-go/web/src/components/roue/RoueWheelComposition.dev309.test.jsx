@@ -99,3 +99,11 @@ describe('roueRefusalText — refus de composition à l\'enregistrement (#309)',
     expect(roueRefusalText('ROUE_BONUS_COUNT_INVALID: x')).toMatch(/BONUS/)
   })
 })
+
+describe('aide sous « Forme de la roue » (#309)', () => {
+  it('renvoie à « Roue — composition », plus aux seuls Paramètres', () => {
+    const { container } = renderEd()
+    expect(container.textContent).toContain('se règlent plus bas, dans « Roue — composition »')
+    expect(container.textContent).not.toContain('se règlent dans les Paramètres.')
+  })
+})
