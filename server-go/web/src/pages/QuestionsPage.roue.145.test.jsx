@@ -84,7 +84,7 @@ describe('QuestionsPage — type ROUE (#145)', () => {
   it('masque Réponse, Points et Temps pour ce type', () => {
     openRoue()
     expect(screen.queryByLabelText(/^Réponse/)).toBeNull()
-    expect(screen.queryByLabelText(/^Points/)).toBeNull()
+    expect(screen.queryByLabelText(/^Points(?! maximum)/)).toBeNull()
     expect(screen.queryByLabelText(/^Temps/)).toBeNull()
   })
 

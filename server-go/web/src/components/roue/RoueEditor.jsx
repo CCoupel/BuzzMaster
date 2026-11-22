@@ -58,6 +58,7 @@ const FALLBACK_ERRORS = {
   ROUE_VOWELS_AFTER_INVALID: "Nombre de voyelles après l'arrêt invalide.",
   ROUE_VOWEL_PRICE_INVALID: "Prix d'une voyelle invalide (entier de 1 à 1 000 000).",
   ROUE_VOWEL_GAIN_INVALID: "Gain d'une voyelle invalide.",
+  ROUE_WHEEL_INVALID: 'Composition de la roue invalide.',
   ROUE_BONUS_COUNT_INVALID: 'Nombre de cases BONUS invalide (0 à 4, et la roue ne dépasse pas 64 cases).',
 }
 
@@ -145,71 +146,140 @@ function VowelsSection({ values, onChange }) {
   )
 }
 
-/** Cases BONUS (v12.1.0, #308, maquette C) : compteur 0 à 4 + aperçu de la roue générée par le serveur (`POST /api/roue/wheel-preview`
- * avec `bonus_count`, section `wheel` lue sur GET /game-config.json). Aucune règle de placement n'est copiée ici.
- * L'aperçu n'est demandé que si le compteur est > 0 ou a été touché (aucun appel réseau pour une question sans BONUS). */
-function BonusSection({ count, onChange }) {
-  const [active, setActive] = useState(count > 0)
-  const [wheel, setWheel] = useState(null) // { SEGMENTS, COUNT }
+// Composition de la roue par question (v12.1.0, #309, contrat roue.md §16, maquette retenue B « champ lié au global, à délier »).
+// Règle : valeur de la question = paramètre personnalisé ; `null` (ou vide) = suit le réglage global (champ retiré à l'enregistrement).
+const WHEEL_PARAMS = [
+  { id: 'max', field: 'roueWheelMaxPoints', global: 'max_points', label: 'Points maximum', hint: 'meilleure case', min: 2, group: 'Points' },
+  { id: 'step', field: 'roueWheelStep', global: 'step', label: 'Pas', hint: 'écart et plus petite valeur', min: 1, group: 'Points' },
+  { id: 'B', field: 'roueWheelBankruptCount', global: 'bankrupt_count', label: '💸 Banqueroute', hint: 'vident la cagnotte', min: 0, group: 'Cases spéciales' },
+  { id: 'P', field: 'roueWheelLoseTurnCount', global: 'lose_turn_count', label: '⏭ Perdu', hint: 'font passer le tour', min: 0, group: 'Cases spéciales' },
+  { id: 'X', field: 'roueBonusCount', global: 'bonus_count', label: '🎁 BONUS', hint: "0 à 4, cadeau de l'animateur", min: 0, max: ROUE_BONUS_MAX, group: 'Cases spéciales' },
+]
+const WHEEL_FIELDS = WHEEL_PARAMS.map(p => p.field)
+const isCustom = (v) => v !== null && v !== undefined && v !== ''
+const globalOf = (g, p) => (p.id === 'X' ? (Number.isInteger(g?.[p.global]) ? g[p.global] : 0) : g?.[p.global])
+
+function WheelCompositionSection({ values, onChange, onValidityChange }) {
+  const [globalWheel, setGlobalWheel] = useState(null) // section `wheel` de GET /game-config.json
+  const [preview, setPreview] = useState(null) // réponse de wheel-preview
   const [error, setError] = useState('')
+  const touched = useRef(false)
   const seq = useRef(0)
-  const show = active || count > 0
-  // Composant resté monté sur une autre question à 0 BONUS : pas d'aperçu inutile.
-  useEffect(() => { if (count === 0) setActive(false) }, [count])
+  const validityRef = useRef(onValidityChange)
+  validityRef.current = onValidityChange
+
   useEffect(() => {
-    if (!show) return undefined
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+    ;(async () => {
+      try {
+        const res = await fetch('/game-config.json', { signal: ctrl?.signal })
+        const cfg = res.ok ? await res.json() : null
+        if (cfg?.wheel) setGlobalWheel(cfg.wheel)
+        else setError('Réglages globaux de la roue indisponibles.')
+      } catch (e) {
+        if (e?.name !== 'AbortError') setError('Réglages globaux de la roue indisponibles.')
+      }
+    })()
+    return () => ctrl?.abort()
+  }, [])
+
+  const eff = {}
+  WHEEL_PARAMS.forEach(p => { eff[p.id] = isCustom(values[p.field]) ? Number(values[p.field]) : globalOf(globalWheel, p) })
+  const effKey = globalWheel ? JSON.stringify(eff) : ''
+
+  useEffect(() => {
+    if (!globalWheel) { validityRef.current?.(true); return undefined }
     const id = ++seq.current
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
     const timer = setTimeout(async () => {
       try {
-        const cfgRes = await fetch('/game-config.json', { signal: ctrl?.signal })
-        const cfg = cfgRes.ok ? await cfgRes.json() : null
-        const w = cfg?.wheel
-        if (!w) throw new Error('config')
         const res = await fetch('/api/roue/wheel-preview', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl?.signal,
-          body: JSON.stringify({ max_points: w.max_points, step: w.step, bankrupt_count: w.bankrupt_count, lose_turn_count: w.lose_turn_count, bonus_count: count }),
+          body: JSON.stringify({ max_points: eff.max, step: eff.step, bankrupt_count: eff.B, lose_turn_count: eff.P, bonus_count: eff.X }),
         })
         if (id !== seq.current) return
-        if (res.ok) { setWheel(await res.json()); setError('') } else {
+        if (res.ok) { setPreview(await res.json()); setError(''); validityRef.current?.(true) } else {
           let body = null
           try { body = await res.json() } catch { /* corps non JSON */ }
-          setWheel(null)
-          setError(body?.MESSAGE || FALLBACK_ERRORS[body?.CODE] || 'Aperçu de la roue refusé.')
+          setPreview(null)
+          setError(body?.MESSAGE || FALLBACK_ERRORS[body?.CODE] || 'Roue refusée.')
+          validityRef.current?.(false)
         }
       } catch (e) {
         if (e?.name === 'AbortError' || id !== seq.current) return
-        setWheel(null)
+        setPreview(null)
         setError('Aperçu de la roue indisponible.')
+        validityRef.current?.(false)
       }
     }, PREVIEW_DELAY_MS)
     return () => { clearTimeout(timer); ctrl?.abort() }
-  }, [show, count])
-  const set = (v) => { setActive(true); onChange(Math.max(0, Math.min(ROUE_BONUS_MAX, v))) }
-  return (
-    <div className="memory-mode-selector roue-bonus-section">
-      <div className="roue-bonus-line">
-        <label htmlFor="roue-bonus-count">🎁 Cases BONUS</label>
-        <span className="roue-stepper" role="group" aria-label="Nombre de cases BONUS">
-          <button type="button" aria-label="Moins de cases BONUS" disabled={count <= 0} onClick={() => set(count - 1)}>−</button>
-          <output id="roue-bonus-count" data-testid="roue-bonus-count">{count}</output>
-          <button type="button" aria-label="Plus de cases BONUS" disabled={count >= ROUE_BONUS_MAX} onClick={() => set(count + 1)}>+</button>
-        </span>
-        <small className="roue-hint">0 à 4 — ajoutées aux cases des Paramètres. Arrêt sur BONUS : aucun point, l'équipe rejoue ; le cadeau est géré par l'animateur.</small>
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effKey])
+
+  const toggle = (p) => { touched.current = true; onChange(p.field, isCustom(values[p.field]) ? null : globalOf(globalWheel, p)) }
+  const edit = (p, raw) => {
+    touched.current = true
+    if (raw === '') { onChange(p.field, p.min); return }
+    const n = Math.max(p.min, Math.trunc(Number(raw)))
+    onChange(p.field, Number.isFinite(n) ? (p.max != null ? Math.min(p.max, n) : n) : p.min)
+  }
+  const custom = WHEEL_PARAMS.filter(p => isCustom(values[p.field]))
+  const stale = !!error && !touched.current && custom.length > 0
+  const segs = preview?.SEGMENTS || []
+  const vals = segs.filter(x => x.KIND === 'value').map(x => x.VALUE)
+
+  const param = (p) => {
+    const c = isCustom(values[p.field])
+    const g = globalOf(globalWheel, p)
+    return (
+      <div key={p.id} className={`roue-wparam${c ? ' c' : ''}`} data-testid={`roue-wparam-${p.id}`}>
+        <label htmlFor={`roue-w-${p.id}`}>{p.label} <span className="roue-wtag">{c ? 'personnalisé' : '🔗 global'}</span></label>
+        <div className="roue-wlock">
+          <input id={`roue-w-${p.id}`} type="number" min={p.min} max={p.max} step="1" disabled={!c || !globalWheel}
+            value={c ? values[p.field] : (g ?? '')} onChange={(e) => edit(p, e.target.value)} />
+          <button type="button" disabled={!globalWheel} aria-label={c ? `Revenir au global : ${p.label}` : `Personnaliser : ${p.label}`}
+            title={c ? 'Revenir au global' : 'Personnaliser'} onClick={() => toggle(p)}>{c ? '🔗' : '✏️'}</button>
+        </div>
+        <small>{c ? `global : ${g ?? '…'} — 🔗 pour y revenir` : p.hint}</small>
       </div>
-      {show && (error
-        ? <p className="roue-hint err" role="alert">✗ {error}</p>
-        : wheel && (
-          <>
-            <div className="roue-bonus-preview" data-testid="roue-bonus-preview"><FortuneWheel wheel={{ SEGMENTS: wheel.SEGMENTS, LAYOUT: 'strip', CURRENT: -1 }} subphase="" size="compact" /></div>
-            <p className="roue-hint">Aperçu de la roue générée ({wheel.COUNT ?? wheel.SEGMENTS?.length} cases) — calculé par le serveur.</p>
-          </>
+    )
+  }
+
+  return (
+    <div className="memory-mode-selector roue-wheel-section" data-testid="roue-wheel-section">
+      <h4 className="roue-wheel-title">🎡 Roue — composition</h4>
+      <p className="roue-hint">Valeurs des Paramètres par défaut ; personnalisez seulement ce qui change pour cette question. Les durées de la roue restent celles des Paramètres.</p>
+      <div className="roue-wgroups">
+        {['Points', 'Cases spéciales'].map(g => (
+          <fieldset key={g} className="roue-wgroup"><legend>{g}</legend>
+            <div className={`roue-wrow roue-wrow-${g === 'Points' ? 2 : 3}`}>{WHEEL_PARAMS.filter(p => p.group === g).map(param)}</div>
+          </fieldset>
         ))}
+      </div>
+      <div className="roue-wstatus" data-testid="roue-wheel-status">
+        {custom.length
+          ? <>Personnalisé pour cette question : <b>{custom.map(p => p.label.replace(/^\S+ /, '')).join(', ')}</b> — le reste suit les Paramètres.</>
+          : 'Tous les paramètres suivent les Paramètres (roue globale).'}
+      </div>
+      {error
+        ? <p className="roue-hint err" role="alert">✗ {stale ? "Cette roue n'est plus valable avec les réglages globaux actuels : " : 'Roue refusée : '}{error}{stale ? " En jeu, la roue globale sera utilisée tant que la question n'est pas corrigée." : ' La question ne peut pas être enregistrée.'}</p>
+        : preview && (
+          <>
+            {preview.step_adjusted_from != null && preview.step !== preview.step_adjusted_from && (
+              <div className="roue-wfix" role="status">ℹ Pas ajusté à <b>{preview.step}</b> : {preview.step_adjusted_from} ne divise pas {eff.max} ; {preview.step} est le diviseur le plus proche.</div>
+            )}
+            <div className="roue-hint" data-testid="roue-wheel-summary">
+              <b>{preview.COUNT ?? segs.length} cases</b>{vals.length ? <> : {vals.length} gagnantes de {Math.min(...vals)} à {Math.max(...vals)} par pas de {preview.step}</> : null} · {eff.B} Banqueroute · {eff.P} Perdu · {eff.X} BONUS
+            </div>
+            <div className="roue-bonus-preview" data-testid="roue-bonus-preview"><FortuneWheel wheel={{ SEGMENTS: segs, LAYOUT: 'strip', CURRENT: -1 }} subphase="" size="compact" /></div>
+            <p className="roue-hint">Aperçu de la roue de cette question — calculé par le serveur.</p>
+          </>
+        )}
     </div>
   )
 }
 
-export default function RoueEditor({ values, onChange, onValidityChange }) {
+export default function RoueEditor({ values, onChange, onValidityChange, onWheelValidityChange }) {
   const { roueMode, roueGainsRule, roueWheelLayout, roueShowLetters } = values
   const phrase = values.rouePhrase || ''
   const presentation = values.rouePresentation || ''
@@ -326,7 +396,7 @@ export default function RoueEditor({ values, onChange, onValidityChange }) {
 
       <VowelsSection values={values} onChange={onChange} />
 
-      <BonusSection count={Number.isInteger(values.roueBonusCount) ? values.roueBonusCount : 0} onChange={(v) => onChange('roueBonusCount', v)} />
+      <WheelCompositionSection values={values} onChange={onChange} onValidityChange={onWheelValidityChange} />
 
       <div className="rafale-alpha-option">
         <button

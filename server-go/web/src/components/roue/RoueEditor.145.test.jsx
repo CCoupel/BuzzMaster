@@ -13,8 +13,14 @@ const base = {
 const OK_BODY = { COLS: 14, MAX_ROWS: 4, ROWS: ['COMBIEN POUR', 'CE CHIEN DANS', 'LA VITRINE'], CONSONANTS: 12, LETTERS: 17 }
 
 function mockPreview(handler) {
-  global.fetch = vi.fn(async (url, opts) => handler(url, opts))
+  // #309 : l'éditeur lit aussi les réglages globaux de la roue et son aperçu — ces appels sont étrangers à l'aperçu de la phrase (#145).
+  global.fetch = vi.fn(async (url, opts) => {
+    if (url === '/game-config.json') return okResponse({ wheel: { max_points: 1000, step: 50, bankrupt_count: 2, lose_turn_count: 1, bonus_count: 0 } })
+    if (url === '/api/roue/wheel-preview') return okResponse({ COUNT: 0, step: 50, SEGMENTS: [] })
+    return handler(url, opts)
+  })
 }
+const phraseCalls = () => global.fetch.mock.calls.filter(c => c[0] === '/api/roue/preview')
 const okResponse = (body) => ({ ok: true, status: 200, json: async () => body })
 const errResponse = (body) => ({ ok: false, status: 400, json: async () => body })
 
@@ -57,7 +63,7 @@ describe('RoueEditor — structure du formulaire (M3)', () => {
   it('ne propose ni Réponse, ni Points, ni Temps (type sans ces champs)', () => {
     renderEditor()
     expect(screen.queryByLabelText(/^Réponse/)).toBeNull()
-    expect(screen.queryByLabelText(/^Points/)).toBeNull()
+    expect(screen.queryByLabelText(/^Points(?! maximum)/)).toBeNull()
     expect(screen.queryByLabelText(/^Temps/)).toBeNull()
   })
 })
@@ -100,14 +106,14 @@ describe('RoueEditor — aperçu serveur (POST /api/roue/preview)', () => {
   it('phrase vide : aucun appel serveur, saisie non enregistrable', async () => {
     const { onValidityChange } = renderEditor({ rouePhrase: '' })
     await new Promise(r => setTimeout(r, 400))
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(phraseCalls()).toHaveLength(0)
     expect(onValidityChange).toHaveBeenLastCalledWith(false)
   })
 
   it('phrase valide : appelle l\'aperçu avec {PHRASE}, affiche le décompte et signale « enregistrable »', async () => {
     const { onValidityChange, container } = renderEditor({ rouePhrase: 'Combien pour ce chien dans la vitrine' })
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true), { timeout: 2000 })
-    const [url, opts] = global.fetch.mock.calls[0]
+    const [url, opts] = phraseCalls()[0]
     expect(url).toBe('/api/roue/preview')
     expect(opts.method).toBe('POST')
     expect(JSON.parse(opts.body)).toEqual({ PHRASE: 'Combien pour ce chien dans la vitrine' })
@@ -150,7 +156,7 @@ describe('RoueEditor — aperçu serveur (POST /api/roue/preview)', () => {
       rerender(<RoueEditor values={{ ...base, rouePhrase: p }} onChange={onChange} onValidityChange={onValidityChange} />)
     }
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true), { timeout: 2000 })
-    expect(global.fetch.mock.calls.length).toBe(1)
-    expect(JSON.parse(global.fetch.mock.calls[0][1].body).PHRASE).toBe('abcd')
+    expect(phraseCalls().length).toBe(1)
+    expect(JSON.parse(phraseCalls()[0][1].body).PHRASE).toBe('abcd')
   })
 })
