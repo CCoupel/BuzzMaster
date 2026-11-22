@@ -797,13 +797,32 @@ Contrat : `contracts/roue.md` §15. Pas de nouveau canal : `ROUE_BUY_VOWEL` suit
 - achat présent après l'arrêt → même chemin, `ROUE_STOP_VOWEL` = `true` ;
 - achat absent → `VOWEL_MISS` et `ROUE_SUBPHASE` = `TURN_END` (aucun événement `TURN_END`, règle de cause).
 
-**Case BONUS** : arrêt sur une case `bonus` → événement `BONUS` `{ TEAM }`, `ROUE_SUBPHASE` = `TURN` (même équipe).
-Le bandeau « 🎁 BONUS ! » reste affiché sur TV et tablettes tant que `ROUE_LAST_EVENT.KIND` = `BONUS`.
+**Case BONUS** (v12.1.0 ; comportement remplacé en v12.2.0, voir ci-dessous) : arrêt sur une case `bonus` → événement `BONUS` `{ TEAM }`, `ROUE_SUBPHASE` = `TURN` (même équipe).
+
+### BONUS sur case à points et BONUS éphémère — v12.2.0 (#316, #317)
+
+Contrat : `contracts/roue.md` §17. Aucune action nouvelle ; changements dans `GameState` et les événements.
+
+**`GameState`** :
+- `ROUE_BONUS_MODE` (string, sans `omitempty`) : `EPHEMERAL` \| `PERMANENT`, copié au `START` ; `""` hors manche.
+- `ROUE_WHEEL.SEGMENTS[]` : `{ "ID", "KIND", "VALUE", "BONUS" }`. `BONUS` (bool, sans `omitempty`) marque une case à
+  points (`KIND = value`). `KIND` ne vaut plus `bonus` (`value` \| `bankrupt` \| `lose_turn`). `BONUS` passe à `false`
+  seulement en éphémère, à la première lettre ou voyelle choisie après l'arrêt ; le nombre et l'ordre des cases ne
+  changent pas pendant la manche.
+
+**Arrêt sur une case marquée** : fin de `STOPPING` sur une case `value` avec `BONUS = true` → événement `BONUS`
+`{ TEAM, VALUE }` (la valeur de la case ; remplace `LAND_VALUE`), `ROUE_SUBPHASE` = `LETTER` (étape 4). La main n'est pas
+rendue pour un nouveau tour. Le bandeau « 🎁 BONUS ! » reste affiché tant que `ROUE_LAST_EVENT.KIND` = `BONUS`, jusqu'au
+choix de la consonne ou de la voyelle. Aucun point n'est attribué au BONUS lui-même.
+
+**Diffusion** : la marque est visible sur TV, tablettes, animateur et admin (`BONUS` de la case). Rien n'est envoyé aux
+buzzers. Sur TV et tablettes, la case marquée n'affiche que le 🎁 : son montant apparaît sur le bandeau et dans
+l'annonce (le champ `VALUE` est diffusé comme pour toute case).
 
 **Confidentialité** : la phrase reste absente de tous les messages `/ws/tv` et tablettes ; les voyelles proposées
 sont dans `ROUE_LETTERS` ; `ROUE_BOARD` ne montre que les voyelles présentes révélées (`*` en `VOWEL_LIT`).
 
-**Aperçu** : `POST /api/roue/wheel-preview` accepte un champ facultatif `bonus_count` (0 à 4, absent = 0).
+**Aperçu** : `POST /api/roue/wheel-preview` accepte un champ facultatif `bonus_count` (0 à 4, absent = 0) ; hors 0 à 4, ou au-delà du maximum de la roue, il refuse en `400 ROUE_BONUS_COUNT_INVALID` (v12.2.0, §17.3).
 
 ## Architecture serveur
 

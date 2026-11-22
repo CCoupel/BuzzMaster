@@ -7,6 +7,7 @@
         "____ ____"
       ]
     },
+    "ROUE_BONUS_MODE": "EPHEMERAL",
     "ROUE_BUY_VOWELS": true,
     "ROUE_CONSONANTS_LEFT": true,
     "ROUE_CURRENT_TEAM": "red",
@@ -54,117 +55,134 @@
       "LAYOUT": "strip",
       "SEGMENTS": [
         {
+          "BONUS": false,
           "ID": "s0",
           "KIND": "value",
           "VALUE": 1000
         },
         {
+          "BONUS": false,
           "ID": "s1",
           "KIND": "bankrupt",
           "VALUE": 0
         },
         {
+          "BONUS": false,
           "ID": "s2",
           "KIND": "value",
           "VALUE": 950
         },
         {
+          "BONUS": false,
           "ID": "s3",
           "KIND": "value",
           "VALUE": 50
         },
         {
+          "BONUS": false,
           "ID": "s4",
           "KIND": "value",
           "VALUE": 900
         },
         {
+          "BONUS": false,
           "ID": "s5",
-          "KIND": "lose_turn",
-          "VALUE": 0
-        },
-        {
-          "ID": "s6",
           "KIND": "value",
           "VALUE": 100
         },
         {
-          "ID": "s7",
+          "BONUS": false,
+          "ID": "s6",
           "KIND": "value",
           "VALUE": 850
         },
         {
+          "BONUS": false,
+          "ID": "s7",
+          "KIND": "lose_turn",
+          "VALUE": 0
+        },
+        {
+          "BONUS": false,
           "ID": "s8",
           "KIND": "value",
           "VALUE": 150
         },
         {
+          "BONUS": false,
           "ID": "s9",
           "KIND": "value",
           "VALUE": 800
         },
         {
+          "BONUS": false,
           "ID": "s10",
           "KIND": "value",
           "VALUE": 200
         },
         {
+          "BONUS": false,
           "ID": "s11",
-          "KIND": "bonus",
-          "VALUE": 0
-        },
-        {
-          "ID": "s12",
           "KIND": "value",
           "VALUE": 750
         },
         {
-          "ID": "s13",
+          "BONUS": false,
+          "ID": "s12",
           "KIND": "value",
           "VALUE": 250
         },
         {
-          "ID": "s14",
+          "BONUS": false,
+          "ID": "s13",
           "KIND": "value",
           "VALUE": 700
         },
         {
+          "BONUS": false,
+          "ID": "s14",
+          "KIND": "bankrupt",
+          "VALUE": 0
+        },
+        {
+          "BONUS": false,
           "ID": "s15",
           "KIND": "value",
           "VALUE": 300
         },
         {
+          "BONUS": true,
           "ID": "s16",
           "KIND": "value",
           "VALUE": 650
         },
         {
+          "BONUS": false,
           "ID": "s17",
-          "KIND": "bankrupt",
-          "VALUE": 0
-        },
-        {
-          "ID": "s18",
           "KIND": "value",
           "VALUE": 350
         },
         {
-          "ID": "s19",
+          "BONUS": false,
+          "ID": "s18",
           "KIND": "value",
           "VALUE": 600
         },
         {
-          "ID": "s20",
+          "BONUS": false,
+          "ID": "s19",
           "KIND": "value",
           "VALUE": 400
         },
         {
-          "ID": "s21",
+          "BONUS": false,
+          "ID": "s20",
           "KIND": "value",
           "VALUE": 550
         },
         {
-          "ID": "s22",
+          "BONUS": false,
+          "ID": "s21",
           "KIND": "value",
           "VALUE": 450
         }

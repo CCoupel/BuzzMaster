@@ -1,6 +1,38 @@
 # Changelog des Contrats API
 
 ---
+## [20261122-b] — v12.2.0 — ROUE : BONUS posé sur une case à points (#316) et BONUS éphémère (#317)
+
+`roue.md` révision 9.1, **§17** (nouveau, prime sur §15.2 et §16 pour le nombre de cases et le BONUS ; §10.1
+inchangé) ; `wheel-component.md` **§9** (nouveau). Décisions utilisateur du 2026-11-22 (issues #316 / #317, ordres
+`_work/tasks/planner-20261122-1405.md` et `-1440.md`).
+
+- **[BREAKING]** `GameState.ROUE_WHEEL.SEGMENTS[].KIND` : valeur `bonus` **retirée** — un BONUS est désormais une marque
+  sur une case à points. *Interne* : aucun client externe (front embarqué dans le binaire, buzzers non destinataires
+  de `ROUE_WHEEL`) ; aucune donnée enregistrée réécrite.
+- **[BREAKING]** Arrêt sur un BONUS : tour normal sur la valeur de la case (consonne, ou voyelle après l'arrêt), **plus
+  de nouveau tour ni de relance** ; événement `BONUS` à la place de `LAND_VALUE`, avec `VALUE` = valeur de la case
+  (§17.4). Remplace le comportement v12.1.0 (#308) — voulu.
+- **[NEW]** `ROUE_WHEEL.SEGMENTS[].BONUS` (bool, sans `omitempty`) ; `GameState.ROUE_BONUS_MODE` (`EPHEMERAL` |
+  `PERMANENT`, `""` hors manche) (§17.5, §17.6).
+- **[NEW]** `game-config.json` `wheel.bonus_mode` (absent = `EPHEMERAL`) ; question `ROUE_BONUS_MODE` (présent =
+  personnalisé, absent = global) ; champ de formulaire `roue_bonus_mode`, refus `400 ROUE_BONUS_MODE_INVALID` (§17.5).
+- **[CHANGED]** Nombre de cases `N = V + B + P` : les BONUS ne comptent plus dans la roue ni dans la limite de 64 cases
+  (§17.3).
+- **[CHANGED]** Placement des BONUS : **tirés au hasard à chaque `START`**, répartis entre les intervalles qui séparent
+  les BANQUEROUTE / PERDU pour homogénéiser la roue, **jamais voisins d'une case spéciale** (§17.2). **BANQUEROUTE,
+  PERDU et valeurs inchangés** (§10.1, aucune roue d'exemple modifiée).
+- **[CHANGED]** Nombre maximal de BONUS d'une roue = min(4, place libre entre les cases spéciales, règle « autant de
+  cases à points normales que de cases spéciales ») ; au-delà, refus `ROUE_BONUS_COUNT_INVALID` (BONUS envoyé ou
+  hérité) à l'enregistrement et désormais aussi dans `wheel-preview` ; au `START`, réduction, jamais de refus (§17.3).
+  Une roue sans BONUS valable en v12.1 le reste.
+- **[CHANGED]** `ROUE_WHEEL.SEGMENTS` peut changer pendant la manche : `BONUS` passe à `false` à la première lettre ou
+  voyelle choisie après l'arrêt sur la case, en mode éphémère (§17.5).
+- **[NEW]** `wheel-component.md` : prop de segment `mark: '' | 'bonus'` (case dorée + ruban sans texte, **logo 🎁 seul,
+  ni montant ni « BONUS »** — valeur sur le bandeau ; `aria-label` « 800, BONUS » : seul l'affichage est limité à 🎁), retour à la couleur et au montant habituels par un fondu au retrait, sans recréer
+  la roue (§9).
+
+---
 ## [20261122] — v12.1.0 LOT-2 — ROUE : refus d'une composition à l'enregistrement (#309, revue M1 / M2)
 
 `roue.md` révision 8.2, §16.5. Précision du contrat, alignée sur le comportement voulu ; **aucun champ ni payload ne

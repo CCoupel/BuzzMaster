@@ -104,28 +104,28 @@ func TestRoueBonus308_Upload_OtherRoueFieldsStillRoundTrip(t *testing.T) {
 	}
 }
 
-// Limite de 64 cases : la roue courante (game-config) plus les BONUS dépasserait 64 → refus ROUE_BONUS_COUNT_INVALID.
-// On règle la configuration à 63 cases (max 63 / pas 1) : 1 BONUS tient (64), 2 dépassent.
-func TestRoueBonus308_Upload_CountThatWouldExceed64CasesRefused(t *testing.T) {
+// Limite (§17.3, v12.2.0) : un BONUS ne peut pas dépasser le maximum de la roue courante (game-config) → refus
+// ROUE_BONUS_COUNT_INVALID. Roue 1000/100/3/2 (14 cases) : 1 BONUS au plus.
+func TestRoueBonus308_Upload_CountAboveTheWheelMaximumRefused(t *testing.T) {
 	s, _ := setupTestHTTPServer(t)
-	cfg := strings.NewReader(`{"wheel":{"max_points":63,"step":1,"bankrupt_count":0,"lose_turn_count":0}}`)
+	cfg := strings.NewReader(`{"wheel":{"max_points":1000,"step":100,"bankrupt_count":3,"lose_turn_count":2}}`)
 	req, _ := http.NewRequest("POST", "/game-config.json", cfg)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	s.mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Skipf("configuration de la roue à 63 cases non acceptée (%d %s) : cas non réalisable dans ce harnais", rec.Code, rec.Body.String())
+		t.Fatalf("configuration de la roue refusée (%d %s)", rec.Code, rec.Body.String())
 	}
 	w, saved := postRoue145(t, s, map[string]string{"roue_bonus_count": "2"})
 	if w.Code != http.StatusBadRequest || !strings.HasPrefix(w.Body.String(), "ROUE_BONUS_COUNT_INVALID") {
-		t.Fatalf("63 cases + 2 BONUS : attendu 400 ROUE_BONUS_COUNT_INVALID, got %d %q", w.Code, w.Body.String())
+		t.Fatalf("14 cases + 2 BONUS : attendu 400 ROUE_BONUS_COUNT_INVALID, got %d %q", w.Code, w.Body.String())
 	}
 	if saved != nil {
 		t.Errorf("rien ne doit être écrit : %v", saved)
 	}
 	w, _ = postRoue145(t, s, map[string]string{"roue_bonus_count": "1"})
 	if w.Code != http.StatusOK {
-		t.Fatalf("63 cases + 1 BONUS = 64 : attendu 200, got %d %s", w.Code, w.Body.String())
+		t.Fatalf("14 cases + 1 BONUS : attendu 200, got %d %s", w.Code, w.Body.String())
 	}
 }
 
@@ -157,9 +157,15 @@ func TestRoueBonus308_WheelPreview_AbsentBonusCountKeepsV120Wheel(t *testing.T) 
 	}
 }
 
-// bonus_count de 1 à 4 : cases KIND "bonus" en plus, COUNT augmenté, même placement qu'au START.
-func TestRoueBonus308_WheelPreview_CountsAndKinds(t *testing.T) {
-	for n := 1; n <= 4; n++ {
+// bonus_count de 1 à 3 (maximum de 100/10/1/1) : cases marquées BONUS, COUNT inchangé (11 cases, les BONUS n'en ajoutent
+// pas, §17.6), BANQUEROUTE et valeurs aux mêmes places que sans BONUS.
+func TestRoueBonus308_WheelPreview_CountsAndMarks(t *testing.T) {
+	s0, _ := setupTestHTTPServer(t)
+	var base wheelPreview144
+	if err := json.Unmarshal(postWheelPreview144(t, s0, bonusBody308(100, 10, 1, 1, "0")).Body.Bytes(), &base); err != nil {
+		t.Fatal(err)
+	}
+	for n := 1; n <= 3; n++ {
 		t.Run(fmt.Sprint(n), func(t *testing.T) {
 			s, _ := setupTestHTTPServer(t)
 			w := postWheelPreview144(t, s, bonusBody308(100, 10, 1, 1, fmt.Sprint(n)))
@@ -170,20 +176,29 @@ func TestRoueBonus308_WheelPreview_CountsAndKinds(t *testing.T) {
 			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 				t.Fatal(err)
 			}
+			var marks struct {
+				Segments []struct {
+					Kind  string `json:"KIND"`
+					Bonus bool   `json:"BONUS"`
+				} `json:"SEGMENTS"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &marks); err != nil {
+				t.Fatal(err)
+			}
 			bonus := 0
-			for _, sg := range got.Segments {
-				if sg.Kind == "bonus" {
+			for _, sg := range marks.Segments {
+				if sg.Bonus {
 					bonus++
-					if sg.Value != 0 {
-						t.Errorf("case BONUS %s : VALUE %d, attendu 0", sg.ID, sg.Value)
+					if sg.Kind != "value" {
+						t.Errorf("marque sur une case %q, attendu une case à points", sg.Kind)
 					}
 				}
 			}
-			if bonus != n || got.Count != 11+n || len(got.Segments) != 11+n {
-				t.Fatalf("bonus=%d : %d BONUS, COUNT %d, %d cases (attendu %d BONUS et %d cases)", n, bonus, got.Count, len(got.Segments), n, 11+n)
+			if bonus != n || got.Count != 11 || len(got.Segments) != 11 {
+				t.Fatalf("bonus=%d : %d marque(s), COUNT %d, %d cases (attendu %d marques et 11 cases)", n, bonus, got.Count, len(got.Segments), n)
 			}
-			if got.Segments[0].Value != 100 || got.Segments[1].Kind != "bankrupt" {
-				t.Errorf("maximum à l'index 0 et BANQUEROUTE à l'index 1 attendus : %+v %+v", got.Segments[0], got.Segments[1])
+			if got.render() != base.render() {
+				t.Errorf("les cases ont bougé : %q au lieu de %q", got.render(), base.render())
 			}
 		})
 	}
@@ -193,9 +208,9 @@ func TestRoueBonus308_WheelPreview_CountsAndKinds(t *testing.T) {
 // ROUE_WHEEL_INVALID, comme les autres refus de wheel-preview, ou ROUE_BONUS_COUNT_INVALID — l'un des deux).
 func TestRoueBonus308_WheelPreview_InvalidBonusCountRefused(t *testing.T) {
 	cases := map[string]string{
-		"hors bornes (5)":  bonusBody308(100, 10, 1, 1, "5"),
-		"négatif":          bonusBody308(100, 10, 1, 1, "-1"),
-		"dépasse 64 cases": bonusBody308(63, 1, 0, 0, "2"),
+		"hors bornes (5)":                   bonusBody308(100, 10, 1, 1, "5"),
+		"négatif":                           bonusBody308(100, 10, 1, 1, "-1"),
+		"dépasse le maximum permis (§17.3)": bonusBody308(100, 10, 1, 1, "4"),
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {

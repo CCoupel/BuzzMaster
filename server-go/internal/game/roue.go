@@ -79,7 +79,7 @@ const (
 const (
 	RoueNoticeBad    = "BAD"    // letter absent / repeated, BANQUEROUTE: the existing "mauvaise réponse" sound
 	RoueNoticeCredit = "CREDIT" // a team was credited (Team, Points): the existing gain sound + comet + flash
-	RoueNoticeBonus  = "BONUS"  // v12.1.0 #308: stop on a BONUS case — the existing "bonne réponse" sound + comet, no flash
+	RoueNoticeBonus  = "BONUS"  // v12.1.0 #308 / v12.2.0 #316: stop on a points case carrying the BONUS mark — the existing "bonne réponse" sound + comet, no flash
 )
 
 // RoueNotice is one side effect of a transition for the application layer.
@@ -209,6 +209,7 @@ func (e *Engine) resetRoueStateUnsafe() {
 	st.RoueBuyVowels, st.RoueVowelTiming, st.RoueVowelsBefore, st.RoueVowelsAfter = false, "", "", ""
 	st.RoueVowelPrice, st.RoueVowelGain = 0, ""
 	st.RoueVowelsLeft, st.RoueTurnVowel, st.RoueStopVowel = false, false, false
+	st.RoueBonusMode = ""
 	st.RoueWheel = RoueWheel{Segments: []RoueSegment{}, Current: -1}
 	st.RoueLastEvent = RoueEvent{}
 	st.RoueWinner = ""
@@ -421,9 +422,9 @@ func (e *Engine) startRoueRoundUnsafe() {
 	if fallback {
 		log.Printf("[Engine] ROUE: wheel composition of question %s invalid with the current settings, global wheel used", q.ID)
 	} else if params.BonusCount < clampInt(requested, 0, RoueMaxBonusCount) {
-		log.Printf("[Engine] ROUE: question %s asks %d BONUS cases, reduced to %d to stay within %d cases", q.ID, requested, params.BonusCount, RoueMaxSegments)
+		log.Printf("[Engine] ROUE: question %s asks %d BONUS marks, reduced to %d (what the wheel can take)", q.ID, requested, params.BonusCount)
 	}
-	segs := BuildRoueWheel(params)
+	segs := BuildRoueWheel(params, e.roueRandN) // the engine's injectable random source (contract §17.2)
 	rt := &roueRuntime{
 		rows: layout.Rows, revealed: map[rune]bool{},
 		gainsRule: q.RoueGainsRule, mode: q.RoueMode,
@@ -455,6 +456,7 @@ func (e *Engine) startRoueRoundUnsafe() {
 	st.RoueVowelsAfter = q.EffectiveRoueVowelsAfter()
 	st.RoueVowelPrice = q.EffectiveRoueVowelPrice()
 	st.RoueVowelGain = q.EffectiveRoueVowelGain()
+	st.RoueBonusMode = params.BonusMode
 	st.RoueWinner = ""
 	st.RoueAwards = map[string]int{}
 	st.RoueWheel = RoueWheel{
@@ -601,9 +603,11 @@ func (e *Engine) roueFinishStoppingUnsafe(fx *roueFx) {
 	case RoueKindLoseTurn:
 		e.roueEventUnsafe(RoueEvLoseTurn, team, "", 0, 0, 0)
 		e.roueEnterTurnEndUnsafe(false, false)
-	case RoueKindBonus:
-		e.roueBonusStopUnsafe(team, fx)
 	default:
+		if seg.Bonus { // v12.2.0 #316: a marked points case — normal turn on its value, no replay (contract §17.4)
+			e.roueBonusStopUnsafe(team, seg.Value, fx)
+			break
+		}
 		e.roueEventUnsafe(RoueEvLandValue, team, "", 0, seg.Value, 0)
 		e.roueSetSubUnsafe(RoueSubLetter)
 	}
@@ -720,6 +724,7 @@ func (e *Engine) RoueLetter(letter string) error {
 		}
 		team := e.state.RoueCurrentTeam
 		ls := string(l)
+		e.roueConsumeBonusUnsafe() // v12.2.0 #317: the action is accepted, it leaves LETTER (repeat, miss or hit alike)
 		for _, p := range e.state.RoueLetters {
 			if p.Letter == ls {
 				e.roueEventUnsafe(RoueEvLetterRepeat, team, ls, 0, 0, 0)

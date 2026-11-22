@@ -1,0 +1,168 @@
+<!--
+mockup:
+  composant: tv_roue_started
+  feature: bonus_on_value
+  version: 12.2.0
+  type: ui
+  issue: "#316 #317"
+  validee_le: 2026-11-22
+  proposition_retenue: "A + B — Case dorée et ruban cadeau, logo 🎁 seul sans montant (valeur sur le bandeau) ; éphémère : couleur et montant reviennent par un fondu"
+  complete: ["v12.0.0/ui/tv_roue_started__phrase_board_wheel.html", "v12.1.0/ui/tv_roue_started__vowels_bonus.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+<title>LOT-1 · v12.2.0 — TV Roue : BONUS sur case à points (version retenue)</title>
+<style>
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#111827; color:#e5e7eb; border-top:6px solid #2f6fed; }
+.tabs { display:flex; gap:.4rem; padding:.6rem 1rem 0; flex-wrap:wrap; background:#000; }
+.tabs button { font:inherit; font-size:.85rem; font-weight:700; padding:.45rem .9rem; border-radius:.5rem .5rem 0 0; border:1px solid #374151; border-bottom:0; background:#1f2937; color:#cbd5e1; cursor:pointer; }
+.tabs button.on { background:#2f6fed; color:#fff; border-color:#2f6fed; }
+.mock-bar { position:sticky; top:0; z-index:300; background:#000; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; border-top:1px solid #1f2937; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:#4f46e5; border-color:#818cf8; } .mock-bar button.m.on { background:#b45309; border-color:#fcd34d; }
+.mock-note { max-width:1120px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:#9ca3af; line-height:1.45; } .mock-note b { color:#e5e7eb; }
+.pitch { max-width:1120px; margin:.6rem auto; padding:.5rem 1rem; font-size:.85rem; background:#1e293b; border-left:4px solid #2f6fed; border-radius:.3rem; }
+/* ---- Écran TV 16:9, STATIQUE : aucun défilement ---- */
+.tv { width:1120px; height:630px; margin:0 auto 1rem; position:relative; overflow:hidden; background:radial-gradient(circle at 50% 15%, #1f2a5a, #0b1020 70%); border:3px solid #374151; --vh:6.3px; --vw:11.2px; --team:#ef4444; display:flex; flex-direction:column; }
+.banks { display:flex; gap:calc(.8*var(--vw)); padding:calc(1.2*var(--vh)) calc(2.5*var(--vw)) 0; height:calc(10*var(--vh)); flex:0 0 auto; }
+.bank { flex:1; min-width:0; border-radius:calc(1*var(--vh)); padding:0 calc(.9*var(--vw)); background:rgba(255,255,255,.08); border-left:calc(.6*var(--vw)) solid var(--c); overflow:hidden; display:flex; align-items:center; justify-content:space-between; gap:.5em; }
+.bank.active { background:rgba(255,255,255,.22); outline:calc(.35*var(--vh)) solid var(--c); }
+.bank .n { font-size:calc(2.2*var(--vh)); font-weight:700; color:#e2e8f0; } .bank .v { font-size:calc(3.6*var(--vh)); font-weight:900; }
+.head { display:flex; align-items:center; gap:calc(2*var(--vw)); padding:calc(1.4*var(--vh)) calc(3*var(--vw)) calc(.6*var(--vh)); height:calc(7*var(--vh)); flex:0 0 auto; }
+.cat { background:rgba(255,255,255,.12); border-radius:999px; padding:.15em 1em; font-size:calc(2.6*var(--vh)); font-weight:800; text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
+.pres { font-size:calc(3.4*var(--vh)); font-weight:700; color:#fde68a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
+.mid { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; position:relative; --cs:calc(7.4*var(--vh)); }
+.board { display:grid; grid-template-columns:repeat(14, var(--cs)); grid-auto-rows:var(--cs); gap:calc(.5*var(--vh)); justify-content:center; }
+.bc { display:flex; align-items:center; justify-content:center; font-weight:900; font-size:calc(var(--cs)*.62); border-radius:calc(.5*var(--vh)); background:rgba(255,255,255,.04); color:#111827; }
+.bc.tile { background:#1d4ed8; box-shadow:inset 0 0 0 2px rgba(255,255,255,.25); } .bc.shown { background:#f8fafc; }
+.bc.lit { background:#fde047; box-shadow:0 0 calc(2.5*var(--vh)) #fde047, inset 0 0 0 2px #fff; }
+.ribbon { position:absolute; left:0; right:0; top:50%; transform:translateY(-50%) rotate(-3deg); background:linear-gradient(90deg,transparent,#f59e0b 15%,#fbbf24 50%,#f59e0b 85%,transparent); color:#111827; text-align:center; font-size:calc(9*var(--vh)); font-weight:900; letter-spacing:.08em; padding:calc(.8*var(--vh)) 0; box-shadow:0 0 calc(4*var(--vh)) #f59e0b; line-height:1; }
+.ribbon small { display:block; font-size:calc(3*var(--vh)); letter-spacing:.02em; margin-top:calc(.5*var(--vh)); }
+.event { text-align:center; font-size:calc(2.8*var(--vh)); font-weight:800; height:calc(4.6*var(--vh)); line-height:calc(4.6*var(--vh)); white-space:nowrap; overflow:hidden; flex:0 0 auto; }
+.event em { font-style:normal; color:#fbbf24; }
+.letters { text-align:center; font-size:calc(2*var(--vh)); color:#9ca3af; height:calc(3.4*var(--vh)); line-height:calc(3.4*var(--vh)); white-space:nowrap; overflow:hidden; flex:0 0 auto; }
+.letters b { display:inline-block; min-width:1.5em; margin:0 .1em; border-radius:.3em; background:rgba(255,255,255,.14); color:#fff; line-height:1.5; }
+.letters b.miss { text-decoration:line-through; color:#fca5a5; background:rgba(239,68,68,.18); } .letters b.idle { background:transparent; color:#475569; } .letters b.vu { border-bottom:2px solid #f59e0b; }
+.letters .lab { color:#fcd34d; font-weight:800; margin-right:.4em; }
+.strip { position:relative; height:calc(13*var(--vh)); margin:0 calc(3*var(--vw)) calc(1.5*var(--vh)); border-radius:calc(1.5*var(--vh)); background:rgba(0,0,0,.35); border:2px solid rgba(255,255,255,.15); overflow:hidden; flex:0 0 auto; }
+.track { position:absolute; top:0; bottom:0; left:50%; display:flex; }
+.cell { position:relative; width:calc(10*var(--vw)); flex:0 0 calc(10*var(--vw)); display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:900; color:#111827; border-right:2px solid #0b1020; font-size:calc(5.4*var(--vh)); line-height:1; }
+.cell.special { background:#0f172a !important; color:#fff; }
+.cell .pic { font-size:calc(4.6*var(--vh)); } .cell .lab { font-size:calc(1.7*var(--vh)); letter-spacing:.06em; margin-top:.25em; text-align:center; line-height:1.05; }
+.ptr { position:absolute; left:50%; top:0; bottom:0; width:calc(10*var(--vw)); transform:translateX(-50%); border:calc(.6*var(--vh)) solid var(--team); border-radius:calc(1*var(--vh)); z-index:3; box-shadow:0 0 calc(2*var(--vh)) var(--team); }
+.strip::before, .strip::after { content:''; position:absolute; top:0; bottom:0; width:16%; z-index:2; pointer-events:none; }
+.strip::before { left:0; background:linear-gradient(90deg, #0b1020, transparent); } .strip::after { right:0; background:linear-gradient(270deg, #0b1020, transparent); }
+/* ---- Marque BONUS ---- */
+.mk { transition:opacity .6s; }
+.fade .mk, .ribbon.fade { animation:fadeout .6s forwards; } @keyframes fadeout { to { opacity:0; } }
+/* Marque retenue (A + B) : case dorée + ruban cadeau ; en éphémère consommé, retour à la couleur de palette par un fondu */
+.cell.bonus { background:linear-gradient(180deg,#fbbf24,#f59e0b) !important; }
+.cell.bonus .rib { position:absolute; top:0; left:0; right:0; height:calc(2.2*var(--vh)); background:linear-gradient(90deg,#b45309,#fde047,#b45309); color:#111827; font-size:calc(1.9*var(--vh)); font-weight:900; display:flex; align-items:center; justify-content:center; letter-spacing:.06em; box-shadow:0 2px 6px rgba(0,0,0,.4); }
+.cell.bonus .gift { font-size:calc(5.8*var(--vh)); margin-top:calc(1.6*var(--vh)); line-height:1; }
+.cell.bonus .val { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; opacity:0; } /* montant masqué tant que la marque est là */
+.cell.bonus.fade { animation:ungold .6s forwards; } @keyframes ungold { to { background:var(--pal); } }
+.cell.bonus.fade .val { animation:showval .6s forwards; } @keyframes showval { to { opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .fade, .fade .mk, .ribbon.fade, .cell.bonus.fade, .cell.bonus.fade .val { animation-duration:1ms !important; } }
+/* ---- Autres écrans (mêmes marques) ---- */
+.others { width:1120px; margin:0 auto 2rem; display:grid; grid-template-columns:2.2fr 1fr 1fr; gap:.8rem; }
+.card { background:#1f2937; border-radius:.6rem; padding:.7rem; font-size:.8rem; } .card h4 { margin:0 0 .5rem; font-size:.82rem; color:#fff; }
+.mini { display:flex; gap:2px; border-radius:.35rem; overflow:hidden; --vh:3px; --vw:3.2px; }
+.mini .cell { width:auto; flex:1 1 0; min-width:0; height:3rem; font-size:.62rem; border-right:0; }
+.mini .cell .pic { font-size:.9rem; } .mini .cell .lab { font-size:.5rem; }
+.anim-case { width:7rem; height:7rem; margin:.3rem auto; border-radius:.8rem; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:900; font-size:2rem; color:#111827; position:relative; overflow:hidden; --vh:5px; --vw:6px; }
+.admin-banner { background:#fef3c7; color:#78350f; border:1px solid #f59e0b; border-radius:.4rem; padding:.45rem .6rem; font-size:.78rem; line-height:1.35; }
+.admin-banner.fade { animation:fadeout .6s forwards; }
+.chip { display:inline-block; background:#374151; border-radius:999px; padding:.1rem .5rem; margin-top:.4rem; font-size:.72rem; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Mode du BONUS :</strong><span class="grp" id="modes"><button class="m on" data-m="EPHEMERAL">⏳ Éphémère (défaut)</button><button class="m" data-m="PERMANENT">♾ Permanent</button></span>
+  <strong>Moment :</strong><span class="grp" id="states">
+  <button data-s="turn">Début du tour</button><button data-s="stop" class="on">Roue arrêtée sur 800 + 🎁</button><button data-s="letter">Consonne D choisie</button><button data-s="next">Tour suivant</button></span>
+  <button id="replay" title="Rejouer le fondu">↻ rejouer le fondu</button></div>
+<div class="pitch" id="pitch"></div>
+<div class="mock-note">Roue par défaut <b>1000 / 50 / 2 Banqueroute / 1 Perdu</b> avec <b>2 BONUS</b> : la roue garde ses <b>22 cases</b> ; deux cases à points portent la marque et n'affichent que 🎁 (ici <b>800</b> et <b>350</b>, montants cachés, tirées au hasard au départ de la manche, jamais à côté d'une Banqueroute, d'un Perdu ou d'un autre BONUS). Arrêt sur <b>800 + 🎁</b> : bandeau doré « BONUS ! » (décision v12.1.0 conservée) et annonce « case 800 : proposez une consonne » — <b>la roue n'est pas relancée</b>. Au choix de la consonne : bandeau retiré ; en <b>éphémère</b>, la case dorée redevient sa case à points normale — couleur habituelle et montant « 800 » — par un fondu (0,6 s) jusqu'à la fin de la manche ; en <b>permanent</b>, la marque reste. Écran <b>statique</b> (aucun défilement). La forme <b>arc</b> et la vue circulaire de la carte de réglage portent la même marque. Mêmes marque et fondu sur la tablette joueur, la tablette animateur, l'admin et les aperçus (bas de page).</div>
+<main><div class="tv AB"></div><div class="others AB"></div></main>
+<script>
+const PITCH = "<b>Version retenue — A + B : case dorée et ruban cadeau</b> (choix utilisateur du 2026-11-22). La case marquée est dorée, un ruban doré (sans texte) barre son haut et elle n'affiche que le <b>logo cadeau 🎁 — ni montant, ni texte « BONUS »</b> (consigne utilisateur ; lecteurs d'écran : « 800, BONUS ») : la valeur n'apparaît que sur le bandeau plein écran « BONUS ! case 800 » à l'arrêt. En <b>éphémère</b>, au choix de la consonne ou de la voyelle, le bandeau s'efface et la case <b>reprend sa couleur habituelle et son montant réapparaît</b> par un fondu (0,6 s) : elle redevient une case à points normale jusqu'à la fin de la manche. En <b>permanent</b>, la marque reste (🎁 sans montant). Même rendu sur les tablettes, l'animateur, l'admin et les aperçus.";
+const st = { m:"EPHEMERAL", s:"stop" }; // ouverture sur « roue arrêtée sur BONUS »
+const ROWS = ["COMBIEN POUR", "CE CHIEN DANS", "LA VITRINE"];
+const PAL = ["#fca5a5","#93c5fd","#86efac","#fde68a","#d8b4fe","#fdba74"];
+// Tranche de la roue par défaut autour de l'index 9 (800) : 850 PERDU 150 [800] 200 750 250 — index 6 à 12 (palette = rang de la case à points)
+const SLICE = [["850",5],["⏭|TOUR PERDU",null],["150",6],["800",7],["200",8],["750",9],["250",10]];
+const bonusOn = () => !(st.s === "next" && st.m === "EPHEMERAL");
+const fading = () => st.s === "letter" && st.m === "EPHEMERAL";
+function cellHtml(p, v, palIdx, isBonus, fade) {
+  if (v.includes("|")) { const [pic, lab] = v.split("|"); return `<div class="cell special"><span class="pic">${pic}</span><span class="lab">${lab.replace(" ", "<br>")}</span></div>`; }
+  const pal = PAL[palIdx % 6]; const f = fade ? " fade" : "";
+  if (!isBonus) return `<div class="cell" style="background:${pal}"><span class="val">${v}</span></div>`;
+  return `<div class="cell bonus${f}" style="--pal:${pal}" role="img" aria-label="${v}, BONUS"><span class="rib mk" aria-hidden="true"></span><span class="gift mk" aria-hidden="true">🎁</span><span class="val">${v}</span></div>`;
+}
+function board() {
+  let cells = ""; const off = Math.floor((4 - ROWS.length) / 2); // centrage vertical (roue.md §3.1, #310)
+  for (let r = 0; r < 4; r++) {
+    const row = ROWS[r - off] || ""; const pad = Math.floor((14 - row.length) / 2);
+    for (let c = 0; c < 14; c++) {
+      const ch = row[c - pad];
+      if (!ch || ch === " ") { cells += `<div class="bc"></div>`; continue; }
+      if (ch === "D" && st.s === "letter") cells += `<div class="bc lit"></div>`;
+      else if (ch === "D" && st.s === "next") cells += `<div class="bc shown">D</div>`;
+      else if ("TRNC".includes(ch)) cells += `<div class="bc shown">${ch}</div>`;
+      else cells += `<div class="bc tile"></div>`;
+    }
+  }
+  return `<div class="board">${cells}</div>`;
+}
+function banks() {
+  const T = [["Rouges","#ef4444",900],["Bleus","#3b82f6",400],["Verts","#22c55e",0],["Jaunes","#eab308",1300]];
+  return `<div class="banks">${T.map(([n, c, v], i) => `<div class="bank${i ? "" : " active"}" style="--c:${c}"><span class="n">${n}</span><span class="v">${(i === 0 && st.s === "next" ? 1700 : v).toLocaleString("fr-FR")}</span></div>`).join("")}</div>`;
+}
+function event() {
+  if (st.s === "turn") return `<div class="event">Aux <em>ROUGES</em> de jouer — roue ou voyelle (250)</div>`;
+  if (st.s === "stop") return `<div class="event"><em>🎁 BONUS</em> — case <em>800</em> : proposez une consonne</div>`;
+  if (st.s === "letter") return `<div class="event">Consonne <em>D</em> : 1 case</div>`;
+  return `<div class="event"><em>D</em> : 1 × 800 = <em>+800</em> — aux <em>ROUGES</em> de jouer</div>`;
+}
+function letters() {
+  const played = { T:"", R:"", N:"", C:"", G:"miss" }; if (st.s === "letter" || st.s === "next") played.D = "";
+  return `<div class="letters"><span class="lab">🔤 250</span>${"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(l => `<b class="${l in played ? played[l] : "idle"} ${"AEIOUY".includes(l) ? "vu" : ""}">${l}</b>`).join("")}</div>`;
+}
+function wheel(p) {
+  const html = SLICE.map(([v, k], i) => cellHtml(p, v, k ?? 0, i === 3 && bonusOn(), i === 3 && fading())).join("");
+  return `<div class="strip"><div class="track" style="transform:translateX(calc(-3.5*10*var(--vw)))">${html}</div><div class="ptr"></div></div>`;
+}
+function others(p) {
+  const b = bonusOn(), f = fading();
+  const strip = [["1000",0],["💸|BANQUE ROUTE",null],["950",1],["50",2],["900",3],["100",4],["850",5],["⏭|TOUR PERDU",null],["150",6],["800",7],["200",8],["750",9],["250",10],["700",11],["💸|BANQUE ROUTE",null],["300",12],["650",13],["350",14],["600",15],["400",16],["550",17],["450",18]]
+    .map(([v, k], i) => cellHtml(p, v, k ?? 0, (i === 9 && b) || i === 17, i === 9 && f)).join("");
+  const ac = cellHtml(p, "800", 7, b, f).replace('class="cell', 'class="cell anim-case');
+  const banner = st.s === "stop" || st.s === "letter"
+    ? `<div class="admin-banner${f ? " fade" : ""}">🎁 <b>BONUS !</b> — les Rouges jouent la case <b>800</b> : remettez le cadeau, puis proposez une consonne${st.m === "EPHEMERAL" ? " · <i>BONUS éphémère : il disparaîtra de la roue</i>" : ""}.</div>`
+    : `<div class="admin-banner" style="opacity:.35">(aucun bandeau : ${st.s === "turn" ? "début du tour" : "tour suivant"})</div>`;
+  return `<div class="card"><h4>Roue entière (vue d'ensemble, aperçus de l'éditeur et des Paramètres)</h4><div class="mini">${strip}</div><span class="chip">22 cases · 2 🎁 sur des cases à points</span></div>
+    <div class="card"><h4>Tablette animateur — case de la roue</h4>${ac}<span class="chip">${st.m === "EPHEMERAL" ? "⏳ BONUS éphémère" : "♾ BONUS permanent"}</span></div>
+    <div class="card"><h4>Admin — bandeau du tour (étape 4)</h4>${banner}<span class="chip">Tablette joueur : même roue, même bandeau que la TV</span></div>`;
+}
+function render() {
+  const rib = st.s === "stop" || (st.s === "letter" && st.m === "EPHEMERAL") ? `<div class="ribbon${fading() ? " fade" : ""}">🎁 BONUS !<small>case 800</small></div>` : "";
+  document.querySelector(".tv").innerHTML = banks() + `<div class="head"><span class="cat">🐾 Animaux</span><span class="pres">Chanson de Line Renaud</span></div><div class="mid">${board()}${rib}</div>` + event() + letters() + wheel("AB");
+  document.querySelector(".others").innerHTML = others("AB");
+  document.getElementById("pitch").innerHTML = PITCH;
+  document.querySelectorAll("#modes button").forEach(b => b.classList.toggle("on", b.dataset.m === st.m));
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", b.dataset.s === st.s));
+}
+document.getElementById("modes").addEventListener("click", e => { if (e.target.dataset.m) { st.m = e.target.dataset.m; render(); } });
+document.getElementById("states").addEventListener("click", e => { if (e.target.dataset.s) { st.s = e.target.dataset.s; render(); } });
+document.getElementById("replay").addEventListener("click", () => render());
+render();
+</script>
+</body>
+</html>

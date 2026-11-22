@@ -153,7 +153,7 @@ func TestRoueCompo309_Upload_InvalidCompositionRefused(t *testing.T) {
 	}
 }
 
-// BONUS hors 0–4, ou qui fait dépasser 64 cases avec la composition EFFECTIVE (champs de la question + global) : ROUE_BONUS_COUNT_INVALID.
+// BONUS hors 0–4, ou qui dépasse le maximum permis (§17.3) par la composition EFFECTIVE (champs de la question + global) : ROUE_BONUS_COUNT_INVALID.
 func TestRoueCompo309_Upload_BonusCountRefusals(t *testing.T) {
 	cases := []struct {
 		name string
@@ -161,7 +161,7 @@ func TestRoueCompo309_Upload_BonusCountRefusals(t *testing.T) {
 	}{
 		{"5 BONUS", map[string]string{"roue_bonus_count": "5"}},
 		{"négatif", map[string]string{"roue_bonus_count": "-1"}},
-		{"64 cases perso + 1 BONUS", map[string]string{"roue_wheel_max_points": "64", "roue_wheel_step": "1", "roue_wheel_bankrupt_count": "0", "roue_wheel_lose_turn_count": "0", "roue_bonus_count": "1"}},
+		{"roue perso 1000/100/3/2 + 2 BONUS", map[string]string{"roue_wheel_max_points": "1000", "roue_wheel_step": "100", "roue_wheel_bankrupt_count": "3", "roue_wheel_lose_turn_count": "2", "roue_bonus_count": "2"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -177,22 +177,22 @@ func TestRoueCompo309_Upload_BonusCountRefusals(t *testing.T) {
 	}
 }
 
-// La validation lit le réglage global COURANT : avec un maximum global de 63 cases, 1 BONUS tient, 2 non ; une composition
-// personnalisée qui tient sans BONUS reste valable.
+// La validation lit le réglage global COURANT : avec une roue globale 1000/100/3/2 (1 BONUS au plus), 1 BONUS tient, 2 non ;
+// une composition personnalisée qui libère de la place (sans BANQUEROUTE ni PERDU) accepte 4 BONUS.
 func TestRoueCompo309_Upload_ValidatesAgainstCurrentGlobal(t *testing.T) {
+	const global = `{"wheel":{"max_points":1000,"step":100,"bankrupt_count":3,"lose_turn_count":2}}`
 	s, _ := setupTestHTTPServer(t)
-	setGlobalWheel309(t, s, `{"wheel":{"max_points":63,"step":1,"bankrupt_count":0,"lose_turn_count":0}}`)
+	setGlobalWheel309(t, s, global)
 	if w, _ := postRoue145(t, s, map[string]string{"roue_bonus_count": "2"}); w.Code != http.StatusBadRequest {
-		t.Fatalf("63 cases globales + 2 BONUS : attendu 400, got %d", w.Code)
+		t.Fatalf("roue globale 14 cases + 2 BONUS : attendu 400, got %d", w.Code)
 	}
 	if w, _ := postRoue145(t, s, map[string]string{"roue_bonus_count": "1"}); w.Code != http.StatusOK {
-		t.Fatalf("63 cases globales + 1 BONUS = 64 : attendu 200, got %d %s", w.Code, w.Body.String())
+		t.Fatalf("roue globale 14 cases + 1 BONUS : attendu 200, got %d %s", w.Code, w.Body.String())
 	}
-	// une composition personnalisée plus petite rend la place : 4 BONUS tiennent.
 	s2, _ := setupTestHTTPServer(t)
-	setGlobalWheel309(t, s2, `{"wheel":{"max_points":63,"step":1,"bankrupt_count":0,"lose_turn_count":0}}`)
-	if w, _ := postRoue145(t, s2, map[string]string{"roue_wheel_max_points": "10", "roue_wheel_step": "1", "roue_bonus_count": "4"}); w.Code != http.StatusOK {
-		t.Fatalf("composition perso à 10 cases + 4 BONUS : attendu 200, got %d %s", w.Code, w.Body.String())
+	setGlobalWheel309(t, s2, global)
+	if w, _ := postRoue145(t, s2, map[string]string{"roue_wheel_bankrupt_count": "0", "roue_wheel_lose_turn_count": "0", "roue_bonus_count": "4"}); w.Code != http.StatusOK {
+		t.Fatalf("composition perso sans case spéciale + 4 BONUS : attendu 200, got %d %s", w.Code, w.Body.String())
 	}
 }
 
@@ -254,9 +254,9 @@ func TestRoueCompo309_GameConfig_SectionWithoutBonusCountMeansZero(t *testing.T)
 
 func TestRoueCompo309_GameConfig_BonusCountRefused(t *testing.T) {
 	cases := map[string]string{
-		"5 BONUS":          `{"wheel":{"max_points":1000,"step":50,"bankrupt_count":2,"lose_turn_count":1,"bonus_count":5}}`,
-		"négatif":          `{"wheel":{"max_points":1000,"step":50,"bankrupt_count":2,"lose_turn_count":1,"bonus_count":-1}}`,
-		"dépasse 64 cases": `{"wheel":{"max_points":63,"step":1,"bankrupt_count":0,"lose_turn_count":0,"bonus_count":2}}`,
+		"5 BONUS":                   `{"wheel":{"max_points":1000,"step":50,"bankrupt_count":2,"lose_turn_count":1,"bonus_count":5}}`,
+		"négatif":                   `{"wheel":{"max_points":1000,"step":50,"bankrupt_count":2,"lose_turn_count":1,"bonus_count":-1}}`,
+		"dépasse le maximum permis": `{"wheel":{"max_points":1000,"step":100,"bankrupt_count":3,"lose_turn_count":2,"bonus_count":2}}`,
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {

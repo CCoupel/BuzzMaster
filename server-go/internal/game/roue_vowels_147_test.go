@@ -688,26 +688,38 @@ func TestRoueVowel147_SpecialCasesNoAfterPurchase(t *testing.T) {
 	}
 }
 
-func TestRoueVowel147_BonusRestartsTurnAndResetsFlags(t *testing.T) {
+// v12.2.0 (#316, contract §17.4) : l'arrêt sur une case marquée n'est plus un nouveau tour (« rejouent » supprimé) mais un
+// tour normal sur la valeur de la case : sous-phase LETTER, étape 4 ; ROUE_TURN_VOWEL (achat avant de tourner) reste ce
+// qu'il était, ROUE_STOP_VOWEL (achat après l'arrêt) est faux tant qu'aucune voyelle n'a été achetée après l'arrêt.
+func TestRoueVowel147_BonusIsANormalTurnOnTheCaseValue(t *testing.T) {
 	over := vopt{"ROUE_VOWEL_TIMING": "BOTH", "ROUE_BONUS_COUNT": 1, "ROUE_VOWELS_BEFORE": "ONE"}
 	e, draw := vEngine147(t, over)
 	vBuy147(t, e, "O") // avant de tourner : ROUE_TURN_VOWEL vrai, plafond « 1 » atteint
 	vFlip147(t, e)
 	vRefused147(t, e, "A", "VOWEL_LIMIT_REACHED")
-	vToLetter147(t, e, draw, vSegIndex147(t, e, RoueKindBonus))
-	if vSub(t, e) != "TURN" || vKind(t, e) != "BONUS" {
-		t.Fatalf("attendu TURN après BONUS, got %s / %s", vSub(t, e), vKind(t, e))
+	vToLetter147(t, e, draw, vMarkedIndex147(t, e))
+	if vSub(t, e) != "LETTER" || vKind(t, e) != "BONUS" {
+		t.Fatalf("attendu LETTER après BONUS (pas de relance), got %s / %s", vSub(t, e), vKind(t, e))
 	}
-	if vBool(t, e, "ROUE_TURN_VOWEL") || vBool(t, e, "ROUE_STOP_VOWEL") {
-		t.Fatal("tour BONUS : ROUE_TURN_VOWEL et ROUE_STOP_VOWEL doivent être remis à faux")
+	if !vBool(t, e, "ROUE_TURN_VOWEL") || vBool(t, e, "ROUE_STOP_VOWEL") {
+		t.Fatal("tour sur la case BONUS : le tour garde son achat avant de tourner, aucun achat après l'arrêt encore")
 	}
-	vBuy147(t, e, "A") // le plafond « 1 » est renouvelé : achat avant de tourner possible
+	vBuy147(t, e, "A") // BOTH : achat de voyelle après l'arrêt (sous-phase LETTER) possible
 }
 
-func TestRoueVowel147_BonusNoAfterPurchaseWhenTimingAfter(t *testing.T) {
+func TestRoueVowel147_BonusAfterPurchaseWhenTimingAfter(t *testing.T) {
 	e, draw := vEngine147(t, vopt{"ROUE_VOWEL_TIMING": "AFTER", "ROUE_BONUS_COUNT": 1})
-	vToLetter147(t, e, draw, vSegIndex147(t, e, RoueKindBonus))
-	vRefused147(t, e, "O", "VOWEL_NOT_NOW") // TURN avec AFTER
+	vToLetter147(t, e, draw, vMarkedIndex147(t, e))
+	vBuy147(t, e, "O") // AFTER : l'achat après l'arrêt reste permis sur une case marquée
+}
+
+func vMarkedIndex147(t *testing.T, e *Engine) int {
+	t.Helper()
+	m := markIndexes308(e.GetState().RoueWheel.Segments)
+	if len(m) == 0 {
+		t.Fatal("aucune case marquée")
+	}
+	return m[0]
 }
 
 // ---- ROUE_SPIN sans consonne restante ---------------------------------------------------------------------------

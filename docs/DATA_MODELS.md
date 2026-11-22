@@ -1842,7 +1842,7 @@ repliés. Mise en lignes : 4 lignes de 14 colonnes au plus, mots non coupés, ca
 | `ROUE_LETTERS` | `{ "LETTER", "TEAM", "HIT" }[]` | Lettres proposées, dans l'ordre : consonnes, et voyelles depuis v12.1.0 |
 | `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question |
 | `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |
-| `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE}`, `KIND` ∈ `value \| bankrupt \| lose_turn \| bonus` — `bonus` depuis v12.1.0, valeur 0), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`), `SPIN_UP_MS` (durée de la montée, posée au `START` = 2 × `SPIN_PERIOD_MS`, soit 1 tour, 5 s par défaut), `FULL_SPEED` (`true` seulement en `SPINNING` une fois la montée terminée ; `false` pendant la montée et hors `SPINNING`) |
+| `ROUE_WHEEL` | objet | `LAYOUT`, `SPIN_PERIOD_MS`, `SPIN_MAX_MS`, `FLIP_INTERVAL_MS`, `SEGMENTS` (`{ID, KIND, VALUE, BONUS}`, `KIND` ∈ `value \| bankrupt \| lose_turn` — `bonus` retiré en v12.2.0 ; `BONUS` bool : marque 🎁 sur une case `value`, §17.6), `CURRENT`, `STOP` (`{TO, DURATION_MS}` ou `null`), `SPIN_UP_MS` (durée de la montée, posée au `START` = 2 × `SPIN_PERIOD_MS`, soit 1 tour, 5 s par défaut), `FULL_SPEED` (`true` seulement en `SPINNING` une fois la montée terminée ; `false` pendant la montée et hors `SPINNING`) |
 | `ROUE_LAST_EVENT` | objet | `{ SEQ, KIND, TEAM, LETTER, COUNT, VALUE, GAIN }` — au plus un événement par action |
 | `ROUE_WINNER` | string | Équipe qui a résolu (`""` sinon) |
 | `ROUE_AWARDS` | map équipe → int | Points crédités à la résolution |
@@ -1861,6 +1861,7 @@ Struct Go `config.WheelConfig` (`internal/config/gameconfig.go`). Une section ab
   "bankrupt_count": 2,
   "lose_turn_count": 1,
   "bonus_count": 0,
+  "bonus_mode": "EPHEMERAL",
   "spin_period_ms": 2500,
   "spin_max_ms": 10000,
   "stop_duration_ms": 4000,
@@ -1879,7 +1880,8 @@ Struct Go `config.WheelConfig` (`internal/config/gameconfig.go`). Une section ab
 | `spin_max_ms` | 10000 | 3000–30000 |
 | `stop_duration_ms` | 4000 | 1500–8000 |
 | `flip_interval_ms` | 600 | 200–1500 ; non exposé dans l'interface en v12.0 |
-| `bonus_count` | 0 | *(v12.1.0 LOT-2, #309)* Nombre global de cases BONUS, 0 à 4 ; absent = 0. Compté dans la limite de 64 cases ; `POST` refusé sinon |
+| `bonus_count` | 0 | *(v12.1.0 LOT-2, #309)* Nombre global de marques BONUS, 0 à 4 ; absent = 0. Ne compte pas dans la limite de 64 cases (v12.2.0) ; `POST` refusé si le nombre dépasse le maximum de la roue (§17.3) |
+| `bonus_mode` | `EPHEMERAL` | *(v12.2.0, #317)* `EPHEMERAL` \| `PERMANENT` ; absent = `EPHEMERAL` ; autre valeur : `400`, rien n'est écrit |
 
 La roue (`SEGMENTS`) n'est pas saisie : elle est générée par le serveur (`internal/game/roue_wheel.go`, contrat §10.1)
 et figée dans `ROUE_WHEEL` au `START`. La forme de la roue n'est pas dans la configuration : c'est `ROUE_WHEEL_LAYOUT`
@@ -1904,7 +1906,7 @@ question v12.0 se lit sans changement (défauts ci-dessous).
 
 Refus à l'enregistrement (`400`, rien n'est écrit) : `ROUE_VOWEL_TIMING_INVALID`, `ROUE_VOWELS_BEFORE_INVALID`,
 `ROUE_VOWELS_AFTER_INVALID`, `ROUE_VOWEL_PRICE_INVALID`, `ROUE_VOWEL_GAIN_INVALID`, `ROUE_BONUS_COUNT_INVALID`
-(hors 0 à 4, ou dépassement de 64 cases dû au seul BONUS) ; composition invalide autrement : `ROUE_WHEEL_INVALID` (§16).
+(hors 0 à 4, ou plus de BONUS que le maximum de la roue, §17.3 en v12.2.0) ; composition invalide autrement : `ROUE_WHEEL_INVALID` (§16).
 
 ### GameState ROUE — champs ajoutés (sans `omitempty`, jamais persistés)
 
@@ -1928,7 +1930,7 @@ dans `A E I O U Y` ; le calcul de `ROUE_CONSONANTS_LEFT` les ignore.
 
 ### Roue générée
 
-- `ROUE_WHEEL.SEGMENTS[].KIND` accepte `bonus` (valeur 0, pas de gain). Placement et limite de 64 cases : contrat §15.2.2.
+- `ROUE_WHEEL.SEGMENTS[].KIND` accepte `bonus` (valeur 0, pas de gain). *Superseded en v12.2.0 : `bonus` retiré, voir section v12.2.0.* Placement et limite de 64 cases : contrat §15.2.2.
 - `ROUE_LAST_EVENT.KIND` accepte `VOWEL_HIT`, `VOWEL_MISS`, `BONUS` (et `FLIP` pour une voyelle).
 
 ### Composition de la roue par question — v12.1.0 LOT-2 (#309)
@@ -1950,5 +1952,43 @@ nullables (`*int` côté Go) : `0` est une valeur personnalisée valable, distin
 - Question LOT-1 avec `ROUE_BONUS_COUNT` seul : seul son BONUS est personnalisé, les autres paramètres suivent le global.
 - `GameState` : aucun champ nouveau. `ROUE_WHEEL.SEGMENTS` reflète la composition effective, construite au `START`.
 - Refus à l'enregistrement (`400`, rien n'est écrit) : `ROUE_WHEEL_INVALID` (composition invalide, sauf le seul cas BONUS) ;
-  `ROUE_BONUS_COUNT_INVALID` (BONUS hors 0 à 4, ou dépassement de 64 cases dû au seul BONUS, envoyé ou hérité du global).
+  `ROUE_BONUS_COUNT_INVALID` (BONUS hors 0 à 4, ou plus de BONUS que le maximum de la roue, envoyé ou hérité du global ; règle de la v12.2.0 en §17.3, qui remplace le dépassement de 64 cases).
+
+## Modèles v12.2.0 — BONUS sur case à points (#316) et BONUS éphémère (#317)
+
+Contrat : `contracts/roue.md` §17 (rév. 9.1), qui prime sur §15.2 et §16 pour le nombre de cases et la case BONUS.
+
+### Question de type `ROUE` (`TypedContent`, `OwnedFields`)
+
+| Champ JSON | Type | Défaut (absent) | Règle |
+|---|---|---|---|
+| `ROUE_BONUS_MODE` | string | suit `wheel.bonus_mode` | `EPHEMERAL` \| `PERMANENT`. Présent = personnalisé ; absent = suit le global. Champ de formulaire `roue_bonus_mode` (vide = global). Refus `400 ROUE_BONUS_MODE_INVALID` |
+
+### GameState ROUE — champ ajouté (sans `omitempty`, jamais persisté)
+
+| Champ JSON | Type | Contenu |
+|---|---|---|
+| `ROUE_BONUS_MODE` | string | Mode effectif de la manche, copié au `START` (`EPHEMERAL` \| `PERMANENT`) ; `""` hors manche |
+
+### Roue générée
+
+- `ROUE_WHEEL.SEGMENTS[]` : `{ "ID", "KIND", "VALUE", "BONUS" }`. `BONUS` (bool, sans `omitempty`) vaut `true` pour une
+  case à points marquée ; `false` pour BANQUEROUTE et PERDU. `KIND` ∈ `value | bankrupt | lose_turn` (`bonus` retiré).
+- `BONUS` peut passer de `true` à `false` (mode éphémère, à la première lettre ou voyelle choisie après l'arrêt), jamais
+  l'inverse : le nombre et l'ordre des cases ne changent pas pendant la manche.
+- `ROUE_LAST_EVENT.KIND = BONUS` : `VALUE` = valeur de la case, `GAIN` = 0.
+- Nombre de cases `N = V + B + P` : les marques BONUS ne comptent pas dans les 64 cases.
+- `POST /api/roue/wheel-preview` : la réponse porte les marques d'un tirage ; un nouvel appel peut les placer ailleurs.
+  Le champ `bonus_mode` est accepté et ignoré.
+
+### Limites et refus
+
+- Maximum de BONUS d'une roue : le plus petit de 4, de la place libre entre les cases spéciales, et de
+  `X ≤ ⌊(V − B − P) / 2⌋` (contrat §17.3).
+- À l'enregistrement (`game-config.json`, `POST /questions`, `wheel-preview`) : `400 ROUE_BONUS_COUNT_INVALID` si le
+  nombre de BONUS dépasse ce maximum. Au `START` : réduction, jamais de refus.
+
+### Fixture et tests
+
+- `web/src/hooks/fixtures/roue-gamestate.312.json` : couvre `ROUE_BONUS_MODE` et le champ `BONUS` des cases.
 

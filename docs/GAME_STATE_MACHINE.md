@@ -364,7 +364,7 @@ STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulem
 ### Achat de voyelles et case BONUS (v12.1.0, #147, #308)
 
 Contrat : `contracts/roue.md` §15. Les réglages de voyelles sont par question ; sans réglage, la manche se joue comme
-en v12.0, **sauf l'achat de voyelles, activé par défaut** (moment « avant de tourner »). Le nombre de cases BONUS suit le
+en v12.0, **sauf l'achat de voyelles, activé par défaut** (moment « avant de tourner »). Le nombre de marques BONUS suit le
 réglage global `wheel.bonus_count` (0 par défaut) tant qu'une question ne le personnalise pas (§16).
 
 **Achat avant de tourner** (`ROUE_VOWEL_TIMING` = `BEFORE` ou `BOTH`, étape 1) — la voyelle est payée, puis :
@@ -388,19 +388,27 @@ ANSWER (ROUE_STOP_VOWEL) ─ROUE_BUY_VOWEL (présente, si ROUE_VOWELS_AFTER = MA
 
 - `ROUE_STOP_VOWEL` vaut `true` après une voyelle présente achetée à l'arrêt ; aucune consonne n'est alors acceptée
   jusqu'au prochain lancer. L'étape 6 propose « Acheter une autre voyelle » en `MANY`.
-- Une case BANQUEROUTE ou TOUR PERDU mène à `TURN_END`, une case BONUS à `TURN` : aucun achat « après » sur ces cases.
+- Une case BANQUEROUTE ou TOUR PERDU mène à `TURN_END` : aucun achat « après » sur ces cases. Une case à points marquée BONUS
+  se joue comme une case à points (v12.2.0, voir ci-dessous).
 - Avec `AFTER` ou `BOTH`, la roue peut être lancée sans consonne restante tant qu'un achat après l'arrêt reste possible.
 
 **Gain et débit** : la cagnotte de manche est débitée du prix à l'achat, dans tous les cas. Le gain d'une voyelle présente
 (`ROUE_VOWEL_GAIN`) est crédité à la cagnotte au retournement (`FLIP`), aux deux moments. Une voyelle absente fait perdre
 le tour. Aucun score de partie n'est modifié avant la résolution.
 
-**Case BONUS** (`ROUE_BONUS_COUNT` ou, à défaut, `wheel.bonus_count` ; 0 par défaut) — arrêt sur une case `bonus` : aucun gain, aucune lettre, aucune
-cagnotte modifiée. Événement `BONUS` ; l'équipe garde la main (nouveau `TURN`, `ROUE_TURN_GAIN` = 0). Le cadeau est
-géré hors système par l'animateur.
+**Case BONUS** (v12.2.0, #316 / #317 ; contrat `roue.md` §17) — un BONUS n'est plus une case de la roue : c'est une marque
+(`SEGMENTS[].BONUS`) posée sur une case à points, qui garde sa valeur. Arrêt sur une case marquée : pas de nouveau tour,
+l'équipe joue la case comme une case à points (`LETTER`, ou achat de voyelle après l'arrêt). Événement `BONUS`
+`{ TEAM, VALUE }` à la place de `LAND_VALUE` ; aucun point pour le BONUS lui-même. Le cadeau est géré hors système par
+l'animateur.
+
+**Mode du BONUS** (`ROUE_BONUS_MODE`, copié au `START`) : `EPHEMERAL` (défaut) ou `PERMANENT`. En éphémère, à la première
+action acceptée qui quitte `LETTER` (`ROUE_LETTER`, `ROUE_BUY_VOWEL`), le serveur passe la marque de la case à `false`
+pour le reste de la manche ; la manche suivante tire une nouvelle roue. En permanent, la marque reste et chaque arrêt
+rejoue le cas ci-dessus. Une action refusée ne consomme rien. Après l'arrêt sur une case marquée, l'équipe ne peut pas passer la main : `ROUE_PASS` est refusé `WRONG_SUBPHASE` (sous-phase `LETTER`). « Passer la main » n'est proposé qu'au `TURN` (étape 1) : côté écran, `canPass` (`roueState.js`) exige `TURN`.
 
 **Événements `ROUE_LAST_EVENT` ajoutés** : `VOWEL_HIT` (achat présent, débit), `VOWEL_MISS` (achat absent, fin de tour),
-`BONUS` (arrêt sur une case BONUS). `FLIP` est émis aussi pour une voyelle retournée.
+`BONUS` (arrêt sur une case marquée BONUS, v12.2.0). `FLIP` est émis aussi pour une voyelle retournée.
 
 ### Les 7 étapes et le bandeau
 
@@ -459,7 +467,7 @@ Kinds : `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | L
 | `SPINNING` (montée) | `ROUE_STOP` (admin ou animateur) | Refusé `NOT_FULL_SPEED`, état et minuterie de montée inchangés |
 | `SPINNING` (montée) | Appui `BUTTON` (joueur, buzzer, tablette) | Ignoré en silence |
 | `SPINNING` (pleine vitesse) | Buzz de l'équipe qui a la main, `ROUE_STOP`, fin de `SPIN_MAX_MS` | Tirage uniforme d'une case, `STOPPING`, `FULL_SPEED = false` |
-| `STOPPING` | Fin de `DURATION_MS` | Application de la case : valeur → `LETTER` ; Banqueroute → cagnotte à 0, `TURN_END` ; Tour perdu → `TURN_END` ; BONUS → `TURN` (même équipe, `ROUE_TURN_GAIN` = 0, événement `BONUS`, v12.1.0) |
+| `STOPPING` | Fin de `DURATION_MS` | Application de la case : valeur → `LETTER` ; Banqueroute → cagnotte à 0, `TURN_END` ; Tour perdu → `TURN_END` ; case à points marquée BONUS → `LETTER` (événement `BONUS`, v12.2.0 : plus de nouveau tour) |
 | `LETTER` | `ROUE_LETTER` | Présente → `LIT` ; absente ou déjà proposée → `TURN_END` ; voyelle ou non-lettre → refus, reste en `LETTER` |
 | `LIT` | `ROUE_FLIP` | `REVEALING` ; événement `FLIP` avec `COUNT` |
 | `REVEALING` | Fin de `COUNT × FLIP_INTERVAL_MS` | `ANSWER` |
@@ -536,7 +544,7 @@ existante : aucun changement de protocole BuzzClick.
 - `internal/game/roue.go` : sous-phases, minuteries, transitions, crédit (sans logique dans `engine.go`).
 - `internal/game/roue_board.go` : repli des accents, mise en lignes, validation de la phrase.
 - `internal/game/roue_vowels.go` : achat de voyelles, réglages et débit (v12.1.0, contrat §15.1).
-- `internal/game/roue_bonus.go` : arrêt sur une case BONUS (v12.1.0, contrat §15.2).
+- `internal/game/roue_bonus.go` : arrêt sur une case marquée BONUS et consommation de la marque en éphémère (v12.2.0, contrat §17).
 - `internal/game/roue_wheel.go` : construction de la roue (§10.1 du contrat), correction du pas.
 - `cmd/server/roue.go` : `handleRoueAction`, rappels LED, ambiance et sons (hors `main.go`).
 

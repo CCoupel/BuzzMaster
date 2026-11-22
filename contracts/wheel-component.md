@@ -166,3 +166,27 @@ rotation : non prévus en v12.0.0.
   La vue d'ensemble circulaire de la carte suit la même position, calculée avec les fonctions pures du §5.
 - Ajouts admis au composant, additifs : libellés longs (largeur de cellule du bandeau, taille de police de l'arc)
   et `aria-label` selon `kind`.
+
+## 9. Marque BONUS sur une case à points (v12.2.0, #316 / #317)
+
+Révision du 2026-11-22 (rév. 9.1 : marque dorée + ruban) — `roue.md` §17. **Additif pour `Wheel`**, BREAKING interne pour l'adaptateur (`kind: 'bonus'`
+retiré, il n'existe plus de case BONUS).
+
+- Prop de segment ajoutée, facultative : **`mark`** — `''` (défaut) ou `'bonus'`. Un segment `kind: 'value'` avec
+  `mark: 'bonus'` est rendu **doré** (fond) avec un **ruban cadeau** (bande dorée décorative, sans texte) et
+  **uniquement le logo 🎁 au centre : ni son `label` (montant) ni le mot « BONUS » ne sont affichés** tant que la marque
+  est présente — maquette retenue
+  `tv_roue_started__bonus_on_value`, identique en bandeau, en arc et sur la vue d'ensemble circulaire (cases étroites :
+  ruban réduit, logo seul). Le `label` et la couleur de palette restent calculés : ils servent au retour à la normale.
+- `FortuneWheel` : `KIND: value` + `BONUS: true` → `{ kind: 'value', label: String(VALUE), mark: 'bonus' }` (le
+  composant masque le `label`).
+  La palette cyclique compte les cases à points marquées comme les autres (couleurs inchangées par la pose des BONUS).
+- **Retrait d'une marque** (BONUS éphémère, `roue.md` §17.5) : quand `mark` passe de `'bonus'` à `''` sur un segment
+  déjà affiché, le doré, le ruban et le 🎁 s'effacent, la case **reprend sa couleur de palette et son montant
+  réapparaît** (transition CSS ~600 ms ;
+  `prefers-reduced-motion` : immédiat). Le changement de
+  `segments` **ne recrée ni ne repositionne la roue** : mêmes `id`, même `current`, aucune animation de mouvement
+  relancée (la clé de mouvement de `FortuneWheel` ne dépend pas de `SEGMENTS`).
+- `aria-label` (accessibilité, décision utilisateur du GATE 2) : « Segment : 800, BONUS » pour une case marquée — **le
+  montant est annoncé** ; seul l'affichage visuel est limité à 🎁. « Segment : 800 » après le retrait.
+- `RafaleLetterWheel` n'utilise pas `mark` : comportement inchangé (§14 de `roue.md`).

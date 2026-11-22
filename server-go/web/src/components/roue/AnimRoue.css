@@ -37,7 +37,7 @@
 
 /* 🎁 BONUS (v12.1.0, #308) */
 .anim-roue-bonus { background: linear-gradient(90deg, #f59e0b, #fbbf24); color: #111827; font-weight: 900; font-size: 1.2rem; text-align: center; border-radius: 0.6rem; padding: 0.4rem; margin-bottom: 0.6rem; }
-.anim-roue-case.gold { background: linear-gradient(180deg, #fbbf24, #f59e0b); color: #111827; }
+.anim-roue-case.gold { background: linear-gradient(90deg, transparent 44%, #b45309 44% 56%, transparent 56%), #fbbf24; color: #111827; }
 
 /* Voyelles (v12.1.0, #147) */
 .anim-roue-vchip { color: #b45309; font-weight: 700; }

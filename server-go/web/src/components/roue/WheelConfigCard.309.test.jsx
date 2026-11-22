@@ -8,7 +8,7 @@ import WheelConfigCard from './WheelConfigCard'
 
 const DEF = { max_points: 1000, step: 50, bankrupt_count: 2, lose_turn_count: 1, bonus_count: 0, spin_period_ms: 2500, spin_max_ms: 10000, stop_duration_ms: 4000, flip_interval_ms: 600 }
 const seg = (i, kind, v = 0) => ({ ID: `s${i}`, KIND: kind, VALUE: v })
-const PREVIEW = { COUNT: 4, step: 50, SEGMENTS: [seg(0, 'value', 100), seg(1, 'bankrupt'), seg(2, 'bonus'), seg(3, 'lose_turn')] }
+const PREVIEW = { COUNT: 4, step: 50, SEGMENTS: [seg(0, 'value', 100), seg(1, 'bankrupt'), { ...seg(2, 'value', 800), BONUS: true }, seg(3, 'lose_turn')] }
 const json = (data, ok = true, status = 200) => ({ ok, status, json: async () => data, text: async () => JSON.stringify(data) })
 let calls
 const respond = (fn) => { global.fetch = vi.fn(async (url, opts) => { calls.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null }); return fn(url, opts) }) }
@@ -102,12 +102,12 @@ describe('WheelConfigCard — 5 paramètres en deux groupes (#309)', () => {
   })
 
   it('aucune règle de construction côté client : les cases affichées sont celles du serveur', async () => {
-    respond(() => json({ COUNT: 3, step: 50, SEGMENTS: [seg(0, 'value', 7), seg(1, 'bonus'), seg(2, 'lose_turn')] }))
+    respond(() => json({ COUNT: 3, step: 50, SEGMENTS: [seg(0, 'value', 7), { ...seg(1, 'value', 800), BONUS: true }, seg(2, 'lose_turn')] }))
     const { container } = render(<WheelConfigCard wheel={DEF} wheelDefault={DEF} />)
     await settle()
     const cells = Array.from(container.querySelectorAll('.wheel-cfg-pc')).map(e => e.textContent)
     expect(cells).toHaveLength(3)
     expect(cells[0]).toMatch(/7/)
-    expect(cells[1]).toMatch(/BONUS/)
+    expect(cells[1]).toBe('2🎁') // marque BONUS : logo seul (rang + 🎁), jamais le montant ni le mot
   })
 })

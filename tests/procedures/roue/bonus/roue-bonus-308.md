@@ -4,6 +4,7 @@
 **Date** : 2026-11-21
 **Testeur** : QA (scenarios AUTO) · utilisateur (scenarios HUMAIN)
 **Issue** : #308 — Case BONUS
+**Statut** : REMPLACÉE en v12.2.0 par `roue-bonus-316-317.md` (le BONUS est désormais une marque sur une case à points ; plus de case ajoutée ni de relance). Conservée pour l'historique v12.1.
 **Références** : `contracts/roue.md` §15.2, §15.3, §15.4 ; maquettes `docs/mockup/v12.1.0/ui/{tv_roue_started,admin_game_roue,anim_roue,admin_question_editor_roue}__vowels_bonus.html`
 
 > Le cadeau d'une case BONUS est géré **hors système** par l'animateur : le serveur ne compte aucun point.

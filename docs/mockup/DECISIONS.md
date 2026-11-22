@@ -143,8 +143,14 @@
 
 ## Roue de la Fortune — mécanique (v12.1.0)
 - Pas de manche « bonus final », pas de round spécial, pas de lettres offertes (R S T L N E) : #146 et #148 fermées « not planned ». _(v12.1.0, cadrage, 2026-11-21)_
-- Case **BONUS** gérée **hors système** par l'animateur : aucun gain, aucun chrono, aucun doublement ; arrêt sur BONUS = bandeau « BONUS ! », l'équipe garde la main et rejoue. Nombre de cases par question (compteur 0–4), jamais une liste de cases. _(v12.1.0, #308, 2026-11-21)_
+- ~~Case **BONUS** gérée hors système ; arrêt sur BONUS = bandeau « BONUS ! », l'équipe garde la main et rejoue. Nombre de cases par question (compteur 0–4).~~ _(v12.1.0, #308, 2026-11-21 — **remplacé en v12.2.0**, voir ci-dessous)_
 - Achat de voyelles : **réglages par question** — moment (avant de tourner / après l'arrêt à la place de la consonne / les deux, défaut « avant ») et nombre « 1 / plusieurs » pour chaque moment. « Une seule voyelle après l'arrêt » imposée par le système : **refusé** (réglable). Voyelle absente = tour perdu. _(v12.1.0, #147, GATE 2 n° 1 et 2, 2026-11-21)_
+
+## Roue de la Fortune — mécanique (v12.2.0)
+- Un BONUS est une **marque posée sur une case à points** (le nombre de cases de la roue ne change pas), toujours géré **hors système** par l'animateur (aucun point attribué au BONUS). Arrêt sur BONUS = bandeau « BONUS ! case 800 » puis consonne (ou voyelle après l'arrêt) au montant de la case, **sans relance de la roue**. Nombre de BONUS par question (compteur 0–4), jamais une liste de cases. _(v12.2.0, #316, GATE 2, 2026-11-22)_
+- Mode du BONUS : **éphémère** (défaut : une fois tiré, il disparaît de la roue jusqu'à la fin de la manche) ou permanent ; réglage global, personnalisable par question. _(v12.2.0, #317, GATE 2, 2026-11-22)_
+- BANQUEROUTE et PERDU gardent leurs positions v12.0 ; **seuls les BONUS s'adaptent** : au hasard à chaque manche, répartis de façon homogène, **jamais voisins d'une case spéciale** ; trop de BONUS = refus à l'enregistrement, réduction au départ. **Refusé** : déplacer BANQUEROUTE / PERDU pour faire de la place (« emplacements réguliers »). **Pas de règle dédiée à la case maximum** (exclue par l'adjacence quand une Banqueroute la touche). _(v12.2.0, #316, GATE 2, 2026-11-22)_
+- Espacement : au moins autant de cases à points normales que de cases spéciales. Aperçu de l'éditeur = un tirage + « 🎲 Autre tirage ». _(v12.2.0, #316, GATE 2, 2026-11-22)_
 
 ## admin_game_roue / anim_roue (v12.1.0)
 - Admin : achat avant de tourner = deuxième bouton à l'étape 1 à côté de « Lancer la roue » ; après l'arrêt = voyelles à l'étape 4 à la place de la consonne, voyelle suivante à l'étape 6. _(v12.1.0, vowels_bonus, GATE 2, 2026-11-21)_
@@ -153,10 +159,17 @@
 ## tv_roue_started (v12.1.0)
 - Ligne des lettres = **alphabet complet** (26 lettres : jouées, absentes barrées, restantes grisées ; voyelles distinguées en doré). Annonce BONUS = **bandeau doré en travers du plateau**. _(v12.1.0, vowels_bonus, GATE 2, 2026-11-21)_
 
+## tv_roue_started (v12.2.0) — vaut aussi pour vplayer_roue, anim_roue, admin_game_roue et les aperçus
+- Marque BONUS = **case dorée + ruban cadeau (sans texte), logo 🎁 seul** : ni montant, ni texte « BONUS » sur la case ; la valeur s'affiche sur le bandeau plein écran (« BONUS ! case 800 »). L'`aria-label` garde le montant (« 800, BONUS ») : seul l'affichage visuel est limité à 🎁. Refusés : case dorée sans ruban (A), ruban sans dorure (B), pastille et liseré (C), montant ou texte « BONUS » visibles sur la case marquée. _(v12.2.0, bonus_on_value, GATE 2, 2026-11-22)_
+- Éphémère consommé : au choix de la lettre, bandeau retiré, la case redevient sa case à points normale — montant et couleur habituelle reviennent — **par un fondu**. Permanent : la marque reste. _(v12.2.0, #317, GATE 2, 2026-11-22)_
+
 ## admin_question_editor (Roue, v12.1.0)
 - Section Voyelles en cartes (moment, nombre, gain), jamais en liste déroulante ; compteur BONUS avec aperçu de la roue générée. _(v12.1.0, roue_vowels_bonus, GATE 2, 2026-11-21)_
 - Choix « Forme de la roue » (bandeau / arc) : **pas de vignettes en 4 couleurs** à côté des libellés (#311, décision utilisateur, retour QUALIF 12.1.0.1 n° 3). La maquette v12.0.0 `admin_question_editor__roue_phrase` ne fait plus foi sur ce point. _(v12.1.0, #311, 2026-11-21)_
 - Composition de la roue **champ par champ** : chaque paramètre (maximum, pas, Banqueroute, Perdu, BONUS) est lié au réglage global (🔗, valeur affichée non modifiable) ou délié et personnalisé seul (✏️, point de départ = valeur globale) ; jamais de personnalisation « tout ou rien », jamais de champs vides à remplir. _(v12.1.0, roue_wheel_fields, #309, GATE 2 LOT-2, 2026-11-21)_
+
+## admin_question_editor / admin_settings (Roue, v12.2.0)
+- Mode du BONUS = **option du compteur BONUS** (interrupteur « une seule fois par manche », grisé à 0 BONUS) avec 🔗/✏️ ; refusés : 6ᵉ paramètre séparé (A), choix en toutes lettres pleine largeur (C). _(v12.2.0, roue_bonus_mode, GATE 2, 2026-11-22)_
 
 ## (toutes maquettes) — exemples exacts
 - Un exemple de maquette doit être exact : une consonne « absente » ne figure pas dans la phrase affichée. _(v12.0.0, #145, GATE 1.5, 2026-11-16)_

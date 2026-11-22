@@ -78,8 +78,12 @@ func TestRoueEffective309_FollowsOrNotAGlobalChange(t *testing.T) {
 	tc := TypedContent{RoueWheelBankruptCount: ip309(1)}
 	for _, g := range []RoueWheelParams{glob309(1000, 50, 2, 1, 0), glob309(200, 20, 0, 3, 2)} {
 		p, _ := eff309(t, tc, g)
-		if p.BankruptCount != 1 || p.MaxPoints != g.MaxPoints || p.Step != g.Step || p.LoseTurnCount != g.LoseTurnCount || p.BonusCount != g.BonusCount {
+		if p.BankruptCount != 1 || p.MaxPoints != g.MaxPoints || p.Step != g.Step || p.LoseTurnCount != g.LoseTurnCount {
 			t.Fatalf("global %+v : got %+v", g, p)
+		}
+		// v12.2.0 (§17.3) : le BONUS global suit aussi, réduit à ce que la roue effective peut prendre.
+		if want := min(g.BonusCount, RoueMaxBonusFor(p)); p.BonusCount != want {
+			t.Fatalf("global %+v : BONUS %d, attendu %d", g, p.BonusCount, want)
 		}
 	}
 }
@@ -104,8 +108,8 @@ func TestRoueEffective309_StepCorrected(t *testing.T) {
 
 // BONUS réduits d'abord (sans repli) ; si la composition reste invalide : global entier + repli = vrai.
 func TestRoueEffective309_ReduceThenFallback(t *testing.T) {
-	p, fb := eff309(t, TypedContent{RoueBonusCount: ip309(4)}, glob309(63, 1, 0, 0, 0))
-	if fb || p.BonusCount != 1 || RoueWheelSize(p) != 64 {
+	p, fb := eff309(t, TypedContent{RoueBonusCount: ip309(4)}, glob309(1000, 100, 3, 2, 0)) // 14 cases : 1 BONUS au plus
+	if fb || p.BonusCount != 1 || RoueWheelSize(p) != 14 {
 		t.Fatalf("réduction : %+v fb=%v", p, fb)
 	}
 	g := glob309(1000, 50, 2, 1, 1)
@@ -138,20 +142,26 @@ func TestRoueEffective309_BonusClamped(t *testing.T) {
 	}
 }
 
-// Égalité case par case : la composition effective sans champ construit exactement la roue de v12.0 ; avec BONUS seul, celle du LOT-1.
-func TestRoueEffective309_WheelEqualityV120AndLot1(t *testing.T) {
+// Égalité case par case : la composition effective sans champ construit exactement la roue de v12.0 ; avec BONUS seul, les
+// mêmes cases (v12.2.0 : les BONUS sont des marques, `n` cases marquées, rien d'autre ne change).
+func TestRoueEffective309_WheelEqualityV120AndMarks(t *testing.T) {
 	g := DefaultRoueWheelParams()
 	p, _ := eff309(t, TypedContent{}, g)
 	ng, _, _ := NormalizeRoueWheelParams(g)
-	if !reflect.DeepEqual(BuildRoueWheel(p), BuildRoueWheel(ng)) {
+	if !reflect.DeepEqual(BuildRoueWheel(p, nil), BuildRoueWheel(ng, nil)) {
 		t.Fatal("sans champ : la roue diffère de v12.0")
 	}
 	for n := 1; n <= 4; n++ {
 		p, _ := eff309(t, TypedContent{RoueBonusCount: ip309(n)}, g)
-		lot1 := ng
-		lot1.BonusCount = n
-		if !reflect.DeepEqual(BuildRoueWheel(p), BuildRoueWheel(lot1)) {
-			t.Fatalf("BONUS seul (%d) : la roue diffère du LOT-1", n)
+		got := BuildRoueWheel(p, nil)
+		if len(markIndexes308(got)) != n {
+			t.Fatalf("BONUS seul (%d) : %d marques", n, len(markIndexes308(got)))
+		}
+		for i := range got {
+			got[i].Bonus = false
+		}
+		if !reflect.DeepEqual(got, BuildRoueWheel(ng, nil)) {
+			t.Fatalf("BONUS seul (%d) : les cases diffèrent de la roue v12.0", n)
 		}
 	}
 }

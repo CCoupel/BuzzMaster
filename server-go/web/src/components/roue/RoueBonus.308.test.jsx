@@ -1,10 +1,11 @@
 /**
- * #308 (v12.1.0, LOT-1.1) — case BONUS : spécification des écrans (contracts/roue.md §15.2 ; maquettes
- * docs/mockup/v12.1.0/ui/{tv_roue_started,admin_game_roue,anim_roue,admin_question_editor_roue}__vowels_bonus.html).
+ * #308 (v12.1.0) puis #316/#317 (v12.2.0) — case BONUS : spécification des écrans (contracts/roue.md §17 ;
+ * maquettes docs/mockup/v12.2.0/…bonus_on_value). Un BONUS est une MARQUE (`BONUS: true`) posée sur une case `value` :
+ * visuel 🎁 seul, montant dans le bandeau « BONUS ! case 800 », arrêt = sous-phase LETTER (plus de relance de la roue).
  * Les écrans n'affichent que ce que dit le serveur (ROUE_WHEEL.CURRENT, ROUE_LAST_EVENT.KIND = BONUS).
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { render, cleanup, fireEvent, screen, waitFor, act } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -12,24 +13,24 @@ import RoueTv from './RoueTv'
 import RouePanel from './RouePanel'
 import { AnimRoueView } from './AnimRoue'
 import RoueEditor from './RoueEditor'
-import { buildFortuneSegments } from './FortuneWheel'
-import { roueAnnouncement, roueGates, segmentLabel, currentSegment } from './roueState'
+import FortuneWheel, { buildFortuneSegments } from './FortuneWheel'
+import { roueAnnouncement, roueGates, segmentAria, segmentLabel, currentSegment } from './roueState'
 
 afterEach(() => cleanup())
 const here = dirname(fileURLToPath(import.meta.url))
 
 const SEGS = [
-  { ID: 's0', KIND: 'value', VALUE: 100 }, { ID: 's1', KIND: 'bankrupt', VALUE: 0 },
-  { ID: 's2', KIND: 'bonus', VALUE: 0 }, { ID: 's3', KIND: 'lose_turn', VALUE: 0 },
+  { ID: 's0', KIND: 'value', VALUE: 100, BONUS: false }, { ID: 's1', KIND: 'bankrupt', VALUE: 0, BONUS: false },
+  { ID: 's2', KIND: 'value', VALUE: 800, BONUS: true }, { ID: 's3', KIND: 'lose_turn', VALUE: 0, BONUS: false },
 ]
-const BONUS_EVENT = { SEQ: 7, KIND: 'BONUS', TEAM: 'Rouges', LETTER: '', COUNT: 0, VALUE: 0, GAIN: 0 }
+const BONUS_EVENT = { SEQ: 7, KIND: 'BONUS', TEAM: 'Rouges', LETTER: '', COUNT: 0, VALUE: 800, GAIN: 0 }
 const NO_EVENT = { SEQ: 0, KIND: '', TEAM: '', LETTER: '', COUNT: 0, VALUE: 0, GAIN: 0 }
 
-/** État serveur juste après un arrêt sur BONUS : nouveau tour (TURN, étape 1), case BONUS sous le pointeur. */
+/** État serveur juste après un arrêt sur une case marquée BONUS : sous-phase LETTER (étape 4), la roue n'est pas relancée. */
 const gs = (over = {}) => ({
   phase: 'STARTED',
   question: { TYPE: 'ROUE', ROUE_MODE: 'TANT_QUE_JE_GAGNE', ROUE_PHRASE: 'BONJOUR LE MONDE', ROUE_PRESENTATION: 'Salutation' },
-  ROUE_SUBPHASE: 'TURN', ROUE_STEP: 1, ROUE_TEAMS: ['Rouges', 'Bleus'], ROUE_CURRENT_TEAM: 'Rouges', ROUE_CURRENT_TEAM_COLOR: [239, 68, 68],
+  ROUE_SUBPHASE: 'LETTER', ROUE_STEP: 4, ROUE_TEAMS: ['Rouges', 'Bleus'], ROUE_CURRENT_TEAM: 'Rouges', ROUE_CURRENT_TEAM_COLOR: [239, 68, 68],
   ROUE_NEXT_TEAM: '', ROUE_NEXT_DEFAULT: '', ROUE_TEAM_BANK: { Rouges: 500, Bleus: 300 }, ROUE_TURN_GAIN: 0,
   ROUE_BOARD: { COLS: 14, ROWS: ['_______ __'] }, ROUE_LETTERS: [], ROUE_SHOW_LETTERS: true, ROUE_CONSONANTS_LEFT: true,
   ROUE_WHEEL: { LAYOUT: 'strip', SPIN_PERIOD_MS: 2500, SPIN_MAX_MS: 10000, FLIP_INTERVAL_MS: 600, CURRENT: 2, STOP: null, SEGMENTS: SEGS },
@@ -43,23 +44,34 @@ const text = (parts) => parts.map(p => p.strong ?? p.text).join('')
 // ---- la case ------------------------------------------------------------------------------------------------------
 
 describe('Case BONUS — roue et libellés', () => {
-  it('la roue conserve l\'ordre et les ID du serveur et rend une case BONUS distincte d\'une valeur et d\'une case spéciale', () => {
+  it('la roue conserve l\'ordre et les ID du serveur ; la case marquée reste une case à points (marque, pas un type)', () => {
     const segs = buildFortuneSegments(SEGS)
     expect(segs.map(s => s.id)).toEqual(['s0', 's1', 's2', 's3'])
-    expect(segs[2].label).toMatch(/BONUS/)
-    expect(segs[2].kind).not.toBe('value')
-    expect(segs[2].color).not.toBe(segs[1].color) // dorée, pas la couleur des cases spéciales
+    expect(segs[2].kind).toBe('value')
+    expect(segs[2].mark).toBe('bonus')
+    expect(segs[2].label).toBe('800') // montant conservé (retour à la normale, aria) ; Wheel masque l'affichage
+    expect(segs[2].color).toBeTruthy() // couleur de palette conservée pour le fondu
+    expect(segs[0].mark).toBeUndefined()
     expect(segs[1].kind).toBe('special')
-    expect(segs[0].kind).toBe('value')
+  })
+
+  it('la palette compte les cases marquées comme les autres (couleurs inchangées par la pose des BONUS)', () => {
+    const plain = buildFortuneSegments([100, 200, 300].map((v, i) => ({ ID: `a${i}`, KIND: 'value', VALUE: v, BONUS: false })))
+    const marked = buildFortuneSegments([100, 200, 300].map((v, i) => ({ ID: `a${i}`, KIND: 'value', VALUE: v, BONUS: i === 1 })))
+    expect(marked.map(s => s.color)).toEqual(plain.map(s => s.color))
   })
 
   it('une valeur 0 n\'est jamais confondue avec une case BONUS', () => {
-    expect(buildFortuneSegments([{ ID: 'a', KIND: 'value', VALUE: 0 }])[0].kind).toBe('value')
+    const [seg] = buildFortuneSegments([{ ID: 'a', KIND: 'value', VALUE: 0, BONUS: false }])
+    expect(seg.kind).toBe('value')
+    expect(seg.mark).toBeUndefined()
   })
 
-  it('libellé de la case : « 🎁 BONUS » ; case courante lue sur ROUE_WHEEL.CURRENT', () => {
-    expect(segmentLabel({ KIND: 'bonus', VALUE: 0 })).toBe('🎁 BONUS')
-    expect(segmentLabel(currentSegment(gs()))).toBe('🎁 BONUS')
+  it('libellé de la case : « 🎁 » seul (ni montant ni « BONUS ») ; libellé accessible « 800, BONUS »', () => {
+    expect(segmentLabel(currentSegment(gs()))).toBe('🎁')
+    expect(segmentAria(currentSegment(gs()))).toBe('800, BONUS')
+    expect(segmentLabel({ KIND: 'value', VALUE: 800, BONUS: false })).toBe('800') // après retrait éphémère
+    expect(segmentAria({ KIND: 'value', VALUE: 800, BONUS: false })).toBe('800')
   })
 
   it('FortuneWheel.css : jamais de scroll (overflow auto / scroll interdits)', () => {
@@ -67,30 +79,73 @@ describe('Case BONUS — roue et libellés', () => {
   })
 })
 
+describe('Roue — marque BONUS : rendu et fondu (wheel-component §9)', () => {
+  const wheelOf = (bonus) => ({ LAYOUT: 'strip', SPIN_PERIOD_MS: 2500, SPIN_MAX_MS: 10000, CURRENT: 2, STOP: null,
+    SEGMENTS: SEGS.map(x => (x.ID === 's2' ? { ...x, BONUS: bonus } : x)) })
+
+  it('case marquée : calque doré, 🎁 ; aria-label « Segment : 800, BONUS » (montant annoncé, pas affiché)', () => {
+    const { container } = render(<FortuneWheel wheel={wheelOf(true)} subphase="LETTER" />)
+    const marks = container.querySelectorAll('[data-testid="wheel-mark"]')
+    expect(marks.length).toBeGreaterThan(0)
+    marks.forEach(m => { expect(m.classList.contains('on')).toBe(true); expect(m.textContent).toBe('🎁') })
+    expect(container.querySelector('.wheel-cell.marked')).toBeTruthy()
+    expect(container.querySelector('[role="img"]').getAttribute('aria-label')).toBe('Segment : 800, BONUS')
+  })
+
+  it('arc : même marque (calque doré + 🎁 dans le secteur)', () => {
+    const w = { ...wheelOf(true), LAYOUT: 'arc' }
+    const { container } = render(<FortuneWheel wheel={w} subphase="LETTER" />)
+    const mark = container.querySelector('g[data-testid="wheel-mark"]')
+    expect(mark.getAttribute('class')).toMatch(/on/)
+    expect(mark.textContent).toBe('🎁')
+  })
+
+  it('retrait (éphémère) : la marque passe hors « on » (fondu CSS), le MÊME nœud reste monté — roue non recréée', () => {
+    const { container, rerender } = render(<FortuneWheel wheel={wheelOf(true)} subphase="LETTER" />)
+    const track = container.querySelector('.wheel-track')
+    const mark = container.querySelector('[data-testid="wheel-mark"]')
+    rerender(<FortuneWheel wheel={wheelOf(false)} subphase="ANSWER" />)
+    expect(container.querySelector('.wheel-track')).toBe(track)
+    expect(container.querySelector('[data-testid="wheel-mark"]')).toBe(mark)
+    expect(mark.classList.contains('on')).toBe(false)
+    expect(container.querySelector('.wheel-cell.marked')).toBeNull()
+    expect(container.querySelector('[role="img"]').getAttribute('aria-label')).toBe('Segment : 800')
+  })
+
+  it('une case jamais marquée n\'a pas de calque', () => {
+    const { container } = render(<FortuneWheel wheel={wheelOf(false)} subphase="LETTER" />)
+    expect(container.querySelector('[data-testid="wheel-mark"]')).toBeNull()
+  })
+
+  it('Wheel.css : fondu de 600 ms et prefers-reduced-motion respecté', () => {
+    const css = readFileSync(join(here, '..', 'wheel', 'Wheel.css'), 'utf8')
+    expect(css).toMatch(/\.wheel-mark\s*\{[^}]*transition:\s*opacity 600ms/)
+    expect(css).toMatch(/prefers-reduced-motion[\s\S]*\.wheel-mark/)
+  })
+})
+
 // ---- annonce et portes --------------------------------------------------------------------------------------------
 
 describe('Après un BONUS — annonce et portes', () => {
-  it('l\'annonce dit BONUS et que l\'équipe rejoue ; aucune invitation à proposer une consonne', () => {
+  it('l\'annonce dit BONUS, la valeur de la case et invite à proposer une consonne ; plus de « rejouent »', () => {
     const t = text(roueAnnouncement(gs()))
-    expect(t).toMatch(/BONUS/)
-    expect(t).toMatch(/rejou/i)
-    expect(t).not.toMatch(/consonne/i)
+    expect(t).toMatch(/BONUS.*case 800.*consonne/)
+    expect(t).not.toMatch(/rejou/i)
   })
 
-  it('tablette de l\'équipe concernée : « vous rejouez »', () => {
-    expect(text(roueAnnouncement(gs(), { mine: true }))).toMatch(/BONUS.*vous rejouez/)
+  it('tablette de l\'équipe concernée : même annonce', () => {
+    expect(text(roueAnnouncement(gs(), { mine: true }))).toMatch(/BONUS.*case 800/)
   })
 
   it('l\'annonce BONUS disparaît dès que l\'événement change (geste suivant)', () => {
-    const t = text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'SPINNING', ROUE_LAST_EVENT: { ...BONUS_EVENT, SEQ: 8, KIND: 'SPIN' } })))
+    const t = text(roueAnnouncement(gs({ ROUE_SUBPHASE: 'LIT', ROUE_LAST_EVENT: { ...BONUS_EVENT, SEQ: 8, KIND: 'FLIP', LETTER: 'R', COUNT: 1 } })))
     expect(t).not.toMatch(/BONUS/)
   })
 
-  it('portes : on peut lancer la roue ; ni lettre, ni dévoilement de lettre, ni fin de tour', () => {
+  it('portes : on propose une lettre ; la roue n\'est pas relançable (pas de nouveau tour)', () => {
     const g = roueGates(gs())
-    expect(g.canSpin).toBe(true)
-    expect(g.canLetter).toBeFalsy()
-    expect(g.canFlip).toBeFalsy()
+    expect(g.canLetter).toBe(true)
+    expect(g.canSpin).toBe(false)
     expect(g.canNext).toBeFalsy()
   })
 })
@@ -98,9 +153,24 @@ describe('Après un BONUS — annonce et portes', () => {
 // ---- TV et tablette -----------------------------------------------------------------------------------------------
 
 describe('RoueTv — bandeau « 🎁 BONUS ! »', () => {
-  it('TV : bandeau « BONUS ! » tant que ROUE_LAST_EVENT.KIND = BONUS', () => {
+  it('TV : bandeau « BONUS ! case 800 » tant que ROUE_LAST_EVENT.KIND = BONUS', () => {
     const { container } = render(<RoueTv gameState={gs()} teams={teams} />)
-    expect(container.textContent).toMatch(/BONUS !/)
+    expect(container.textContent).toMatch(/BONUS ! case 800/)
+  })
+
+  it('bandeau retiré au choix de la lettre (événement ≠ BONUS) ; en éphémère il reste monté 600 ms pour le fondu', () => {
+    vi.useFakeTimers()
+    try {
+      const { container, rerender } = render(<RoueTv gameState={gs()} teams={teams} />)
+      expect(container.querySelector('[data-testid="roue-bonus"]')).toBeTruthy()
+      const after = gs({ ROUE_SUBPHASE: 'LIT', ROUE_LAST_EVENT: { ...BONUS_EVENT, SEQ: 8, KIND: 'FLIP', LETTER: 'R', VALUE: 0 } })
+      rerender(<RoueTv gameState={after} teams={teams} />)
+      const fading = container.querySelector('[data-testid="roue-bonus"]')
+      expect(fading?.className).toMatch(/fading/)
+      expect(fading.textContent).toMatch(/case 800/) // la valeur est mémorisée pendant le fondu
+      act(() => { vi.advanceTimersByTime(700) })
+      expect(container.querySelector('[data-testid="roue-bonus"]')).toBeNull()
+    } finally { vi.useRealTimers() }
   })
 
   it('TV : pas de bandeau sans événement BONUS (ni pour une autre case spéciale)', () => {
@@ -112,7 +182,7 @@ describe('RoueTv — bandeau « 🎁 BONUS ! »', () => {
 
   it('tablette joueur : même bandeau', () => {
     const { container } = render(<RoueTv gameState={gs()} teams={teams} isVPlayer teamName="Rouges" />)
-    expect(container.textContent).toMatch(/BONUS !/)
+    expect(container.textContent).toMatch(/BONUS ! case 800/)
   })
 
   it('le bandeau n\'expose ni cagnotte modifiée ni gain : cagnottes inchangées à l\'écran', () => {
@@ -135,36 +205,43 @@ describe('RoueTv — bandeau « 🎁 BONUS ! »', () => {
 // ---- admin et animateur -------------------------------------------------------------------------------------------
 
 describe('RouePanel (admin) — après un BONUS', () => {
-  it('bandeau BONUS, « Lancer la roue » actif, aucune consonne à proposer', () => {
-    const a = actionsMock()
-    render(<RouePanel gameState={gs()} actions={a} />)
-    expect(screen.getByText(/BONUS !/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Lancer la roue/ }))
-    expect(a.spin).toHaveBeenCalledTimes(1)
+  it('bandeau « BONUS ! case 800 — remettez le cadeau, puis proposez une consonne » ; la roue n\'est pas relançable', () => {
+    render(<RouePanel gameState={gs()} actions={actionsMock()} />)
+    const b = screen.getByTestId('roue-bonus')
+    expect(b.textContent).toMatch(/BONUS ! case 800/)
+    expect(b.textContent).toMatch(/remettez le cadeau/)
+    expect(b.textContent).toMatch(/consonne/)
+    expect(screen.queryByRole('button', { name: /Lancer la roue/ })).toBeNull()
   })
 
-  it('« Passer la main » reste disponible', () => {
-    const a = actionsMock()
-    render(<RouePanel gameState={gs()} actions={a} />)
-    const pass = screen.queryByRole('button', { name: /Passer la main/ })
-    expect(pass).toBeTruthy()
-    expect(pass.disabled).toBe(false)
-    fireEvent.click(pass)
-    expect(a.pass).toHaveBeenCalledTimes(1)
+  it('la case du bandeau d\'étape : 🎁 seul avec aria-label « 800, BONUS »', () => {
+    const { container } = render(<RouePanel gameState={gs()} actions={actionsMock()} />)
+    const seg = container.querySelector('.roue-seg')
+    expect(seg.textContent).toBe('🎁')
+    expect(seg.getAttribute('aria-label')).toBe('800, BONUS')
   })
 
   it('pas de bandeau BONUS sans événement BONUS', () => {
     render(<RouePanel gameState={gs({ ROUE_LAST_EVENT: NO_EVENT })} actions={actionsMock()} />)
     expect(screen.queryByText(/BONUS !/)).toBeNull()
   })
+
+  it('puce du mode : nombre de BONUS et mode (éphémère par défaut, permanent sinon)', () => {
+    const q = { TYPE: 'ROUE', ROUE_MODE: 'TANT_QUE_JE_GAGNE', ROUE_PHRASE: 'X', ROUE_BONUS_COUNT: 2 }
+    const { rerender } = render(<RouePanel gameState={gs({ question: q })} actions={actionsMock()} />)
+    expect(screen.getByTestId('roue-bonus-chip').textContent).toMatch(/2.*une seule fois/)
+    rerender(<RouePanel gameState={gs({ question: q, ROUE_BONUS_MODE: 'PERMANENT' })} actions={actionsMock()} />)
+    expect(screen.getByTestId('roue-bonus-chip').textContent).toMatch(/permanent/)
+  })
 })
 
 describe('AnimRoue (animateur) — après un BONUS', () => {
-  it('bandeau BONUS et seul « Lancer la roue » actif', () => {
+  it('bandeau « BONUS ! case 800 » ; case de la roue : 🎁 seul sur fond doré, aria-label « 800, BONUS »', () => {
     const { container } = render(<AnimRoueView gameState={gs()} teams={teams} actions={actionsMock()} />)
-    expect(container.textContent).toMatch(/BONUS !/)
-    const enabled = Array.from(container.querySelectorAll('.anim-roue-steps button')).filter(b => !b.disabled).map(b => b.textContent)
-    expect(enabled).toEqual([expect.stringMatching(/Lancer/)])
+    expect(container.textContent).toMatch(/BONUS ! case 800/)
+    const box = container.querySelector('.anim-roue-case')
+    expect(box.className).toMatch(/gold/)
+    expect(box.getAttribute('aria-label')).toBe('800, BONUS')
   })
 
   it('sans événement BONUS : pas de bandeau', () => {
@@ -180,7 +257,7 @@ const baseValues = {
   roueGainsRule: 'WINNER_ONLY', roueWheelLayout: 'strip', roueShowLetters: true,
 }
 const PREVIEW_OK = { COLS: 14, MAX_ROWS: 4, ROWS: ['COMBIEN POUR'], CONSONANTS: 12, LETTERS: 17 }
-const WHEEL_OK = { COUNT: 12, step: 10, SEGMENTS: [{ ID: 's0', KIND: 'value', VALUE: 100 }, { ID: 's1', KIND: 'bankrupt', VALUE: 0 }, { ID: 's2', KIND: 'bonus', VALUE: 0 }] }
+const WHEEL_OK = { COUNT: 12, step: 10, SEGMENTS: [{ ID: 's0', KIND: 'value', VALUE: 100 }, { ID: 's1', KIND: 'bankrupt', VALUE: 0 }, { ID: 's2', KIND: 'value', VALUE: 800, BONUS: true }] }
 let calls
 beforeEach(() => {
   calls = []
@@ -261,5 +338,14 @@ describe('RoueEditor — cases BONUS (modèle #309 : suit le global, ou personna
     })
     renderEditor({ roueBonusCount: 4 })
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/BONUS|64/), { timeout: 2000 })
+  })
+})
+
+describe('RoueTv — bandeau en BONUS permanent (§17.5)', () => {
+  it('permanent : retiré tout de suite, sans fondu', () => {
+    const { container, rerender } = render(<RoueTv gameState={gs({ ROUE_BONUS_MODE: 'PERMANENT' })} teams={teams} />)
+    expect(container.querySelector('[data-testid="roue-bonus"]')).toBeTruthy()
+    rerender(<RoueTv gameState={gs({ ROUE_BONUS_MODE: 'PERMANENT', ROUE_SUBPHASE: 'LIT', ROUE_LAST_EVENT: { ...BONUS_EVENT, SEQ: 8, KIND: 'FLIP', LETTER: 'R', VALUE: 0 } })} teams={teams} />)
+    expect(container.querySelector('[data-testid="roue-bonus"]')).toBeNull()
   })
 })

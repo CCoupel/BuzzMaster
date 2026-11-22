@@ -11,6 +11,7 @@ import './Wheel.css'
  * @param {Object} props
  * Un `label` peut contenir `\n` (libellé sur plusieurs lignes) ; `icon` (optionnel) s'affiche au-dessus.
  * @param {Array<{id:string,label:string,icon?:string,color?:string,kind?:'letter'|'value'|'special',state?:''|'disabled'|'played'}>} props.segments
+ * `mark: 'bonus'` (v12.2.0, §9) : case dorée + ruban, logo 🎁 seul ; au retrait, fondu vers la case normale (`label` + couleur de palette).
  * @param {number|null} props.current - index du segment sous le pointeur, ou null
  * @param {'strip'|'arc'} [props.layout='strip']
  * @param {'tv'|'compact'} [props.size='tv']
@@ -29,6 +30,7 @@ function ariaLabelFor(segments, current) {
   const seg = current != null ? segments[current] : null
   if (!seg) return 'Roue'
   const label = String(seg.label).replace(/\n/g, ' ')
+  if (seg.mark === 'bonus') return `Segment : ${label}, BONUS` // montant conservé pour les lecteurs d'écran (§9)
   return seg.kind === 'letter' || !seg.kind ? `Lettre courante : ${label}` : `Segment : ${label}`
 }
 
@@ -39,8 +41,8 @@ const frameNow = () => (typeof performance !== 'undefined' && performance.now ? 
 const requestFrame = (f) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(f) : setTimeout(() => f(frameNow()), 16))
 const cancelFrame = (id) => (typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame(id) : clearTimeout(id))
 
-function wedgePath(i, n, R, r) {
-  const half = Math.PI / n
+function wedgePath(i, n, R, r, frac = 1) {
+  const half = (Math.PI / n) * frac
   const c = (angleFor(i, n) * Math.PI) / 180
   const a0 = c - half
   const a1 = c + half
@@ -74,6 +76,7 @@ export default function Wheel({
   const moverRef = useRef(null) // élément qui porte le transform (ruban ou rotor)
   const posRef = useRef(safeCurrent ?? 0) // position continue affichée, normalisée [0, n) — mise à jour à chaque image
   const firstRenderRef = useRef(true)
+  const everMarked = useRef(new Set()) // cases qui ont porté une marque : leur calque reste monté pour le fondu de retrait
   const [landed, setLanded] = useState(null) // index mis en évidence à la fin d'un `land`
   const motionMode = motion?.mode === 'spin' || motion?.mode === 'land' ? motion.mode : null
   const motionTo = motion?.to
@@ -210,10 +213,15 @@ export default function Wheel({
   const hl = motionMode === 'spin' ? null : motionMode === 'land' ? landed : safeCurrent
   const transition = view.animate ? `transform ${stepMs}ms cubic-bezier(.215,.61,.355,1)` : 'none'
   const cls = `wheel wheel-${layout === 'arc' ? 'arc' : 'strip'} wheel-size-${size}`
+  const markedId = (seg, i) => {
+    const id = seg.id ?? i
+    if (seg.mark === 'bonus') everMarked.current.add(id)
+    return everMarked.current.has(id)
+  }
   const colorOf = (seg, i) => seg.color || PALETTE[i % PALETTE.length]
   const stateCls = (seg, i) =>
     [seg.state === 'disabled' ? 'disabled' : '', seg.state === 'played' ? 'played' : '',
-      seg.kind === 'special' ? 'special' : '', i === hl ? 'is-current' : ''].filter(Boolean).join(' ')
+      seg.kind === 'special' ? 'special' : '', seg.mark === 'bonus' ? 'marked' : '', i === hl ? 'is-current' : ''].filter(Boolean).join(' ')
 
   const common = { 'data-pos': view.pos, 'data-animate': view.animate ? 'true' : 'false', role: 'img', ref: rootRef, 'aria-label': ariaLabelFor(segments, hl), style: { '--wheel-accent': accent } }
 
@@ -243,12 +251,19 @@ export default function Wheel({
                   data-current={i === hl ? 'true' : undefined}
                 >
                   <path d={wedgePath(i, n, 480, 330)} fill={colorOf(seg, i)} />
+                  {markedId(seg, i) && (
+                    <g className={`wheel-mark${seg.mark === 'bonus' ? ' on' : ''}`} data-testid="wheel-mark" aria-hidden="true">
+                      <path d={wedgePath(i, n, 480, 330)} fill="#fbbf24" />
+                      <path d={wedgePath(i, n, 480, 330, 0.22)} fill="#b45309" />
+                      <text className="wheel-gift" x={tx} y={ty} transform={`rotate(${a + 90} ${tx} ${ty})`} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(110, 2000 / Math.max(n, 1))}>🎁</text>
+                    </g>
+                  )}
                   {seg.icon && (
                     <text className="wheel-icon" x={tx} y={ty} transform={`rotate(${a + 90} ${tx} ${ty}) translate(0 -38)`} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(60, 1200 / Math.max(n, 1))}>
                       {seg.icon}
                     </text>
                   )}
-                  <text x={tx} y={ty} transform={`rotate(${a + 90} ${tx} ${ty})`} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(fitCap, labelLines(seg).length > 1 || seg.icon ? Math.min(40, 800 / Math.max(n, 1)) : Math.min(90, 1800 / Math.max(n, 1)))}>
+                  <text className="wheel-lab-text" x={tx} y={ty} transform={`rotate(${a + 90} ${tx} ${ty})`} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(fitCap, labelLines(seg).length > 1 || seg.icon ? Math.min(40, 800 / Math.max(n, 1)) : Math.min(90, 1800 / Math.max(n, 1)))}>
                     {labelLines(seg).length > 1
                       ? labelLines(seg).map((l, k) => <tspan key={k} x={tx} dy={k === 0 ? '-0.55em' : '1.1em'}>{l}</tspan>)
                       : seg.label}
@@ -284,6 +299,13 @@ export default function Wheel({
               data-current={i === hl ? 'true' : undefined}
               style={{ background: colorOf(seg, i), '--n': labelLen(seg) }}
             >
+              {markedId(seg, i) && (
+                <span className={`wheel-mark${seg.mark === 'bonus' ? ' on' : ''}`} data-testid="wheel-mark" aria-hidden="true">
+                  <span className="wheel-ribbon wheel-ribbon-v" />
+                  <span className="wheel-ribbon wheel-ribbon-h" />
+                  <span className="wheel-gift">🎁</span>
+                </span>
+              )}
               {seg.icon && <span className="wheel-icon">{seg.icon}</span>}
               <span className={`wheel-lab${labelLines(seg).length > 1 || seg.icon ? ' multi' : ''}`}>
                 {labelLines(seg).map((l, k) => (k === 0 ? l : <span key={k}><br />{l}</span>))}

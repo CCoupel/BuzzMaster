@@ -86,7 +86,7 @@ var soundSiteRegistry = map[soundSite]soundDecision{
 		"OnRafaleLotEnd (CueRafaleFinLot — fired AFTER the verdict cue, review m1) and " +
 		"OnTimeUp (CueTempsEcoule) callbacks wired here"},
 	{Func: "setupRoueCallbacks"}: {"OnRoueNotice (v12.0.0 #144): CueRafaleMauvaise on an absent/repeated letter or " +
-		"BANQUEROUTE, CueGagne on the credit, CueRafaleBonne on a BONUS case (v12.1.0 #308) — existing cues only"},
+		"BANQUEROUTE, CueGagne on the credit, CueRafaleBonne on a points case carrying the BONUS mark (v12.1.0 #308, v12.2.0 #316) — existing cues only"},
 }
 
 // ---------------------------------------------------------------------------

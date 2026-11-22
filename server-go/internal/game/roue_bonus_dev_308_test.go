@@ -19,7 +19,7 @@ func TestRoueBonusDev308_ZeroBonusIsV120Wheel(t *testing.T) {
 	}
 	for _, g := range golden {
 		var parts []string
-		for i, s := range BuildRoueWheel(g.p) {
+		for i, s := range BuildRoueWheel(g.p, nil) {
 			if s.ID != fmt.Sprintf("s%d", i) {
 				t.Fatalf("ID %q at %d", s.ID, i)
 			}
@@ -40,22 +40,23 @@ func TestRoueBonusDev308_ZeroBonusIsV120Wheel(t *testing.T) {
 	}
 }
 
+// v12.2.0 (#316, contract §17): the BONUS are marks on points cases, the wheel keeps its N = V + B + P cases.
 func TestRoueBonusDev308_ExactCountAndSize(t *testing.T) {
 	for n := 0; n <= RoueMaxBonusCount; n++ {
 		p := DefaultRoueWheelParams()
 		p.BonusCount = n
-		segs := BuildRoueWheel(p)
+		segs := BuildRoueWheel(p, nil)
 		got := 0
 		for _, s := range segs {
-			if s.Kind == RoueKindBonus {
+			if s.Bonus {
 				got++
-				if s.Value != 0 {
-					t.Fatal("BONUS must have VALUE 0")
+				if s.Kind != RoueKindValue || s.Value == 0 {
+					t.Fatalf("a BONUS mark must sit on a points case, got %+v", s)
 				}
 			}
 		}
-		if got != n || len(segs) != 22+n {
-			t.Fatalf("n=%d got %d bonus, %d cases", n, got, len(segs))
+		if got != n || len(segs) != 22 {
+			t.Fatalf("n=%d got %d marks, %d cases (22 expected, marks never add cases)", n, got, len(segs))
 		}
 	}
 }
@@ -65,9 +66,9 @@ func TestRoueBonusDev308_Validate(t *testing.T) {
 	if ValidateRoueBonusCount(4, p) != nil || ValidateRoueBonusCount(5, p) == nil || ValidateRoueBonusCount(-1, p) == nil {
 		t.Fatal("0..4 expected")
 	}
-	big := RoueWheelParams{MaxPoints: 3100, Step: 50, BankruptCount: 0, LoseTurnCount: 0} // 62 cases
-	if ValidateRoueBonusCount(2, big) != nil || ValidateRoueBonusCount(3, big) == nil {
-		t.Fatal("64-case limit expected")
+	tight := RoueWheelParams{MaxPoints: 100, Step: 30, BankruptCount: 1, LoseTurnCount: 1} // 100/25/1/1: no room
+	if ValidateRoueBonusCount(0, tight) != nil || ValidateRoueBonusCount(1, tight) == nil {
+		t.Fatal("room limit expected (contract §17.3)")
 	}
 }
 
@@ -87,7 +88,7 @@ func TestRoueBonusDev308_StopOnBonus(t *testing.T) {
 	st := e.GetState()
 	bi := -1
 	for i, s := range st.RoueWheel.Segments {
-		if s.Kind == RoueKindBonus {
+		if s.Bonus {
 			bi = i
 		}
 	}
@@ -105,8 +106,9 @@ func TestRoueBonusDev308_StopOnBonus(t *testing.T) {
 	seqBefore := e.GetState().RoueLastEvent.Seq
 	fireRoueTimer144(e)
 	st = e.GetState()
-	if st.RoueSubPhase != RoueSubTurn || st.RoueCurrentTeam != "red" || st.RoueTurnGain != 0 ||
-		st.RoueLastEvent.Kind != RoueEvBonus || st.RoueLastEvent.Seq != seqBefore+1 || st.RoueWheel.Current != bi {
+	if st.RoueSubPhase != RoueSubLetter || st.RoueCurrentTeam != "red" || st.RoueTurnGain != 0 ||
+		st.RoueLastEvent.Kind != RoueEvBonus || st.RoueLastEvent.Seq != seqBefore+1 || st.RoueWheel.Current != bi ||
+		st.RoueLastEvent.Value != st.RoueWheel.Segments[bi].Value {
 		t.Fatalf("bad state after BONUS: sub=%s team=%s ev=%+v", st.RoueSubPhase, st.RoueCurrentTeam, st.RoueLastEvent)
 	}
 	if st.RoueTeamBank["red"] != 0 || len(st.RoueLetters) != 0 {
@@ -121,14 +123,20 @@ func TestRoueBonusDev308_ReducedAtStart(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"red": {Name: "red", Color: []int{255, 0, 0}}})
 	e.RoueWheelParamsFn = func() RoueWheelParams {
-		return RoueWheelParams{MaxPoints: 3100, Step: 50}
+		return RoueWheelParams{MaxPoints: 100, Step: 30, BankruptCount: 1, LoseTurnCount: 1} // no room for any BONUS
 	}
 	e.Ready("r", &Question{ID: "r", Question: "Roue", Type: QuestionTypeRoue, TypedContent: TypedContent{RouePhrase: "Toto", RoueBonusCount: intpDev309(4)}})
 	_ = e.RoueSetTeams([]string{"red"})
 	e.StartImmediate(0)
 	t.Cleanup(e.Stop)
-	if n := len(e.GetState().RoueWheel.Segments); n > RoueMaxSegments {
-		t.Fatalf("%d cases", n)
+	st := e.GetState()
+	if st.Phase != PhaseStarted {
+		t.Fatalf("the start is never refused: %s", st.Phase)
+	}
+	for _, s := range st.RoueWheel.Segments {
+		if s.Bonus {
+			t.Fatalf("no BONUS expected, got %+v", s)
+		}
 	}
 }
 

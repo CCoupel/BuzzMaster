@@ -31,3 +31,8 @@
 @media (max-width: 900px) { .wheel-cfg-groups { grid-template-columns: 1fr; } .wheel-cfg-params-3 { grid-template-columns: repeat(2, 1fr); } .wheel-cfg-views { grid-template-columns: 1fr; } }
 .wheel-cfg-trial { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.5rem 0 0.2rem; }
 .wheel-cfg-trial-state { font-size: 0.86rem; font-weight: 700; color: var(--gray-600, #4b5563); min-height: 1.3em; }
+
+/* Marque BONUS (v12.2.0, #316/#317) : interrupteur « une seule fois par manche » sous le compteur ; case dorée + ruban. */
+.wheel-cfg-switch { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.35rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.wheel-cfg-switch.off { opacity: 0.45; cursor: not-allowed; }
+.wheel-cfg-pc.bonus { background: linear-gradient(90deg, transparent 42%, #b45309 42% 58%, transparent 58%), #fbbf24; }

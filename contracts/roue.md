@@ -14,6 +14,8 @@ la saisie, « Équipe suivante »)
 sections 3 à 12 pour ces deux points. Décisions : `.claude/workflow/cadrage-v12.1.0-decisions.md`.
 **Révision 8 — v12.1.0 LOT-2** : composition de la roue par question (#309) — **§16**, qui prime sur §10 et §15.2 pour la
 composition de la roue.
+**Révision 9 — v12.2.0 (milestone #47)** : BONUS posé sur une case à points (#316) et BONUS éphémère (#317) — **§17**
+(rév. 9.1), qui prime sur §15.2 et §16 pour le nombre de cases et la case BONUS (§10.1 inchangé).
 **Hors périmètre** : round bonus final (#146) et round spécial (#148), fermés « not planned ».
 
 > Ce fichier est la **référence unique** pour `dev-backend` et `dev-frontend` sur le mode ROUE.
@@ -835,7 +837,8 @@ Effet (un événement par action, §4) — cagnotte − prix dans tous les cas, 
 - Limite de 64 cases : à l'enregistrement de la question, `ROUE_BONUS_COUNT` qui ferait dépasser 64 avec la
   configuration courante → refus `ROUE_BONUS_COUNT_INVALID`. Au `START` (configuration modifiée depuis), le nombre de
   cases BONUS est réduit pour tenir dans 64, avec un journal ; le départ n'est jamais refusé.
-- Libellé de la case **[planner]** : « 🎁 BONUS » (TV, tablettes, admin, animateur, aperçus), case dorée.
+- Libellé de la case **[planner]** : « 🎁 BONUS » (TV, tablettes, admin, animateur, aperçus), case dorée. *(v12.1 —
+  remplacé en v12.2.0 par §17.5 : logo 🎁 seul.)*
 
 #### 15.2.3 Arrêt sur BONUS
 
@@ -992,3 +995,184 @@ durées = toujours wheel.* (§10)
 - Question LOT-1 avec `ROUE_BONUS_COUNT` seul : roue identique à celle du LOT-1 (§16.2).
 - `game-config.json` sans `bonus_count` : chargé sans erreur, 0 BONUS.
 - Durées, sous-phases, actions, achat de voyelles et case BONUS (§15) : inchangés.
+
+---
+
+## 17. v12.2.0 — BONUS posé sur une case à points (#316) et BONUS éphémère (#317)
+
+> Révision 9 (2026-11-22, milestone #47) ; **rév. 9.1** (2026-11-22, retours utilisateur sur le plan :
+> `_work/tasks/planner-20261122-1440.md`) — BANQUEROUTE / PERDU **strictement inchangés**, BONUS qui s'adaptent, pas de
+> règle dédiée à la case maximum, marque dorée + ruban. Décisions utilisateur : corps des issues #316 / #317, ordres
+> `_work/tasks/planner-20261122-1405.md` et `-1440.md` (valeur par défaut **éphémère** ; marques BONUS posées **au
+> hasard** ; répartition **homogène** des trois types de cases spéciales ; un BONUS ne touche jamais une case
+> spéciale). Choix techniques marqués **[planner]**.
+> **§17 prime sur §15.2 et §16** pour le nombre de cases et la case BONUS ; **§10.1 (BANQUEROUTE, PERDU, valeurs) est
+> inchangé**. Le reste de §15 (achat de voyelles) et de §16 (surcharge champ par champ) est inchangé.
+> **BREAKING (protocole `GameState`, interne)** : `ROUE_WHEEL.SEGMENTS[].KIND` perd la valeur `bonus` ; l'arrêt sur un
+> BONUS ne rend plus la main pour un nouveau tour. Aucun client externe : le front est embarqué dans le binaire, les
+> buzzers ne reçoivent pas `ROUE_WHEEL`. Aucune donnée enregistrée n'est réécrite (§17.7).
+
+### 17.1 Vocabulaire
+
+| Terme | Définition |
+|---|---|
+| **Marque BONUS** | Attribut d'une **case à points** (`KIND = value`) : la case garde sa valeur et porte en plus un cadeau (🎁). Un BONUS n'est plus une case de la roue |
+| **Case spéciale** | Une case BANQUEROUTE, une case TOUR PERDU, ou une case à points **marquée BONUS** |
+| **Case à points normale** | Case à points sans marque BONUS |
+| **Intervalle** | Suite des cases à points comprises entre deux cases BANQUEROUTE / PERDU consécutives (roue circulaire : la dernière case touche la première). Longueur `g` = nombre de cases de la suite |
+| **Mode du BONUS** | `EPHEMERAL` (éphémère : la marque disparaît après son premier tirage, jusqu'à la fin de la manche) ou `PERMANENT` (la marque reste) |
+
+### 17.2 Roue générée — remplace §15.2.2
+
+Notations : `V` = nombre de valeurs (§10.1 étape 1), `B`, `P` = Banqueroute, Perdu, `X` = nombre de marques BONUS.
+**Nombre de cases : `N = V + B + P`** — les BONUS ne comptent plus.
+
+1. **Valeurs, BANQUEROUTE, PERDU : §10.1, inchangé case pour case** (étapes 1 à 4, calculées sans les BONUS). Aucune
+   roue d'exemple de §10.1 ne change, y compris celles où deux cases BANQUEROUTE / PERDU se touchent (« c'est accepté »,
+   §10.1, reste vrai pour elles). **Poser des BONUS ne déplace aucune case.**
+2. **Marques BONUS — les BONUS s'adaptent** **[planner]** : ils se placent sur les cases à points, **au hasard**, de
+   façon à **homogénéiser** la répartition des cases spéciales, et **ne touchent jamais une case spéciale** (ni
+   BANQUEROUTE, ni PERDU, ni un autre BONUS).
+   a. **Capacité d'un intervalle** de longueur `g` : `c = ⌊(g − 1) / 2⌋` BONUS au plus (une case à points normale avant,
+      après et entre chaque BONUS).
+   b. **Répartition entre intervalles** : les `X` BONUS sont attribués un à un ; chacun va à l'intervalle **non plein**
+      dont le rapport `g / (b + 1)` est le plus grand (`b` = BONUS déjà attribués à cet intervalle ; à égalité : au
+      hasard). Le plus grand vide de la roue est ainsi coupé en premier.
+   c. **Position dans un intervalle** : les `b` BONUS d'un intervalle sont posés par **tirage uniforme parmi toutes les
+      poses valables** dans cet intervalle (ni sur ses deux cases extrêmes, ni côte à côte).
+   d. **Sans BANQUEROUTE ni PERDU** (`B = P = 0`) : le premier BONUS est tiré au hasard sur toute la roue ; il joue
+      ensuite le rôle de case spéciale de départ (un seul intervalle de longueur `N − 1`) pour les suivants.
+   e. **Case maximum (index 0)** : **aucune règle propre**. Quand `B ≥ 1`, elle touche la première BANQUEROUTE (index 1)
+      et ne peut donc jamais porter de BONUS ; sans BANQUEROUTE, elle peut en porter un comme toute case à points.
+3. **Aléa** : la source d'aléa du moteur (injectable pour les tests, §6). Le tirage a lieu **à chaque `START`** : les
+   BONUS changent de place d'une manche à l'autre, BANQUEROUTE et PERDU jamais.
+
+**Exemples** (`+🎁` = case marquée ; un tirage possible) :
+
+| `MAX / PAS / B / P / X` | Roue générée | BONUS au plus (§17.3) |
+|---|---|---|
+| 1000 / 50 / 2 / 1 / 2 (défaut) | `1000 BANQ 950 50 900 100 850 PERDU 150 800+🎁 200 750 250 700 BANQ 300 650 350 600 400 550 450+🎁` | 4 |
+| 1000 / 100 / 2 / 1 / 2 | `1000 BANQ 900 100 PERDU 800 200+🎁 700 BANQ 300 600 400+🎁` | 2 |
+| 1000 / 100 / 3 / 2 / 1 | `1000 BANQ PERDU 900 100 BANQ 800 200 PERDU 700 300 BANQ 600 400+🎁` (seule place possible) | 1 |
+| 100 / 10 / 0 / 0 / 3 | `100 10+🎁 90 20+🎁 80 30 70 40 60+🎁 50` | 4 |
+
+**Propriétés exigées** (tests sur de nombreux tirages, aléa à graine fixe) : `N` cases ; valeurs, BANQUEROUTE et
+PERDU identiques à la roue v12.1 sans BONUS (§10.1) ; `X` marques exactement, sur des cases `value` ; aucune marque
+voisine d'une case spéciale (circulairement) ; au plus `c` marques par intervalle ; avec `X = 0`, roue identique à
+v12.1. Le placement réussit **toujours** quand `X` respecte §17.3 (pas de repli).
+
+### 17.3 Limites — remplace la limite BONUS de §15.2.2 et §16.5
+
+- **64 cases au plus** : `N = V + B + P ≤ 64` (les BONUS ne comptent plus). Les autres règles de §10 sont inchangées ;
+  **une roue sans BONUS valable en v12.1 le reste**.
+- **BONUS au plus** pour une roue : le plus petit de
+  1. **4** ;
+  2. **la place libre** : somme des capacités `⌊(g − 1) / 2⌋` des intervalles (sans BANQUEROUTE ni PERDU : `⌊N / 2⌋`) ;
+  3. **la règle d'espacement** : au moins autant de cases à points normales que de cases spéciales,
+     `V − X ≥ B + P + X`, soit `X ≤ ⌊(V − B − P) / 2⌋`.
+  Exemples : roue par défaut `1000 / 50 / 2 / 1` (22 cases) : 4 ; `1000 / 100 / 2 / 1` (12) : 2 ; `100 / 20 / 1 / 1`
+  (7) : 1 ; `1000 / 100 / 3 / 2` (14) : 1 ; `100 / 30 → 25 / 1 / 1` (5) : 0.
+- **Trop de BONUS** : jamais de repli ni de déplacement de BANQUEROUTE / PERDU — **refus** à l'enregistrement,
+  **réduction** au départ de la manche :
+
+| Situation | `POST /game-config.json` | `POST /questions` | `wheel-preview` | `START` |
+|---|---|---|---|---|
+| Roue invalide sans BONUS (règles §10 / §16.5 : pas, maximum, `N > 64`…) | `400`, rien n'est écrit | `400 ROUE_WHEEL_INVALID` | `400 ROUE_WHEEL_INVALID` | roue globale ; si elle aussi est invalide, roue par défaut ; journal (§16.3) |
+| Roue valable, mais `X` > BONUS au plus | `400`, rien n'est écrit | `400 ROUE_BONUS_COUNT_INVALID` (BONUS envoyé **ou hérité**, règle §16.5) | `400 ROUE_BONUS_COUNT_INVALID` **[planner]** | `X` réduit au maximum permis ; journal |
+| `bonus_count` / `ROUE_BONUS_COUNT` hors 0–4 | `400` | `400 ROUE_BONUS_COUNT_INVALID` | `400 ROUE_BONUS_COUNT_INVALID` | ramené à la borne |
+
+- **Une seule implémentation** (`roue_wheel.go`) pour l'enregistrement de `game-config.json`, `POST /questions`,
+  `wheel-preview` et le `START`.
+- Message de refus BONUS **[planner]** : « Trop de BONUS : N au plus pour cette roue (un BONUS ne touche jamais une
+  Banqueroute, un Perdu ni un autre BONUS). » Le départ n'est **jamais** refusé (règle §16.3 conservée).
+
+### 17.4 Arrêt sur une case marquée BONUS — remplace §15.2.3
+
+Fin du freinage (`STOPPING`) sur une case `value` dont `BONUS = true` :
+- **tour normal sur la valeur de la case** : sous-phase `LETTER`, étape 4 — consonne au montant de la case, ou voyelle
+  « après l'arrêt » si le réglage de la question le permet (§15.1.4) ; gains, cagnotte et suite du tour **identiques à
+  une case à points** ;
+- **la roue n'est pas relancée** et la main n'est pas rendue pour un nouveau tour (fin du comportement v12.1) ;
+- événement **`BONUS`** `{ TEAM, VALUE = valeur de la case }` **à la place de `LAND_VALUE`** (règle « un événement par
+  action », §4) ;
+- son et LED : notice `BONUS` existante (§15.4 : « bonne réponse » + comète, ni flash ni pulsation) ;
+- annonce : bandeau « 🎁 BONUS ! — case 800 » (valeur de la case : la case marquée ne l'affiche pas, §17.5 ; TV,
+  tablettes, animateur, admin) **tant que `ROUE_LAST_EVENT.KIND = BONUS`**, c.-à-d.
+  jusqu'au choix de la consonne ou de la voyelle ; ligne d'annonce « 🎁 BONUS — case 500 : proposez une consonne »
+  **[planner]** ;
+- le cadeau reste géré hors système par l'animateur ; aucun point n'est attribué au BONUS.
+
+### 17.5 BONUS éphémère / permanent (#317)
+
+**Réglage global** — `game-config.json` `wheel` :
+
+| Champ | Règle |
+|---|---|
+| `bonus_mode` **[NEW]** | `EPHEMERAL` \| `PERMANENT`. **Absent = `EPHEMERAL`** (décision utilisateur) ; autre valeur : `400`, rien n'est écrit. `wheel_default.bonus_mode = EPHEMERAL` |
+
+**Surcharge par question** — même règle que §16.2 (présent = personnalisé, absent = global) :
+
+| Champ JSON (`TypedContent`, `OwnedFields` du type `ROUE`) | Champ de formulaire `POST /questions` | Refus |
+|---|---|---|
+| `ROUE_BONUS_MODE` **[NEW]** (string, `omitempty`) | `roue_bonus_mode` (`EPHEMERAL` / `PERMANENT` ; absent ou vide = global, champ retiré) | `400 ROUE_BONUS_MODE_INVALID` |
+
+Relu à chaque enregistrement (leçon #107). Enregistré même quand le nombre de BONUS effectif est 0.
+
+**`GameState`** — champ ajouté (mêmes règles que §4 : sans `omitempty`, jamais persisté, remis à `""` dans `Ready`,
+`stopUnsafe`, `InitGameWith`) :
+
+| Champ | Type | Contenu |
+|---|---|---|
+| `ROUE_BONUS_MODE` | string | Mode effectif de la manche, copié au `START` (`EPHEMERAL` \| `PERMANENT`) ; `""` hors manche |
+
+**Éphémère** — à la **première action acceptée qui quitte la sous-phase `LETTER`** après un arrêt sur une case marquée
+(`ROUE_LETTER` présente, absente ou déjà proposée ; `ROUE_BUY_VOWEL` après l'arrêt), le serveur passe
+`ROUE_WHEEL.SEGMENTS[CURRENT].BONUS` à `false` dans la même action. La case redevient une case à points normale
+**jusqu'à la fin de la manche** ; la manche suivante tire une nouvelle roue (§17.2). Une action refusée ne consomme rien.
+**Permanent** : la marque reste ; chaque nouvel arrêt sur la case rejoue le §17.4.
+
+**Affichage** (décision utilisateur du 2026-11-22) : dans les deux modes, le bandeau est retiré au choix de la lettre
+(consonne ou voyelle — fin de l'événement `BONUS`, règle v12.1 ; en éphémère il s'efface par le même fondu que la
+case). En **éphémère**, la case marquée **redevient sa case à
+points normale avec un fondu** (~600 ms : le doré, le ruban et le 🎁 s'effacent, la case reprend sa couleur habituelle
+et son **montant réapparaît** ;
+`prefers-reduced-motion` : sans fondu) — la roue n'est jamais recréée (§6). En **permanent**, la marque reste.
+**Marque** (maquette retenue `tv_roue_started__bonus_on_value`, précision utilisateur du 2026-11-22) : case **dorée**,
+**ruban cadeau** (bande dorée décorative, **sans texte**) et **uniquement le logo 🎁 au centre — ni montant, ni texte
+« BONUS »** — la valeur de la case
+n'apparaît que sur le bandeau plein écran à l'arrêt (« 🎁 BONUS ! — case 800 ») et dans l'annonce. Identique sur la TV
+(bandeau et arc), les tablettes, l'animateur, l'admin et les aperçus de l'éditeur et des Paramètres (montant au survol
+dans les aperçus admin seulement **[planner]**). Libellé visible de case (`segmentLabel`) : « 🎁 » ; `aria-label`
+(accessibilité, décision utilisateur du GATE 2) : « 800, BONUS » — le montant est annoncé aux lecteurs d'écran ;
+**seul l'affichage visuel est limité à 🎁**. La valeur
+reste dans `SEGMENTS[].VALUE` (le serveur ne la masque pas : elle n'est pas secrète,
+seulement non affichée).
+
+### 17.6 `GameState` et HTTP — récapitulatif
+
+- `ROUE_WHEEL.SEGMENTS[]` : `{ "ID", "KIND", "VALUE", "BONUS" }` — **`BONUS` bool ajouté, sans `omitempty`**, `false`
+  pour BANQUEROUTE et PERDU. `KIND` ∈ `value | bankrupt | lose_turn` (**`bonus` retiré**). `SEGMENTS` n'est plus
+  « inchangée pendant la manche » : seul `BONUS` peut passer de `true` à `false` (éphémère), jamais l'inverse, jamais
+  le nombre ni l'ordre des cases.
+- `ROUE_LAST_EVENT` `BONUS` : `VALUE` = valeur de la case (0 en v12.1).
+- `POST /api/roue/wheel-preview` : la réponse porte les marques (`BONUS`) d'**un tirage** ; un nouvel appel peut les
+  placer ailleurs. `COUNT` = `N` (BONUS exclus). Champ `bonus_mode` accepté et ignoré **[planner]**.
+- Fixture `web/src/hooks/fixtures/roue-gamestate.312.json` régénérée : elle doit couvrir `ROUE_BONUS_MODE` et le champ
+  `BONUS` des cases (leçon #312).
+
+### 17.7 Migration et non-régression
+
+- **Aucun fichier réécrit.** Une question v12.1 avec `ROUE_BONUS_COUNT = n` garde `n` BONUS, désormais **posés sur des
+  cases à points** : sa roue perd `n` cases (celles que les BONUS ajoutaient). Sans `ROUE_BONUS_MODE`, elle suit le
+  global (éphémère par défaut).
+- Une question ou une configuration v12.1 dont le nombre de BONUS dépasse désormais le maximum (§17.3) : à
+  l'ouverture, l'éditeur ou la carte affiche le refus de `wheel-preview` ; au `START`, le nombre de BONUS est réduit,
+  jamais de refus. Une roue **sans** BONUS valable en v12.1 le reste.
+- `game-config.json` sans `bonus_mode` : chargé sans erreur, éphémère.
+- Sans BONUS : roue identique à v12.1, case pour case (exemples de §10.1 inchangés). Avec BONUS : mêmes valeurs,
+  BANQUEROUTE et PERDU aux mêmes places que sans BONUS.
+- Achat de voyelles, durées, sous-phases et actions de §5 / §15.1 : inchangés.
+- Tests v12.1 à **réécrire** (comportement voulu changé) : ceux qui attendent `KIND = bonus`, `N + X` cases, ou le
+  retour en `TURN` après un BONUS (`roue_bonus_308_test.go`, `roue_bonus_dev_308_test.go`,
+  `internal/server/roue_bonus_308_test.go`, `cmd/server/roue_bonus_308_test.go`, `RoueBonus.308.test.jsx`,
+  `QuestionsPage.roue.308.test.jsx`, cas BONUS de `roue_composition_309_test.go` / `WheelConfigCard.309.test.jsx`).

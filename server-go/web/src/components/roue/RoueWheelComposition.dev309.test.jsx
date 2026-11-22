@@ -7,7 +7,7 @@ const GLOBAL = { max_points: 1000, step: 50, bankrupt_count: 2, lose_turn_count:
 const base = { rouePhrase: '', rouePresentation: '', roueMode: 'TANT_QUE_JE_GAGNE', roueGainsRule: 'WINNER_ONLY', roueWheelLayout: 'strip', roueShowLetters: true,
   roueWheelMaxPoints: null, roueWheelStep: null, roueWheelBankruptCount: null, roueWheelLoseTurnCount: null, roueBonusCount: null }
 const ok = (b) => ({ ok: true, status: 200, json: async () => b })
-let previewBody = { COUNT: 23, step: 50, SEGMENTS: [{ ID: 's0', KIND: 'value', VALUE: 1000 }, { ID: 's1', KIND: 'bonus', VALUE: 0 }] }
+let previewBody = { COUNT: 23, step: 50, SEGMENTS: [{ ID: 's0', KIND: 'value', VALUE: 1000 }, { ID: 's1', KIND: 'value', VALUE: 800, BONUS: true }] }
 let previewReply
 const previews = () => global.fetch.mock.calls.filter(c => c[0] === '/api/roue/wheel-preview').map(c => JSON.parse(c[1].body))
 
@@ -96,7 +96,7 @@ describe('roueRefusalText — refus de composition à l\'enregistrement (#309)',
   it('ROUE_WHEEL_INVALID : message précis du serveur conservé', async () => {
     const { roueRefusalText } = await import('./RoueEditor')
     expect(roueRefusalText('ROUE_WHEEL_INVALID: la roue aurait 70 cases, la limite est de 64')).toBe('la roue aurait 70 cases, la limite est de 64')
-    expect(roueRefusalText('ROUE_BONUS_COUNT_INVALID: x')).toMatch(/BONUS/)
+    expect(roueRefusalText('ROUE_BONUS_COUNT_INVALID:')).toMatch(/BONUS/)
   })
 })
 

@@ -75,8 +75,8 @@ func TestRoueWheelFieldsDev309_GlobalBonusCount(t *testing.T) {
 			t.Errorf("%s: %d", bad, w.Code)
 		}
 	}
-	if w := postGameConfigDev309(t, s, `{"wheel":{"max_points":3100,"step":50,"bankrupt_count":0,"lose_turn_count":0,"bonus_count":3}}`); w.Code != http.StatusBadRequest {
-		t.Errorf("65 cases: %d", w.Code)
+	if w := postGameConfigDev309(t, s, `{"wheel":{"max_points":1000,"step":100,"bankrupt_count":3,"lose_turn_count":2,"bonus_count":2}}`); w.Code != http.StatusBadRequest {
+		t.Errorf("above the maximum (1 on a 14-case wheel, contract §17.3): %d", w.Code)
 	}
 	g := httptest.NewRecorder()
 	s.mux.ServeHTTP(g, httptest.NewRequest("GET", "/game-config.json", nil))
@@ -90,12 +90,12 @@ func TestRoueWheelFieldsDev309_InheritedBonusOverflowRefused(t *testing.T) {
 	s, _ := setupTestHTTPServer(t)
 	const def = `{"wheel":{"max_points":1000,"step":50,"bankrupt_count":2,"lose_turn_count":1,"bonus_count":0}}`
 	t.Cleanup(func() { postGameConfigDev309(t, s, def) })
-	// global: 60 cases + 4 BONUS = 64
-	if w := postGameConfigDev309(t, s, `{"wheel":{"max_points":3000,"step":50,"bankrupt_count":0,"lose_turn_count":0,"bonus_count":4}}`); w.Code != http.StatusOK {
+	// global: 1000/100/2/1 (12 cases) + 2 BONUS = the maximum
+	if w := postGameConfigDev309(t, s, `{"wheel":{"max_points":1000,"step":100,"bankrupt_count":2,"lose_turn_count":1,"bonus_count":2}}`); w.Code != http.StatusOK {
 		t.Fatalf("global: %d %s", w.Code, w.Body.String())
 	}
-	// the question brings the wheel to 63 cases without sending any BONUS count: 63 + 4 inherited > 64
-	w, saved := postRoue145(t, s, map[string]string{"roue_wheel_max_points": "3150"})
+	// the question brings the wheel to 3 BANQUEROUTE / 2 PERDU (1 BONUS at most) without sending any BONUS count: 2 inherited > 1
+	w, saved := postRoue145(t, s, map[string]string{"roue_wheel_bankrupt_count": "3", "roue_wheel_lose_turn_count": "2"})
 	if w.Code != http.StatusBadRequest || !strings.HasPrefix(w.Body.String(), "ROUE_BONUS_COUNT_INVALID") {
 		t.Fatalf("attendu 400 ROUE_BONUS_COUNT_INVALID, got %d %q", w.Code, w.Body.String())
 	}
@@ -103,7 +103,7 @@ func TestRoueWheelFieldsDev309_InheritedBonusOverflowRefused(t *testing.T) {
 		t.Errorf("rien ne doit être écrit : %v", saved)
 	}
 	// a customised BONUS count that fits is accepted
-	if w, _ := postRoue145(t, s, map[string]string{"roue_wheel_max_points": "3150", "roue_bonus_count": "1"}); w.Code != http.StatusOK {
+	if w, _ := postRoue145(t, s, map[string]string{"roue_wheel_bankrupt_count": "3", "roue_wheel_lose_turn_count": "2", "roue_bonus_count": "1"}); w.Code != http.StatusOK {
 		t.Errorf("1 BONUS personnalisé : %d %s", w.Code, w.Body.String())
 	}
 }
