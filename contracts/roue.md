@@ -893,7 +893,8 @@ registre fermé `soundSiteRegistry`.
 ## 16. v12.1.0 LOT-2 — Composition de la roue par question (#309)
 
 > Révision 8 (2026-11-21, retour QUALIF 12.1.0.1 n° 1 ; **rév. 8.1** : surcharge champ par champ, choix utilisateur
-> sur le plan LOT-2). Décisions : `.claude/workflow/cadrage-v12.1.0-decisions.md` « Retours QUALIF 12.1.0.1 » et
+> sur le plan LOT-2 ; **rév. 8.2** (2026-11-22) : §16.5, code de refus d'un dépassement de 64 cases et BONUS hérité
+> validé à l'enregistrement — revue LOT-2 M1 / M2). Décisions : `.claude/workflow/cadrage-v12.1.0-decisions.md` « Retours QUALIF 12.1.0.1 » et
 > « LOT-2 #309 — choix utilisateur » (font foi) : **réglages globaux « Roue » = défauts, chaque paramètre de
 > composition personnalisable seul par question** — points maximum, pas, nombre de BANQUEROUTE, de TOUR PERDU
 > (« passe » = TOUR PERDU), de BONUS. Choix techniques marqués **[planner]**. **Aucun BREAKING**.
@@ -965,13 +966,21 @@ durées = toujours wheel.* (§10)
 | `roue_wheel_step` | `ROUE_WHEEL_STEP` (valeur corrigée) | `ROUE_WHEEL_INVALID` |
 | `roue_wheel_bankrupt_count` | `ROUE_WHEEL_BANKRUPT_COUNT` | `ROUE_WHEEL_INVALID` |
 | `roue_wheel_lose_turn_count` | `ROUE_WHEEL_LOSE_TURN_COUNT` | `ROUE_WHEEL_INVALID` |
-| `roue_bonus_count` (existant) | `ROUE_BONUS_COUNT` | `ROUE_BONUS_COUNT_INVALID` (hors 0–4) |
+| `roue_bonus_count` (existant) | `ROUE_BONUS_COUNT` | `ROUE_BONUS_COUNT_INVALID` (hors 0–4, ou dépassement de 64 cases dû au seul BONUS, voir ci-dessous) |
 
 - **Champ de formulaire absent ou vide = paramètre au global** : le champ est **retiré** de la question. Valeur
   présente = paramètre personnalisé, enregistré (y compris `0`).
-- Validation sur la **composition effective** (champs présents + réglages globaux courants), par le même code que
-  `wheel-preview` : pas ≥ maximum, maximum hors 2–1 000 000, valeur non entière ou négative, plus de 64 cases →
-  `400 ROUE_WHEEL_INVALID`, rien n'est écrit.
+- Validation sur la **composition effective** (champs présents + réglages globaux courants), **nombre de BONUS
+  compris, qu'il soit envoyé ou hérité du global** (`wheel.bonus_count`), par le même code que `wheel-preview`. Tout
+  refus = `400`, **rien n'est écrit** :
+  - **dépassement de 64 cases dû au seul BONUS** — la composition effective sans ses cases BONUS tient dans 64 cases,
+    avec elles non — → `400 ROUE_BONUS_COUNT_INVALID`, que le BONUS soit envoyé ou hérité (comportement du LOT-1
+    conservé, test #308) ; de même pour un BONUS envoyé hors 0–4 ;
+  - **toute autre composition invalide** — pas ≥ maximum, maximum hors 2–1 000 000, valeur non entière ou négative,
+    plus de 64 cases même sans BONUS — → `400 ROUE_WHEEL_INVALID`.
+- La **réduction des BONUS puis le repli sur la roue globale** (§16.3) ne s'appliquent **qu'au `START`**, pour une
+  composition devenue invalide après l'enregistrement (réglage global modifié depuis, ou fichier modifié à la main) ;
+  jamais à l'enregistrement, qui refuse.
 - `POST /game-config.json` : `wheel.bonus_count` accepté et validé (§16.1). Les questions ne sont pas revalidées
   (§16.3 couvre une composition devenue invalide).
 - `POST /api/roue/wheel-preview` : inchangé (accepte déjà `bonus_count`) — l'éditeur lui envoie la composition

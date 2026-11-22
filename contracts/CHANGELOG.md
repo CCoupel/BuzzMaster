@@ -1,6 +1,19 @@
 # Changelog des Contrats API
 
 ---
+## [20261122] — v12.1.0 LOT-2 — ROUE : refus d'une composition à l'enregistrement (#309, revue M1 / M2)
+
+`roue.md` révision 8.2, §16.5. Précision du contrat, alignée sur le comportement voulu ; **aucun champ ni payload ne
+change, aucun BREAKING**.
+
+- **[CHANGED]** `POST /questions` (`type=ROUE`) : la composition effective est validée **BONUS hérité du global
+  compris** ; une composition qui dépasse 64 cases est refusée à l'enregistrement (`400`, rien n'est écrit), même si
+  le BONUS n'est pas envoyé (M1). La réduction des BONUS et le repli sur la roue globale ne valent qu'au `START`.
+- **[CHANGED]** Code de refus : dépassement de 64 cases dû au **seul** BONUS (envoyé ou hérité) → `400
+  ROUE_BONUS_COUNT_INVALID` (comportement LOT-1 conservé) ; toute autre composition invalide → `400
+  ROUE_WHEEL_INVALID` (M2 : le texte du §16.5 est aligné sur son tableau).
+
+---
 ## [20261121-d] — v12.1.0 LOT-1 — ROUE : placement de la phrase sur le plateau (#310)
 
 `roue.md` §3.1 (règle « Placement »). Correctif livré `051e5d9a`. **Aucun champ ni payload ne change, aucun BREAKING.**
