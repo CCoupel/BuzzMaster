@@ -1,117 +1,180 @@
 {
   "type": "FEATURE",
-  "version": "12.1.0",
-  "branch": "milestone/v12.1.0",
+  "description": "milestone:v12.2.0 — Roue : BONUS sur case à points (#316, #317)",
   "status": "completed",
-  "milestone": 22,
-  "issues": [
-    147,
-    308,
-    309,
-    310,
-    311,
-    312,
-    313,
-    314,
-    315
+  "branch": "main",
+  "version": "12.2.0",
+  "started_at": "2026-11-22T13:55:00Z",
+  "updated_at": "2026-11-22T16:35:00Z",
+  "cycles": 4,
+  "issue_nums": [
+    316,
+    317
   ],
+  "milestone_num": 47,
+  "plan": ".claude/workflow/plan-12.2.0.md",
   "phases": {
     "clarification": {
       "status": "completed",
-      "report": "_work/handoff/cadrage-v12.1.0-decisions.md"
+      "decisions": {
+        "317_default": "ephemere",
+        "316_pose": "hasard, BONUS/BANQUEROUTE/PERDU répartis équitablement sur la roue, jamais 2 cases spéciales adjacentes"
+      }
     },
     "init": {
       "status": "completed",
-      "sha": "eccaa75c"
+      "sha": "641c03c1"
     },
     "plan": {
       "status": "completed",
-      "report": "_work/reports/planner-plan-v12.1.0.md",
-      "commit": "ef96bca7"
+      "report": "_work/reports/plan-20261122-143909.md",
+      "gate15": {
+        "tv": "A+B doré+ruban, retour couleur normale en éphémère",
+        "editeur": "B",
+        "repartition": "BANQ/PERDU inchangés, BONUS s adaptent",
+        "max": "pas de règle dédiée (adjacence)",
+        "conception": "B"
+      },
+      "gate2": "2026-11-22T14:55:00Z, + aria-label avec montant (« 800, BONUS »)",
+      "contract_commit": "36dabc8b"
     },
     "dev": {
       "status": "completed",
-      "lot": "LOT-2",
-      "sha": "85c6b3e9"
+      "batch": 2,
+      "agents": [
+        "dev-backend",
+        "dev-frontend",
+        "test-writer"
+      ],
+      "orders": [
+        "_work/tasks/dev-backend-20261122-1500.md",
+        "_work/tasks/dev-frontend-20261122-1500.md",
+        "_work/tasks/test-writer-20261122-1500.md"
+      ],
+      "head": "591112bf"
     },
     "review": {
       "status": "completed",
-      "lot": "LOT-2",
       "verdict": "APPROUVE AVEC RESERVES",
-      "report": "_work/reports/code-reviewer-v12.1.0-lot2.md",
-      "fix": "M1 5dd13055 tmp, M2 contrat db676c6e"
+      "report": "_work/reports/code-review-20261122-1620.md",
+      "fixes": {
+        "M1": "dev-backend tmp/v12.2.0-m1",
+        "M2": "dev-frontend tmp/v12.2.0-m2",
+        "M3": "non traité (non bloquant)"
+      },
+      "fix_shas": [
+        "9b70ee40",
+        "c4edb3c6",
+        "3de7074d",
+        "2bbb2594"
+      ]
     },
     "qa": {
       "status": "completed",
-      "lot": "LOT-2",
       "verdict": "VALIDATED",
-      "sha": "85c6b3e9",
-      "m1": "VALIDATED 235f2f8a"
+      "report": "_work/reports/qa-20261122-152555.md",
+      "head": "591112bf"
     },
     "doc": {
       "status": "completed",
-      "lot": "LOT-2",
-      "sha": "dc7ffc44",
-      "review": "_work/reports/code-reviewer-v12.1.0-doc-lot2.md"
+      "sha": [
+        "a51fa7ea",
+        "15d0dd75",
+        "96eecad3"
+      ],
+      "files": [
+        "CHANGELOG.md",
+        "docs/GAME_STATE_MACHINE.md",
+        "docs/DATA_MODELS.md",
+        "docs/WEBSOCKET_PROTOCOL.md",
+        "docs/ADMIN_GUIDE.md"
+      ],
+      "review1": {
+        "verdict": "KO",
+        "report": "_work/reports/code-review-20261122-1650-docs-lot1.md"
+      },
+      "readme": "mis à jour (ligne ROUE)",
+      "review2": {
+        "verdict": "OK",
+        "report": "_work/reports/code-review-20261122-1700-docs-lot1-recheck.md",
+        "optionnel": [
+          "ADMIN_GUIDE:1313 proposé→actif",
+          "accents README",
+          "contracts/roue.md:717/739 case BONUS (§15)"
+        ]
+      }
     },
-    "qualif": {
+    "deploy-qualif": {
       "status": "completed",
-      "version": "12.1.0.5",
-      "lot": "LOT-2",
-      "sha": "dbaeab2e",
-      "artifact": "build/qualif_v12.1.0/buzzcontrol-qualif-12.1.0.5-windows-amd64.exe"
+      "version": "12.2.0.7",
+      "binaire": "build/qualif_v12.2.0/buzzcontrol-qualif-12.2.0.7-windows-amd64.exe",
+      "ci": "45038625645 success a51fa7ea",
+      "version_commit": "0f469fd8",
+      "ci_head": "45039070602 success 0f469fd8"
+    },
+    "deploy-prod": {
+      "status": "completed",
+      "main": "3d353e71",
+      "tag": "v12.2.0",
+      "release": "https://github.com/CCoupel/BuzzMaster/releases/tag/v12.2.0",
+      "ci": "45043348860 success",
+      "version_commit": "d7142f35"
+    },
+    "dev-frontend": {
+      "status": "completed",
+      "sha": [
+        "1433229c",
+        "e57ae6bd",
+        "591112bf"
+      ],
+      "handoff": "_work/handoff/dev-frontend-20261122-145249.md"
+    },
+    "test-writer": {
+      "status": "completed",
+      "sha": [
+        "37898492",
+        "6dc8cbe1",
+        "103d55e1",
+        "6f4687f6"
+      ],
+      "handoff": "_work/handoff/test-writer-20261122-1520.md"
+    },
+    "dev-backend": {
+      "status": "completed",
+      "sha": "9be8b7ac",
+      "handoff": "_work/handoff/dev-backend-20261122-1500.md"
     },
     "qa_fix1": {
       "status": "completed",
       "verdict": "VALIDATED",
-      "sha": "051e5d9a"
+      "report": "_work/reports/qa-20261122-152915.md"
     },
-    "doc_fix1": {
+    "nr_full": {
       "status": "completed",
-      "sha": "a85c3908"
-    },
-    "fix2": {
-      "status": "completed",
-      "dev_sha": "9883b7de",
-      "review": "APPROUVE",
-      "qa": "VALIDATED",
-      "step": "doc-review+qualif",
-      "doc_sha": "de62feeb"
-    },
-    "fix_qualif4": {
-      "status": "completed",
-      "shas": [
-        "7f851300",
-        "ea17f67d",
-        "74d9196b"
-      ],
-      "review": "APPROUVE",
-      "qa": "VALIDATED"
-    },
-    "doc_finalize": {
-      "status": "completed",
-      "sha": "6760534e",
-      "review": "OK"
-    },
-    "prod": {
-      "status": "completed",
-      "tag": "v12.1.0",
-      "main_sha": "fae364e2",
-      "release": "https://github.com/CCoupel/BuzzMaster/releases/tag/v12.1.0"
+      "verdict": "VALIDATED",
+      "report": "_work/reports/qa-20261122-153316.md"
     },
     "marketing": {
       "status": "completed",
-      "site": "d33cfefa",
-      "notes": "4cf87307"
+      "gh_pages": "6d31290e",
+      "main": "036c71f2"
+    },
+    "gate_lot": {
+      "status": "completed",
+      "at": "2026-11-22T16:00:00Z"
+    },
+    "gate4": {
+      "status": "completed",
+      "at": "2026-11-22T16:05:00Z"
     }
   },
+  "intensite_depart": "complet",
   "cadrage": {
     "intensite": "complet",
     "test_writer": true,
     "review": true,
     "qualif": true,
     "doc": "agent",
-    "qa_parallelizable": false,
     "team": [
       "dev-backend",
       "dev-frontend",
@@ -120,56 +183,22 @@
       "qa",
       "doc-updater"
     ],
-    "validated_at": "2026-11-21T14:10:00Z"
+    "qa_parallelizable": true,
+    "valide": "GATE 2"
   },
-  "plan": ".claude/workflow/plan-12.1.0.md",
   "lots": {
-    "current": "LOT-2",
-    "LOT-1": {
-      "issues": [
-        147,
-        308,
-        310,
-        311,
-        312,
-        313,
-        314,
-        315
-      ],
-      "status": "completed",
-      "sublots": [
-        "LOT-1.1",
-        "LOT-1.2"
-      ],
-      "validated_at": "2026-11-22T09:21:00Z",
-      "ci": "45007203850 success 03475e95",
-      "closed": true
-    },
-    "LOT-1.1": {
-      "issues": [
-        308
-      ],
-      "status": "completed",
-      "qa": "_work/reports/qa-v12.1.0-lot1.1.md"
-    },
-    "LOT-1.2": {
-      "issues": [
-        147
-      ],
-      "status": "completed",
-      "qa": "_work/reports/qa-v12.1.0-lot1.2.md"
-    },
-    "LOT-2": {
-      "issues": [
-        309
-      ],
-      "status": "completed",
-      "contract_commit": "2b1b6461",
-      "validated_at": "2026-11-22T10:23:00Z",
-      "ci": "45012261951 success dbaeab2e",
-      "closed": true
+    "current": "LOT-1",
+    "items": {
+      "LOT-1": {
+        "status": "completed",
+        "issues": [
+          316,
+          317
+        ],
+        "validated_at": "2026-11-22T16:00:00Z",
+        "ci_sha": "0f469fd8",
+        "ci": "45039070602 success"
+      }
     }
-  },
-  "cycles": 2,
-  "updated_at": "2026-11-22T11:25:00Z"
+  }
 }
