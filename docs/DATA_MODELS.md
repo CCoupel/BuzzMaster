@@ -1904,7 +1904,7 @@ question v12.0 se lit sans changement (défauts ci-dessous).
 
 Refus à l'enregistrement (`400`, rien n'est écrit) : `ROUE_VOWEL_TIMING_INVALID`, `ROUE_VOWELS_BEFORE_INVALID`,
 `ROUE_VOWELS_AFTER_INVALID`, `ROUE_VOWEL_PRICE_INVALID`, `ROUE_VOWEL_GAIN_INVALID`, `ROUE_BONUS_COUNT_INVALID`
-(hors 0 à 4, ou roue de plus de 64 cases).
+(hors 0 à 4, ou dépassement de 64 cases dû au seul BONUS) ; composition invalide autrement : `ROUE_WHEEL_INVALID` (§16).
 
 ### GameState ROUE — champs ajoutés (sans `omitempty`, jamais persistés)
 
@@ -1934,7 +1934,7 @@ dans `A E I O U Y` ; le calcul de `ROUE_CONSONANTS_LEFT` les ignore.
 ### Composition de la roue par question — v12.1.0 LOT-2 (#309)
 
 Contrat : `contracts/roue.md` §16. Règle unique : **champ présent = paramètre personnalisé pour cette question ; champ
-absent = le paramètre suit le réglage global** (`wheel` de `game-config.json`). Les 4 premiers champs sont des entiers
+absent = le paramètre suit le réglage global** (`wheel` de `game-config.json`). Les 5 champs sont des entiers
 nullables (`*int` côté Go) : `0` est une valeur personnalisée valable, distincte de « absent ».
 
 | Champ JSON | Type | Suit le global quand absent |

@@ -1265,7 +1265,7 @@ Une voyelle ne se propose pas comme une consonne : elle s'**achète** quand l'ac
 
 ### Voyelles achetables et case BONUS (v12.1.0)
 
-Réglages par question, dans l'éditeur de question Roue : la section « Voyelles », et le compteur de cases BONUS.
+Réglages par question, dans l'éditeur de question Roue : la section « Voyelles » et la section « 🎡 Roue — composition » (dont le nombre de cases BONUS).
 
 **Voyelles** (activées par défaut, y compris pour les questions déjà créées) :
 

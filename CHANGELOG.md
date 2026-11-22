@@ -2,9 +2,9 @@
 
 Historique des versions du projet BuzzControl.
 
-## [12.1.0] - YYYY-MM-DD — Roue de la Fortune : extensions (#147, #308)
+## [12.1.0] - YYYY-MM-DD — Roue de la Fortune : extensions (#147, #308, #309)
 
-Deux extensions de la Roue de la Fortune : l'achat de voyelles, et une case BONUS dont l'effet est géré par l'animateur.
+Extensions de la Roue de la Fortune : l'achat de voyelles, une case BONUS dont l'effet est géré par l'animateur, et la composition de la roue par question (#309).
 
 ### Added
 
@@ -13,11 +13,11 @@ Deux extensions de la Roue de la Fortune : l'achat de voyelles, et une case BONU
   consonne de la case tirée) ou « Les deux ». Nombre : « 1 voyelle » ou « Plusieurs voyelles », réglé séparément pour
   chaque moment. Gain d'une voyelle présente : « Sans gain », « Mise remboursée » ou « Prix × nombre de lettres ». Une
   voyelle absente fait perdre le tour. Activé par défaut, y compris pour les questions existantes.
-- **Case BONUS (#308)** — 0 à 4 cases BONUS par question (0 par défaut). Arrêt sur BONUS : bandeau « 🎁 BONUS ! » sur la
+- **Case BONUS (#308)** — 0 à 4 cases BONUS, réglées par défaut selon le réglage global (0) et personnalisables par question (#309). Arrêt sur BONUS : bandeau « 🎁 BONUS ! » sur la
   TV et les tablettes, son « bonne réponse » et comète LED ; l'équipe garde la main. Aucun gain n'est calculé par le
   système : le cadeau est géré par l'animateur, et des points éventuels passent par l'attribution manuelle.
-- **Éditeur de question Roue** — section « Voyelles » (interrupteur, moment, nombres, prix, gain, exemple) et compteur
-  de cases BONUS, avec aperçu de la roue.
+- **Éditeur de question Roue** — section « Voyelles » (interrupteur, moment, nombres, prix, gain, exemple) et section
+  « 🎡 Roue — composition » (Points maximum, Pas, Banqueroute, Perdu, BONUS), avec aperçu de la roue.
 - **Actions WebSocket** — `ROUE_BUY_VOWEL` (admin et animateur), 7 codes `ROUE_ERROR` ajoutés (`NOT_A_VOWEL`,
   `VOWELS_DISABLED`, `VOWEL_NOT_NOW`, `VOWEL_LIMIT_REACHED`, `INSUFFICIENT_BANK`, `LETTER_ALREADY_PROPOSED`,
   `NO_VOWEL_LEFT`). Événements `ROUE_LAST_EVENT` : `VOWEL_HIT`, `VOWEL_MISS`, `BONUS`.
