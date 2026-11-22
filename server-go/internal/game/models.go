@@ -414,7 +414,7 @@ type TypedContent struct {
 	RoueWheelStep          *int `json:"ROUE_WHEEL_STEP,omitempty"`
 	RoueWheelBankruptCount *int `json:"ROUE_WHEEL_BANKRUPT_COUNT,omitempty"`
 	RoueWheelLoseTurnCount *int `json:"ROUE_WHEEL_LOSE_TURN_COUNT,omitempty"`
-	RoueBonusCount   *int   `json:"ROUE_BONUS_COUNT,omitempty"`   // BONUS marks laid on points cases (v12.2.0 #316; v12.1.0 #308: added cases), 0 (absent) to 4
+	RoueBonusCount         *int `json:"ROUE_BONUS_COUNT,omitempty"` // BONUS marks laid on points cases (v12.2.0 #316; v12.1.0 #308: added cases), 0 (absent) to 4
 	// v12.2.0 #317 (contract §17.5): EPHEMERAL | PERMANENT, present = customised for this question, absent = global.
 	RoueBonusMode string `json:"ROUE_BONUS_MODE,omitempty"`
 }
@@ -1057,21 +1057,21 @@ type GameState struct {
 	RoueShowLetters      bool           `json:"ROUE_SHOW_LETTERS"`
 	RoueConsonantsLeft   bool           `json:"ROUE_CONSONANTS_LEFT"`
 	// v12.1.0 #147 (contracts/roue.md §15.1.2) — NO omitempty, copied from the question at START.
-	RoueBuyVowels    bool           `json:"ROUE_BUY_VOWELS"`
-	RoueVowelTiming  string         `json:"ROUE_VOWEL_TIMING"`
-	RoueVowelsBefore string         `json:"ROUE_VOWELS_BEFORE"`
-	RoueVowelsAfter  string         `json:"ROUE_VOWELS_AFTER"`
-	RoueVowelPrice   int            `json:"ROUE_VOWEL_PRICE"`
-	RoueVowelGain    string         `json:"ROUE_VOWEL_GAIN"`
-	RoueVowelsLeft   bool           `json:"ROUE_VOWELS_LEFT"`
-	RoueTurnVowel    bool           `json:"ROUE_TURN_VOWEL"`
-	RoueStopVowel    bool           `json:"ROUE_STOP_VOWEL"`
+	RoueBuyVowels    bool   `json:"ROUE_BUY_VOWELS"`
+	RoueVowelTiming  string `json:"ROUE_VOWEL_TIMING"`
+	RoueVowelsBefore string `json:"ROUE_VOWELS_BEFORE"`
+	RoueVowelsAfter  string `json:"ROUE_VOWELS_AFTER"`
+	RoueVowelPrice   int    `json:"ROUE_VOWEL_PRICE"`
+	RoueVowelGain    string `json:"ROUE_VOWEL_GAIN"`
+	RoueVowelsLeft   bool   `json:"ROUE_VOWELS_LEFT"`
+	RoueTurnVowel    bool   `json:"ROUE_TURN_VOWEL"`
+	RoueStopVowel    bool   `json:"ROUE_STOP_VOWEL"`
 	// v12.2.0 #317 (contract §17.5) — NO omitempty: effective BONUS mode of the round (EPHEMERAL | PERMANENT), "" out of round.
-	RoueBonusMode string `json:"ROUE_BONUS_MODE"`
-	RoueWheel        RoueWheel      `json:"ROUE_WHEEL"`
-	RoueLastEvent    RoueEvent      `json:"ROUE_LAST_EVENT"`
-	RoueWinner       string         `json:"ROUE_WINNER"`
-	RoueAwards       map[string]int `json:"ROUE_AWARDS"`
+	RoueBonusMode string         `json:"ROUE_BONUS_MODE"`
+	RoueWheel     RoueWheel      `json:"ROUE_WHEEL"`
+	RoueLastEvent RoueEvent      `json:"ROUE_LAST_EVENT"`
+	RoueWinner    string         `json:"ROUE_WINNER"`
+	RoueAwards    map[string]int `json:"ROUE_AWARDS"`
 
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero

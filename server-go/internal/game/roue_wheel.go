@@ -289,7 +289,7 @@ func RoueEffectiveParams(tc TypedContent, global RoueWheelParams) (p RoueWheelPa
 	np, _, nerr := NormalizeRoueWheelParams(eff)
 	if nerr != nil {
 		g.BonusCount = clampInt(g.BonusCount, 0, RoueMaxBonusFor(g))
-		if tc.RoueBonusMode != "" && ValidRoueBonusMode(tc.RoueBonusMode) {
+		if ValidRoueBonusMode(tc.RoueBonusMode) {
 			g.BonusMode = tc.RoueBonusMode
 		}
 		return g, true
