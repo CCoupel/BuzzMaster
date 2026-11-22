@@ -14,8 +14,9 @@ Extensions de la Roue de la Fortune : l'achat de voyelles, une case BONUS dont l
   chaque moment. Gain d'une voyelle présente : « Sans gain », « Mise remboursée » ou « Prix × nombre de lettres ». Une
   voyelle absente fait perdre le tour. Activé par défaut, y compris pour les questions existantes.
 - **Case BONUS (#308)** — 0 à 4 cases BONUS, réglées par défaut selon le réglage global (0) et personnalisables par
-  question (#309). Arrêt sur BONUS : bandeau « 🎁 BONUS ! » sur la TV et les tablettes, son « bonne réponse » et comète LED ; l'équipe garde la main. Aucun gain n'est calculé par le
-  système : le cadeau est géré par l'animateur, et des points éventuels passent par l'attribution manuelle.
+  question (#309). Arrêt sur BONUS : bandeau « 🎁 BONUS ! » sur la TV et les tablettes, son « bonne réponse » et
+  comète LED ; l'équipe garde la main. Aucun gain n'est calculé par le système : le cadeau est géré par l'animateur, et
+  des points éventuels passent par l'attribution manuelle.
 - **Éditeur de question Roue** — section « Voyelles » (interrupteur, moment, nombres, prix, gain, exemple) et section
   « 🎡 Roue — composition » (Points maximum, Pas, Banqueroute, Perdu, BONUS), avec aperçu de la roue.
 - **Actions WebSocket** — `ROUE_BUY_VOWEL` (admin et animateur), 7 codes `ROUE_ERROR` ajoutés (`NOT_A_VOWEL`,
@@ -61,7 +62,9 @@ Extensions de la Roue de la Fortune : l'achat de voyelles, une case BONUS dont l
 
 - Les questions de la v12.0.0 gardent leur déroulé, sauf l'achat de voyelles, activé par défaut « avant de tourner » :
   les équipes peuvent acheter une voyelle au début du tour. Pour garder le comportement v12.0.0, désactiver l'interrupteur de la question.
-- 0 case BONUS : roue identique à la v12.0.0.
+- 0 case BONUS : roue identique à la v12.0.0. Un nombre de BONUS global supérieur à 0 (carte « Roue » des Paramètres)
+  s'applique à toutes les questions sans BONUS personnalisé, y compris celles de la v12.0.0 : tant que le global reste à 0,
+  rien ne change.
 - Affichage TV et tablettes des questions v12.0.0 de 1 ou 2 lignes : la phrase est désormais centrée verticalement
   (1 ligne sur la ligne 2 ; 2 lignes sur les lignes 2 et 3). Aucune donnée ne change.
 

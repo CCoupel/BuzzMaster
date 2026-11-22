@@ -363,8 +363,9 @@ STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulem
 
 ### Achat de voyelles et case BONUS (v12.1.0, #147, #308)
 
-Contrat : `contracts/roue.md` §15. Les réglages sont par question ; sans réglage, la manche se joue comme en v12.0,
-**sauf l'achat de voyelles, activé par défaut** (moment « avant de tourner »).
+Contrat : `contracts/roue.md` §15. Les réglages de voyelles sont par question ; sans réglage, la manche se joue comme
+en v12.0, **sauf l'achat de voyelles, activé par défaut** (moment « avant de tourner »). Le nombre de cases BONUS suit le
+réglage global `wheel.bonus_count` (0 par défaut) tant qu'une question ne le personnalise pas (§16).
 
 **Achat avant de tourner** (`ROUE_VOWEL_TIMING` = `BEFORE` ou `BOTH`, étape 1) — la voyelle est payée, puis :
 
