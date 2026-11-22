@@ -187,7 +187,7 @@ beforeEach(() => {
   global.fetch = vi.fn(async (url, opts) => {
     calls.push([url, opts])
     if (url === '/api/roue/preview') return { ok: true, status: 200, json: async () => PREVIEW_OK }
-    if (url === '/game-config.json') return { ok: true, status: 200, json: async () => ({ wheel: { max_points: 100, step: 10, bankrupt_count: 1, lose_turn_count: 1 } }) }
+    if (url === '/game-config.json') return { ok: true, status: 200, json: async () => ({ wheel: { max_points: 100, step: 10, bankrupt_count: 1, lose_turn_count: 1, bonus_count: 0 } }) }
     if (url === '/api/roue/wheel-preview') return { ok: true, status: 200, json: async () => WHEEL_OK }
     return { ok: true, status: 200, json: async () => ({}) }
   })
@@ -197,36 +197,52 @@ const renderEditor = (values = {}) => {
   const utils = render(<RoueEditor values={{ ...baseValues, ...values }} onChange={onChange} onValidityChange={vi.fn()} />)
   return { onChange, ...utils }
 }
-const plus = () => screen.getByRole('button', { name: /Plus de cases BONUS/ })
-const minus = () => screen.getByRole('button', { name: /Moins de cases BONUS/ })
+// Modèle §16 (#309) : le BONUS est le 5ᵉ paramètre de composition — `null` / absent = suit le global, nombre = personnalisé (0 compris), saisie 0–4.
+const bonus = () => screen.getByTestId('roue-wparam-X')
+const bonusInput = () => bonus().querySelector('input')
+const bonusToggle = () => bonus().querySelector('button')
+const loaded2 = async () => { await waitFor(() => expect(bonusInput()).toBeTruthy(), { timeout: 2000 }); await waitFor(() => expect(calls.some(c => c[0] === '/game-config.json')).toBe(true)) }
+const loaded = async () => { await waitFor(() => expect(bonusInput().value).toBe('0'), { timeout: 2000 }); await waitFor(() => expect(calls.some(c => c[0] === '/game-config.json')).toBe(true)) }
 
-describe('RoueEditor — cases BONUS', () => {
-  it('critical — question v12.0 (champ absent) : 0 BONUS, « moins » grisé', () => {
+describe('RoueEditor — cases BONUS (modèle #309 : suit le global, ou personnalisé 0–4)', () => {
+  it('critical — question v12.0 (champ absent) : BONUS = global (0), lié, non modifiable', async () => {
     renderEditor()
-    expect(screen.getByText(/Cases BONUS/)).toBeTruthy()
-    expect(document.body.textContent).toMatch(/Cases BONUS\s*(−|-)?\s*0/)
-    expect(minus().disabled).toBe(true)
-    expect(plus().disabled).toBe(false)
+    await loaded()
+    expect(bonus().textContent).toMatch(/BONUS/)
+    expect(bonus().textContent).toMatch(/global/)
+    expect(bonus().textContent).not.toMatch(/personnalisé/)
+    expect(bonusInput().disabled).toBe(true)
   })
 
-  it('« plus » envoie onChange(roueBonusCount, n + 1) ; « moins » n - 1', () => {
-    const { onChange } = renderEditor({ roueBonusCount: 2 })
-    fireEvent.click(plus())
-    expect(onChange).toHaveBeenCalledWith('roueBonusCount', 3)
-    fireEvent.click(minus())
-    expect(onChange).toHaveBeenCalledWith('roueBonusCount', 1)
+  it('personnaliser (✏️) envoie le global comme départ ; saisie → onChange(roueBonusCount, n) ; 🔗 → null', async () => {
+    const { onChange } = renderEditor()
+    await loaded()
+    fireEvent.click(bonusToggle())
+    expect(onChange).toHaveBeenCalledWith('roueBonusCount', 0)
+    cleanup()
+    const r = renderEditor({ roueBonusCount: 2 })
+    await loaded2()
+    fireEvent.change(bonusInput(), { target: { value: '3' } })
+    expect(r.onChange).toHaveBeenCalledWith('roueBonusCount', 3)
+    fireEvent.click(bonusToggle())
+    expect(r.onChange).toHaveBeenCalledWith('roueBonusCount', null)
   })
 
-  it('borné à 0–4 : « plus » grisé à 4, « moins » grisé à 0', () => {
-    renderEditor({ roueBonusCount: 4 })
-    expect(plus().disabled).toBe(true)
-    expect(minus().disabled).toBe(false)
+  it('borné à 0–4 : la saisie est plafonnée à 4 et ne descend pas sous 0 ; attributs min / max', async () => {
+    const { onChange } = renderEditor({ roueBonusCount: 1 })
+    await loaded2()
+    expect(bonusInput().getAttribute('min')).toBe('0')
+    expect(bonusInput().getAttribute('max')).toBe('4')
+    fireEvent.change(bonusInput(), { target: { value: '9' } })
+    expect(onChange).toHaveBeenCalledWith('roueBonusCount', 4)
+    fireEvent.change(bonusInput(), { target: { value: '-3' } })
+    expect(onChange).toHaveBeenCalledWith('roueBonusCount', 0)
   })
 
-  it('aucun appel réseau d\'aperçu de la roue tant que le compteur est à 0 et intact', async () => {
+  it('l\'aperçu de la roue vient toujours du serveur et reçoit le BONUS effectif (global 0 si non personnalisé)', async () => {
     renderEditor()
-    await new Promise(r => setTimeout(r, 450))
-    expect(calls.filter(c => c[0] === '/api/roue/wheel-preview')).toHaveLength(0)
+    await waitFor(() => expect(calls.some(c => c[0] === '/api/roue/wheel-preview')).toBe(true), { timeout: 2000 })
+    expect(JSON.parse(calls.find(c => c[0] === '/api/roue/wheel-preview')[1].body).bonus_count).toBe(0)
   })
 
   it('compteur > 0 : l\'aperçu de la roue vient du serveur (wheel-preview avec bonus_count), sans copie de la règle', async () => {
@@ -240,7 +256,7 @@ describe('RoueEditor — cases BONUS', () => {
   it('refus du serveur (roue de plus de 64 cases) : message d\'erreur lisible, pas d\'exception', async () => {
     global.fetch = vi.fn(async (url) => {
       if (url === '/api/roue/preview') return { ok: true, status: 200, json: async () => PREVIEW_OK }
-      if (url === '/game-config.json') return { ok: true, status: 200, json: async () => ({ wheel: { max_points: 63, step: 1, bankrupt_count: 0, lose_turn_count: 0 } }) }
+      if (url === '/game-config.json') return { ok: true, status: 200, json: async () => ({ wheel: { max_points: 63, step: 1, bankrupt_count: 0, lose_turn_count: 0, bonus_count: 0 } }) }
       return { ok: false, status: 400, json: async () => ({ CODE: 'ROUE_BONUS_COUNT_INVALID', MESSAGE: '' }) }
     })
     renderEditor({ roueBonusCount: 4 })

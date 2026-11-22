@@ -44,7 +44,7 @@ beforeEach(() => {
   global.fetch = vi.fn(async (url) => {
     if (url === '/api/roue/preview') return { ok: true, status: 200, json: async () => PREVIEW_OK }
     if (url === '/questions') return { ok: true, status: 200, json: async () => ({ status: 'ok', warning: null }) }
-    if (url === '/game-config.json') return { ok: true, status: 200, json: async () => ({ wheel: { max_points: 100, step: 10, bankrupt_count: 1, lose_turn_count: 1 } }) }
+    if (url === '/game-config.json') return { ok: true, status: 200, json: async () => ({ wheel: { max_points: 100, step: 10, bankrupt_count: 1, lose_turn_count: 1, bonus_count: 0 } }) }
     if (url === '/api/roue/wheel-preview') return { ok: true, status: 200, json: async () => ({ COUNT: 12, SEGMENTS: [] }) }
     return { ok: true, status: 200, json: async () => ({}) }
   })
@@ -64,33 +64,38 @@ const postedForm = () => {
 }
 const fill = async () => {
   fireEvent.change(screen.getByLabelText(/Phrase à deviner/), { target: { value: 'Combien pour ce chien dans la vitrine' } })
+  await waitFor(() => expect(bonusInput().value).toBe('0'), { timeout: 2000 })
   await waitFor(() => expect(submitBtn().disabled).toBe(false), { timeout: 2000 })
 }
 
-describe('QuestionsPage — type ROUE : cases BONUS (#308)', () => {
-  it('critical — question neuve : roue_bonus_count = 0 envoyé (absent côté disque, jamais perdu)', async () => {
+const bonusToggle = () => screen.getByTestId('roue-wparam-X').querySelector('button')
+const bonusInput = () => screen.getByTestId('roue-wparam-X').querySelector('input')
+
+// Modèle §16 (#309) : champ vide = suit le global (retiré), valeur = personnalisé (0 compris).
+describe('QuestionsPage — type ROUE : cases BONUS (#308, modèle #309)', () => {
+  it('critical — question neuve : roue_bonus_count envoyé VIDE (suit le global, champ retiré côté disque)', async () => {
     openRoue()
     await fill()
     fireEvent.click(submitBtn())
     await waitFor(() => expect(postedForm()).not.toBeNull(), { timeout: 2000 })
-    expect(postedForm().get('roue_bonus_count')).toBe('0')
+    expect(postedForm().get('roue_bonus_count')).toBe('')
   })
 
-  it('le compteur choisi (« plus » ×3) est envoyé tel quel', async () => {
+  it('un BONUS personnalisé à 3 est envoyé tel quel', async () => {
     openRoue()
     await fill()
-    const plus = screen.getByRole('button', { name: /Plus de cases BONUS/ })
-    fireEvent.click(plus); fireEvent.click(plus); fireEvent.click(plus)
+    fireEvent.click(bonusToggle())
+    fireEvent.change(bonusInput(), { target: { value: '3' } })
     fireEvent.click(submitBtn())
     await waitFor(() => expect(postedForm()).not.toBeNull(), { timeout: 2000 })
     expect(postedForm().get('roue_bonus_count')).toBe('3')
   })
 
-  it('le compteur est plafonné à 4 dans le formulaire', async () => {
+  it('le BONUS est plafonné à 4 dans le formulaire', async () => {
     openRoue()
     await fill()
-    const plus = screen.getByRole('button', { name: /Plus de cases BONUS/ })
-    for (let i = 0; i < 7; i++) fireEvent.click(plus)
+    fireEvent.click(bonusToggle())
+    fireEvent.change(bonusInput(), { target: { value: '9' } })
     fireEvent.click(submitBtn())
     await waitFor(() => expect(postedForm()).not.toBeNull(), { timeout: 2000 })
     expect(postedForm().get('roue_bonus_count')).toBe('4')
@@ -100,11 +105,11 @@ describe('QuestionsPage — type ROUE : cases BONUS (#308)', () => {
     global.fetch = vi.fn(async (url) => {
       if (url === '/api/roue/preview') return { ok: true, status: 200, json: async () => PREVIEW_OK }
       if (url === '/questions') return { ok: false, status: 400, text: async () => 'ROUE_BONUS_COUNT_INVALID: trop de cases', json: async () => ({}) }
-      return { ok: true, status: 200, json: async () => ({ wheel: { max_points: 63, step: 1, bankrupt_count: 0, lose_turn_count: 0 }, COUNT: 0, SEGMENTS: [] }) }
+      if (url === '/game-config.json') return { ok: true, status: 200, json: async () => ({ wheel: { max_points: 63, step: 1, bankrupt_count: 0, lose_turn_count: 0, bonus_count: 0 } }) }
+      return { ok: true, status: 200, json: async () => ({ COUNT: 63, step: 1, SEGMENTS: [] }) }
     })
     openRoue()
     await fill()
-    fireEvent.click(screen.getByRole('button', { name: /Plus de cases BONUS/ }))
     fireEvent.click(submitBtn())
     await waitFor(() => expect(document.body.textContent).toMatch(/invalide|trop de cases/i), { timeout: 2000 })
   })
