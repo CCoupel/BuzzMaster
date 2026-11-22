@@ -1,0 +1,84 @@
+<!--
+mockup:
+  composant: game_state_roue
+  feature: bonus_on_value
+  version: 12.2.0
+  type: conception
+  issue: "#316 #317"
+  validee_le: 2026-11-22
+  proposition_retenue: "B — Horizontal · Couloirs Serveur / Écrans / Roue"
+  complete: ["v12.1.0/conception/game_state_roue__vowels_bonus.html", "v12.0.0/conception/game_state_roue__subphases.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+<title>LOT-1 · v12.2.0 — Roue : arrêt sur BONUS (conception, version retenue)</title>
+<style>
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#f8fafc; color:#0f172a; border-top:6px solid #2f6fed; }
+.tabs { display:flex; gap:1.2rem; padding:.6rem 1rem; flex-wrap:wrap; background:#0f172a; align-items:center; }
+.tabs .g { display:flex; gap:.3rem; align-items:center; color:#94a3b8; font-size:.75rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+.tabs button { font:inherit; font-size:.82rem; text-transform:none; letter-spacing:0; font-weight:700; padding:.4rem .8rem; border-radius:.4rem; border:1px solid #334155; background:#1e293b; color:#cbd5e1; cursor:pointer; }
+.tabs button.on { background:#2f6fed; color:#fff; border-color:#2f6fed; }
+.pitch { max-width:1180px; margin:.8rem auto; padding:.5rem 1rem; font-size:.85rem; background:#fff; border-left:4px solid #2f6fed; border-radius:.3rem; }
+.note { max-width:1180px; margin:.4rem auto; padding:0 1rem; font-size:.8rem; color:#475569; line-height:1.45; }
+main.one { display:block; max-width:1180px; margin:0 auto 2rem; padding:0 1rem; }
+svg { width:100%; height:auto; background:#fff; border:1px solid #e2e8f0; border-radius:.6rem; }
+svg text { font-family:inherit; }
+.st rect, rect.st { fill:#e0e7ff; stroke:#4f46e5; stroke-width:1.5; }
+.ev rect, rect.ev { fill:#fef3c7; stroke:#f59e0b; stroke-width:1.5; }
+.bad rect, rect.bad { fill:#fee2e2; stroke:#ef4444; stroke-width:1.5; }
+.old rect, rect.old { fill:#f1f5f9; stroke:#94a3b8; stroke-width:1.2; stroke-dasharray:5 4; }
+.dec polygon, polygon.dec { fill:#fff; stroke:#0f172a; stroke-width:1.5; }
+.t { font-size:13px; font-weight:700; fill:#0f172a; } .s { font-size:11px; fill:#475569; } .o { font-size:11px; fill:#94a3b8; text-decoration:line-through; }
+.lane { fill:#f8fafc; stroke:#e2e8f0; } .lt { font-size:12px; font-weight:800; fill:#64748b; text-transform:uppercase; letter-spacing:.06em; }
+path.a { fill:none; stroke:#334155; stroke-width:1.6; marker-end:url(#ar); } path.a.x { stroke:#94a3b8; stroke-dasharray:5 4; marker-end:url(#arx); }
+path.a.g { stroke:#d97706; marker-end:url(#arg); }
+.legend { font-size:.78rem; color:#475569; display:flex; gap:1rem; flex-wrap:wrap; margin:.5rem 0; } .legend span::before { content:''; display:inline-block; width:.9rem; height:.7rem; margin-right:.3rem; border-radius:.15rem; vertical-align:middle; }
+.l1::before { background:#e0e7ff; border:1px solid #4f46e5; } .l2::before { background:#fef3c7; border:1px solid #f59e0b; } .l3::before { background:#fee2e2; border:1px solid #ef4444; } .l4::before { background:#f1f5f9; border:1px dashed #94a3b8; }
+</style>
+</head>
+<body>
+<div class="pitch" id="pitch"></div>
+<div class="note">Seul change le <b>freinage terminé</b> sur une case à points <b>marquée 🎁</b> (#316) et la <b>consommation</b> de la marque en mode éphémère (#317). Les autres sous-phases (montée, pleine vitesse, achat de voyelles, retournement, réponse, fin de tour) sont celles des maquettes v12.0.0 / v12.1.0, inchangées. En pointillé gris : le chemin v12.1.0 supprimé (BONUS → nouveau tour, relance de la roue).</div>
+<div class="note legend"><span class="l1">sous-phase</span><span class="l2">événement / effet BONUS</span><span class="l3">fin de tour</span><span class="l4">supprimé (v12.1.0)</span></div>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#334155"/></marker>
+  <marker id="arx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#94a3b8"/></marker>
+  <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#d97706"/></marker>
+</defs></svg>
+
+<main class="one">
+<svg viewBox="0 0 1160 470">
+  <rect class="lane" x="0" y="0" width="1160" height="150"/><text class="lt" x="12" y="20">Serveur (moteur)</text>
+  <rect class="lane" x="0" y="155" width="1160" height="150" style="fill:#fff"/><text class="lt" x="12" y="175">Écrans (TV · tablettes · anim · admin)</text>
+  <rect class="lane" x="0" y="310" width="1160" height="160"/><text class="lt" x="12" y="330">Roue (ROUE_WHEEL.SEGMENTS)</text>
+  <g class="st"><rect x="30" y="45" width="140" height="56" rx="10"/><text class="t" x="100" y="70" text-anchor="middle">STOPPING</text><text class="s" x="100" y="87" text-anchor="middle">freinage terminé</text></g>
+  <g class="ev"><rect x="230" y="40" width="190" height="66" rx="10"/><text class="t" x="325" y="63" text-anchor="middle">case 800 + 🎁</text><text class="s" x="325" y="80" text-anchor="middle">événement BONUS (VALUE 800)</text><text class="s" x="325" y="95" text-anchor="middle">notice BONUS → son + comète</text></g>
+  <path class="a" d="M170,73 H228"/>
+  <g class="st"><rect x="480" y="45" width="150" height="56" rx="10"/><text class="t" x="555" y="70" text-anchor="middle">LETTER</text><text class="s" x="555" y="87" text-anchor="middle">consonne à 800</text></g>
+  <path class="a" d="M420,73 H478"/>
+  <g class="ev"><rect x="690" y="40" width="220" height="66" rx="10"/><text class="t" x="800" y="63" text-anchor="middle">lettre / voyelle choisie</text><text class="s" x="800" y="80" text-anchor="middle">⏳ BONUS = false (même action)</text><text class="s" x="800" y="95" text-anchor="middle">♾ rien</text></g>
+  <path class="a" d="M630,73 H688"/>
+  <g class="st"><rect x="970" y="45" width="170" height="56" rx="10"/><text class="t" x="1055" y="70" text-anchor="middle">LIT → REVEALING</text><text class="s" x="1055" y="87" text-anchor="middle">→ ANSWER (inchangé)</text></g>
+  <path class="a" d="M910,73 H968"/>
+  <g class="ev"><rect x="230" y="195" width="400" height="70" rx="10"/><text class="t" x="430" y="218" text-anchor="middle">Bandeau doré « 🎁 BONUS ! — case 800 »</text><text class="s" x="430" y="236" text-anchor="middle">tant que ROUE_LAST_EVENT.KIND = BONUS</text><text class="s" x="430" y="251" text-anchor="middle">annonce : « proposez une consonne »</text></g>
+  <path class="a g" d="M325,106 V193"/>
+  <g class="ev"><rect x="690" y="195" width="220" height="70" rx="10"/><text class="t" x="800" y="218" text-anchor="middle">bandeau retiré</text><text class="s" x="800" y="236" text-anchor="middle">⏳ la case dorée redevient normale (fondu)</text><text class="s" x="800" y="251" text-anchor="middle">♾ marque visible</text></g>
+  <path class="a g" d="M800,106 V193"/>
+  <g class="ev"><rect x="230" y="350" width="400" height="80" rx="10" style="fill:#fff"/><text class="t" x="430" y="373" text-anchor="middle">22 cases · BONUS sur 800 et 350</text><text class="s" x="430" y="391" text-anchor="middle">posés au hasard au START, jamais voisins d'une case spéciale</text><text class="s" x="430" y="407" text-anchor="middle">BANQUEROUTE / PERDU à leur place fixe</text></g>
+  <g class="ev"><rect x="690" y="350" width="220" height="80" rx="10" style="fill:#fff"/><text class="t" x="800" y="373" text-anchor="middle">⏳ 800 redevient normale</text><text class="s" x="800" y="391" text-anchor="middle">jusqu'à la fin de la manche</text><text class="s" x="800" y="407" text-anchor="middle">♾ 800 + 🎁 reste</text></g>
+  <path class="a g" d="M800,265 V348"/>
+  <g class="old"><rect x="970" y="350" width="170" height="80" rx="10"/><text class="t" x="1055" y="375" text-anchor="middle" style="fill:#94a3b8">v12.1 : case BONUS</text><text class="o" x="1055" y="393" text-anchor="middle">ajoutée à la roue (24)</text><text class="o" x="1055" y="409" text-anchor="middle">→ TURN, relance</text></g>
+</svg>
+</main>
+
+<script>
+document.getElementById("pitch").innerHTML = "<b>Version retenue — B : couloirs Serveur / Écrans / Roue</b> (choix utilisateur du 2026-11-22). Trois couloirs alignés dans le temps : ce que fait le moteur, ce que voient les écrans, l'état des cases de la roue. BANQUEROUTE et PERDU ne bougent jamais ; les BONUS sont tirés au départ de la manche.";
+</script>
+</body>
+</html>

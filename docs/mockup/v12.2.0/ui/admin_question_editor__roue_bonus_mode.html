@@ -1,0 +1,182 @@
+<!--
+mockup:
+  composant: admin_question_editor
+  feature: roue_bonus_mode
+  version: 12.2.0
+  type: ui
+  issue: "#316 #317"
+  validee_le: 2026-11-22
+  proposition_retenue: "B — Option du compteur BONUS"
+  complete: ["v12.1.0/ui/admin_question_editor__roue_wheel_fields.html", "v12.1.0/ui/admin_settings__wheel_bonus.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+<title>LOT-1 · v12.2.0 — Éditeur et Paramètres Roue : BONUS éphémère (version retenue)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --cust:#c2410c; --custbg:#fff7ed; --info:#0369a1; --infobg:#e0f2fe; --gold:#f59e0b; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); border-top:6px solid #2f6fed; }
+.tabs { display:flex; gap:.4rem; padding:.6rem 1rem 0; flex-wrap:wrap; background:#111827; }
+.tabs button { font:inherit; font-size:.85rem; font-weight:700; padding:.45rem .9rem; border-radius:.5rem .5rem 0 0; border:1px solid #374151; border-bottom:0; background:#1f2937; color:#cbd5e1; cursor:pointer; }
+.tabs button.on { background:#2f6fed; color:#fff; border-color:#2f6fed; }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; border-top:1px solid #1f2937; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:var(--primary); border-color:#818cf8; }
+.pitch { max-width:920px; margin:.6rem auto; padding:.5rem 1rem; font-size:.85rem; background:#fff; border-left:4px solid #2f6fed; border-radius:.3rem; }
+.mock-note { max-width:920px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); }
+.form { max-width:920px; margin:0 auto 1rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.form > h2 { margin:0 0 .6rem; font-size:1rem; } .form > h2 small { font-weight:500; color:var(--gray-500); font-size:.78rem; }
+.folded { border:1px dashed var(--gray-300); border-radius:.5rem; padding:.5rem .8rem; margin-bottom:.6rem; color:var(--gray-500); font-size:.82rem; display:flex; justify-content:space-between; } .folded b { color:var(--gray-700); }
+.sec { border-top:1px solid var(--gray-200); padding-top:.9rem; margin-top:.6rem; } .sec h3 { margin:0 0 .3rem; font-size:.95rem; }
+.hint { font-size:.76rem; color:var(--gray-500); margin:.3rem 0 0; }
+.groups { display:grid; grid-template-columns:1fr 1.7fr; gap:.8rem; margin-top:.6rem; } @media (max-width:720px) { .groups { grid-template-columns:1fr; } }
+fieldset { border:1px solid var(--gray-200); border-radius:.6rem; padding:.6rem; margin:0; } legend { font-weight:800; font-size:.82rem; padding:0 .3rem; }
+.row2 { display:grid; grid-template-columns:repeat(2, 1fr); gap:.6rem; } .row3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:.6rem; } .row4 { display:grid; grid-template-columns:repeat(4, 1fr); gap:.5rem; }
+.param label { display:flex; justify-content:space-between; align-items:center; gap:.3rem; font-weight:700; font-size:.8rem; margin-bottom:.2rem; }
+.param .tag { font-size:.64rem; font-weight:800; border-radius:999px; padding:.05rem .45rem; background:var(--gray-100); color:var(--gray-500); white-space:nowrap; }
+.param.c .tag { background:var(--cust); color:#fff; }
+input[type=number] { font:inherit; font-size:.9rem; padding:.4rem .5rem; border:1px solid var(--gray-300); border-radius:.4rem; width:100%; color:var(--gray-500); min-width:0; }
+.param.c input[type=number] { border:2px solid var(--cust); color:var(--gray-900); font-weight:700; background:var(--custbg); }
+input[disabled] { background:var(--gray-100); }
+.param small { display:block; color:var(--gray-500); font-size:.7rem; margin-top:.15rem; }
+.lock { display:flex; gap:.3rem; align-items:center; } .lock > :first-child { flex:1; min-width:0; }
+.lock button.k { font:inherit; font-size:.9rem; border:1px solid var(--gray-300); background:#fff; border-radius:.4rem; padding:.3rem .45rem; cursor:pointer; }
+.param.c .lock button.k { border-color:var(--cust); }
+.seg { display:flex; border:1px solid var(--gray-300); border-radius:.4rem; overflow:hidden; }
+.seg button { flex:1; font:inherit; font-size:.76rem; font-weight:700; padding:.42rem .3rem; border:0; background:#fff; color:var(--gray-500); cursor:pointer; white-space:nowrap; }
+.seg button.on { background:var(--gray-200); color:var(--gray-900); } .seg.dis button { cursor:default; }
+.param.c .seg { border:2px solid var(--cust); } .param.c .seg button.on { background:var(--cust); color:#fff; }
+.sw { display:flex; align-items:center; gap:.4rem; font-size:.76rem; margin-top:.35rem; color:var(--gray-700); }
+.sw .t { width:2.1rem; height:1.15rem; border-radius:999px; background:var(--gray-300); position:relative; flex:0 0 auto; cursor:pointer; }
+.sw .t::after { content:''; position:absolute; top:.13rem; left:.13rem; width:.9rem; height:.9rem; border-radius:50%; background:#fff; transition:left .15s; }
+.sw .t.on { background:var(--gold); } .sw .t.on::after { left:1.07rem; } .sw.c .t.on { background:var(--cust); }
+.sw .mini-k { font-size:.75rem; border:1px solid var(--gray-300); background:#fff; border-radius:.3rem; padding:.05rem .3rem; cursor:pointer; }
+.choice { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-top:.4rem; }
+.choice label { border:1px solid var(--gray-300); border-radius:.5rem; padding:.5rem .6rem; font-size:.8rem; cursor:pointer; display:flex; gap:.45rem; align-items:flex-start; background:#fff; }
+.choice label.on { border:2px solid var(--gray-700); background:var(--gray-50); } .c .choice label.on { border-color:var(--cust); background:var(--custbg); }
+.choice label b { display:block; } .choice label span { color:var(--gray-500); font-size:.72rem; }
+.choice.dis label { cursor:default; opacity:.85; }
+.wide { margin-top:.7rem; }
+.wide .head { display:flex; justify-content:space-between; align-items:center; font-weight:800; font-size:.82rem; }
+.status { margin-top:.6rem; font-size:.82rem; border-radius:.5rem; padding:.45rem .7rem; background:var(--gray-50); border:1px solid var(--gray-200); } .status b.c { color:var(--cust); }
+.fix { background:var(--infobg); color:var(--info); border-radius:.4rem; padding:.35rem .6rem; font-size:.78rem; margin:.4rem 0; }
+.err { background:#fee2e2; color:#b91c1c; border-radius:.4rem; padding:.35rem .6rem; font-size:.78rem; margin:.4rem 0; }
+.summary { font-size:.8rem; color:var(--gray-700); margin-top:.5rem; display:flex; justify-content:space-between; align-items:center; gap:.5rem; }
+.btn { font:inherit; font-size:.76rem; font-weight:600; padding:.3rem .6rem; border-radius:.45rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); cursor:pointer; white-space:nowrap; }
+.strip { display:flex; gap:2px; overflow:hidden; border-radius:.4rem; margin-top:.4rem; }
+.strip span { position:relative; flex:1 0 1.9rem; height:2.5rem; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:.62rem; font-weight:800; line-height:1.1; }
+.strip span.s { background:#111827; color:#fff; }
+.strip span.x { background:linear-gradient(180deg,#fbbf24,#f59e0b) !important; padding-top:.6rem; font-size:.9rem; } /* logo seul, sans montant (valeur au survol) */
+.strip span.x::before { content:''; position:absolute; top:0; left:0; right:0; height:.45rem; background:linear-gradient(90deg,#b45309,#fde047,#b45309); font-size:.55rem; text-align:center; line-height:.8rem; }
+.save { margin-top:1rem; display:flex; justify-content:flex-end; } .save button { font:inherit; font-weight:700; background:var(--primary); color:#fff; border:0; border-radius:.5rem; padding:.6rem 1.2rem; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Exemple :</strong><span class="grp" id="states">
+  <button data-s="new" class="on">Nouvelle question (tout global)</button><button data-s="perm">BONUS 2, permanent pour cette question</button><button data-s="many">Trop de BONUS (pas 100 : 2 au plus → refus)</button><button data-s="legacy">Question v12.1 (BONUS : 2)</button><button data-s="zero">Aucun BONUS</button></span>
+  <span style="color:#9ca3af">— 🔗 / ✏️, compteurs et choix sont actifs</span></div>
+<div class="pitch" id="pitch"></div>
+<div class="mock-note">Éditeur de question, type <b>Roue</b>, section <b>🎡 Roue — composition</b> (pattern 🔗 global / ✏️ personnalisé de v12.1.0 conservé) <b>et</b> carte <b>Roue</b> des Paramètres, qui porte le même réglage en défaut global. Nouveauté #317 : le <b>mode du BONUS</b> — <b>⏳ éphémère</b> (défaut : une fois tiré, il disparaît de la roue jusqu'à la fin de la manche) ou <b>♾ permanent</b>. Nouveauté #316 : les BONUS sont <b>posés sur des cases à points</b> — le nombre de cases ne change plus, l'aperçu montre <b>un tirage</b> (« 🎲 Autre tirage » en montre un autre ; les emplacements sont retirés au hasard à chaque manche). Banqueroute et Perdu ne bougent jamais ; les BONUS se placent dans les intervalles libres, sans jamais toucher une case spéciale, d'où le maximum affiché. Globaux de l'exemple : 1000 · pas 50 · 2 Banqueroute · 1 Perdu · 0 BONUS · éphémère.</div>
+<main id="main"></main>
+<script>
+const PITCH = "<b>Version retenue — B : option du compteur BONUS</b> (choix utilisateur du 2026-11-22). Le mode est un interrupteur « une seule fois par manche » sous le compteur 🎁 BONUS (allumé = ⏳ éphémère, éteint = ♾ permanent), avec son propre 🔗 / ✏️ dans l'éditeur ; il se grise quand le nombre de BONUS vaut 0. Même contrôle sur la carte Roue des Paramètres (défaut global : éphémère).";
+const G = { max:1000, step:50, B:2, P:1, X:0, M:"EPHEMERAL" };
+const PRESETS = { new:{}, perm:{ X:2, M:"PERMANENT" }, many:{ step:100, X:4 }, legacy:{ X:2 }, zero:{ X:0 } };
+const st = { s:"new", draw:0 };
+let q = {};
+const KEYS = ["max","step","B","P","X","M"];
+const LAB = { max:["Points maximum","meilleure case"], step:["Pas","écart et plus petite valeur"], B:["💸 Banqueroute","vident la cagnotte"], P:["⏭ Perdu","font passer le tour"], X:["🎁 BONUS","posés sur des cases à points"], M:["⏳ Mode du BONUS","une fois tiré"] };
+const eff = () => { const e = {}; KEYS.forEach(k => e[k] = k in q ? q[k] : G[k]); return e; };
+const cust = k => k in q; const val = k => cust(k) ? q[k] : G[k];
+// ---- Construction (règle roue.md §10.1 + §17.2, aléa à graine pour l'aperçu) ----
+function rng(seed) { let x = seed * 9301 + 49297; return n => { x = (x * 9301 + 49297) % 233280; return Math.floor(x / 233280 * n); }; }
+function build(max, step, B, P, X, seed) {
+  const values = []; for (let v = max; v >= step; v -= step) { if (P >= 1 && max % 2 === 0 && v === max / 2) continue; values.push(v); }
+  const list = values.slice(); if (B >= 1) list.push(0);
+  let seq = []; for (let lo = 0, hi = list.length - 1, f = true; lo <= hi; f = !f) seq.push(f ? list[lo++] : list[hi--]);
+  if (B >= 1) seq = seq.filter(v => v !== 0);
+  const V = values.length, N = V + B + P, K0 = B + P;
+  if (N > 64) return { err:`la roue aurait ${N} cases, la limite est de 64` };
+  // BANQUEROUTE / PERDU : §10.1 inchangé
+  const kinds = []; let rB = B, rP = P; if (rB > 0) { kinds.push("b"); rB--; } while (rB > 0 || rP > 0) { if (rP > 0) { kinds.push("p"); rP--; } if (rB > 0) { kinds.push("b"); rB--; } }
+  const pos = {}; const taken = new Array(N).fill(false); taken[0] = true;
+  kinds.forEach((k, j) => { let i = B >= 1 ? (j === 0 ? 1 : Math.floor(j * N / K0)) : Math.floor((2 * j + 1) * N / (2 * K0)); i %= N; while (i === 0 || taken[i]) i = (i + 1) % N; taken[i] = true; pos[i] = k; });
+  const segs = []; let si = 0; for (let i = 0; i < N; i++) segs.push(pos[i] || seq[si++]);
+  // Intervalles entre BANQUEROUTE / PERDU, capacité ⌊(g − 1) / 2⌋ ; BONUS au plus = min(4, place libre, espacement) — §17.3
+  const sp = Object.keys(pos).map(Number).sort((a, b) => a - b), gaps = [];
+  sp.forEach((a, k) => { const b = k + 1 < sp.length ? sp[k + 1] : sp[0] + N; const g = []; for (let i = a + 1; i < b; i++) g.push(i % N); gaps.push(g); });
+  const room = sp.length ? gaps.reduce((t, g) => t + Math.max(0, Math.floor((g.length - 1) / 2)), 0) : Math.floor(N / 2);
+  const maxX = Math.max(0, Math.min(4, room, Math.floor((V - K0) / 2)));
+  if (X > maxX) return { bonusErr:`Trop de BONUS : ${maxX} au plus pour cette roue (un BONUS ne touche jamais une Banqueroute, un Perdu ni un autre BONUS).`, N, maxX };
+  const r = rng(seed + 1), bonus = new Set(); let left = X, gs = gaps;
+  if (!sp.length && left > 0) { const f = r(N); bonus.add(f); left--; const g = []; for (let i = 1; i < N; i++) g.push((f + i) % N); gs = [g]; }
+  const alloc = gs.map(() => 0), cap = g => Math.max(0, Math.floor((g.length - 1) / 2));
+  for (let n = 0; n < left; n++) { const c = gs.map((g, i) => i).filter(i => alloc[i] < cap(gs[i])); const best = Math.max(...c.map(i => gs[i].length / (alloc[i] + 1))); const t = c.filter(i => gs[i].length / (alloc[i] + 1) === best); alloc[t[r(t.length)]]++; }
+  gs.forEach((g, i) => { const b = alloc[i]; if (!b) return; let s = g.length - (2 * b + 1); let p = 1; for (let k = 0; k < b; k++) { const room2 = s; const take = room2 > 0 ? r(room2 + 1) : 0; s -= take; p += take + 1; bonus.add(g[p - 1]); p += 1; } });
+  return { segs, bonus, N, maxX };
+}
+const PAL = ["#fca5a5","#93c5fd","#86efac","#fde68a","#d8b4fe","#fdba74"];
+function strip(w) { let k = 0; return `<div class="strip">${w.segs.map((s, i) => s === "b" ? `<span class="s">💸<small>BANQUE</small></span>` : s === "p" ? `<span class="s">⏭<small>PERDU</small></span>` : (w.bonus.has(i) ? `<span class="x" title="${s}, BONUS" aria-label="${s}, BONUS" style="--pal:${PAL[k++ % 6]}">🎁</span>` : `<span style="background:${PAL[k++ % 6]}">${s}</span>`)).join("")}</div>`; }
+function preview(e) {
+  const w = build(e.max, e.step, e.B, e.P, e.X, st.draw);
+  if (w.err) return `<div class="err">✗ Roue refusée : ${w.err}.</div>`;
+  if (w.bonusErr) return `<div class="err">✗ ${w.bonusErr} La question ne peut pas être enregistrée.</div>`;
+  const vals = w.segs.filter(x => typeof x === "number");
+  const mode = e.X ? (e.M === "EPHEMERAL" ? " · ⏳ éphémère" : " · ♾ permanent") : "";
+  return `<div class="summary"><span><b>${w.N} cases</b> : ${vals.length} cases à points de ${Math.min(...vals)} à ${Math.max(...vals)} · ${e.B} Banqueroute · ${e.P} Perdu · <b>${e.X} BONUS</b> (${w.maxX} au plus)${mode}</span>${e.X ? `<button class="btn" data-draw="1">🎲 Autre tirage</button>` : ""}</div>${strip(w)}<p class="hint">${e.X ? "Exemple de tirage (une case BONUS n'affiche que 🎁 ; son montant au survol) : les 🎁 changent de case à chaque manche, jamais à côté d'une Banqueroute, d'un Perdu ou d'un autre BONUS. " : ""}Aperçu calculé par le serveur.</p>`;
+}
+// ---- Champs ----
+function numParam(k, scope) {
+  const c = scope === "q" && cust(k), v = scope === "q" ? val(k) : G[k];
+  const lock = scope === "q" ? `<button class="k" data-toggle="${k}" title="${c ? "Revenir au global" : "Personnaliser"}">${c ? "🔗" : "✏️"}</button>` : "";
+  const tag = scope === "q" ? `<span class="tag">${c ? "personnalisé" : "🔗 global"}</span>` : "";
+  const sub = scope === "q" && c ? `global : ${G[k]} — 🔗 pour y revenir` : LAB[k][1];
+  return `<div class="param ${c ? "c" : ""}"><label>${LAB[k][0]} ${tag}</label><div class="lock"><input type="number" data-f="${k}" value="${v}" ${scope === "q" && !c ? "disabled" : ""}>${lock}</div><small>${sub}</small></div>`;
+}
+const modeTxt = m => m === "EPHEMERAL" ? "⏳ Éphémère" : "♾ Permanent";
+function bonusB(scope) {
+  const base = numParam("X", scope);
+  const c = scope === "q" && cust("M"), m = scope === "q" ? val("M") : G.M, x = scope === "q" ? eff().X : G.X, dis = scope === "q" && !c;
+  const lock = scope === "q" ? `<button class="mini-k" data-toggle="M">${c ? "🔗" : "✏️"}</button>` : "";
+  return base.replace(/<\/div>$/, `<div class="sw ${c ? "c" : ""}" style="${x ? "" : "opacity:.45"}"><span class="t ${m === "EPHEMERAL" ? "on" : ""}" data-flip="${dis ? "" : "1"}"></span>une seule fois par manche ${lock}<span class="tag" style="font-size:.6rem">${scope === "q" ? (c ? "personnalisé" : "global") : ""}</span></div></div>`);
+}
+function groups(p, scope) {
+  const n = k => numParam(k, scope);
+  return `<div class="groups"><fieldset><legend>Points</legend><div class="row2">${n("max")}${n("step")}</div></fieldset><fieldset><legend>Cases spéciales</legend><div class="row3">${n("B")}${n("P")}${bonusB(scope)}</div></fieldset></div>`;
+}
+function status() {
+  const c = KEYS.filter(k => k in q).map(k => k === "M" ? "mode du BONUS" : LAB[k][0].replace(/^\S+ /, ""));
+  const legacy = st.s === "legacy" ? `<div class="fix">ℹ Question créée en v12.1 : ses <b>2 BONUS</b> sont désormais <b>posés sur des cases à points</b> — sa roue passe de 24 à <b>22 cases</b>. Le mode suit les Paramètres (éphémère).</div>` : "";
+  return legacy + `<div class="status">${c.length ? `Personnalisé pour cette question : <b class="c">${c.join(", ")}</b> — le reste suit les Paramètres.` : "Tous les paramètres suivent les Paramètres (roue globale)."}</div>`;
+}
+function editor(p) {
+  return `<div class="form"><h2>Éditeur de question <small>— type Roue</small></h2><div class="folded"><span><b>Phrase, présentation, mode, gains, forme de la roue, lettres proposées</b> — inchangés</span><span>▸</span></div><div class="folded"><span><b>🔤 Voyelles</b> — inchangé</span><span>▸</span></div>
+    <div class="sec"><h3>🎡 Roue — composition</h3><p class="hint">Valeurs des Paramètres par défaut ; personnalisez seulement ce qui change pour cette question. Les durées de la roue restent celles des Paramètres.</p>${groups(p, "q")}${status()}${preview(eff())}</div><div class="save"><button>Enregistrer</button></div></div>`;
+}
+function settings(p) {
+  return `<div class="form"><h2>Paramètres › 🎡 Roue <small>— réglages par défaut des questions ROUE ; chaque question peut en personnaliser un ou plusieurs</small></h2>${groups(p, "g")}<div class="folded" style="margin-top:.7rem"><span><b>Durées (vitesse, durée maximale, freinage) et bouton « Tester »</b> — inchangés</span><span>▸</span></div>${preview(G)}<div class="save"><button class="btn" style="margin-right:.5rem">Roue par défaut</button><button>Enregistrer</button></div></div>`;
+}
+function render() {
+  document.getElementById("main").innerHTML = editor("B") + settings("B");
+  document.getElementById("pitch").innerHTML = PITCH;
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", b.dataset.s === st.s));
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-toggle],[data-mode],[data-flip],[data-draw],#states button"); if (!t) return;
+  if (t.dataset.s) { st.s = t.dataset.s; q = { ...PRESETS[st.s] }; render(); return; }
+  if (t.dataset.draw) { st.draw++; render(); return; }
+  if (t.dataset.toggle) { const k = t.dataset.toggle; if (k in q) delete q[k]; else q[k] = G[k]; render(); return; }
+  if (t.dataset.mode) { if (t.closest(".form") === document.querySelector("#main .form")) q.M = t.dataset.mode; else G.M = t.dataset.mode; render(); return; }
+  if (t.dataset.flip) { const inEditor = t.closest(".form") === document.querySelector("#main .form"); const cur = inEditor ? val("M") : G.M; const nv = cur === "EPHEMERAL" ? "PERMANENT" : "EPHEMERAL"; if (inEditor) q.M = nv; else G.M = nv; render(); }
+});
+document.addEventListener("change", e => { const t = e.target; if (t.dataset && t.dataset.f) { const k = t.dataset.f; let v = Math.max(0, parseInt(t.value || "0", 10)); if (k === "X") v = Math.min(4, v); if (t.closest(".form") === document.querySelector("#main .form")) q[k] = v; else G[k] = v; render(); } });
+render();
+</script>
+</body>
+</html>
