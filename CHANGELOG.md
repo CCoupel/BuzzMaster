@@ -47,6 +47,9 @@ Deux extensions de la Roue de la Fortune : l'achat de voyelles, et une case BONU
 - **Annonce de retournement d'une consonne (TV et tablette)** — l'annonce affichait « × 0 = +0 » depuis la v12.0.0. Seul
   l'affichage était faux : les points crédités étaient corrects. L'annonce affiche maintenant la valeur de la case et le
   gain réel du tour.
+- **Annonce à l'étape 6 (TV et tablette, #315)** — après le retournement d'une consonne, les points gagnés (par exemple
+  « R : 3 × 500 = +1 500 ») restent affichés ; « Une réponse ? À voix haute » s'affiche en dessous. Auparavant, ce texte
+  remplaçait les points.
 
 ### Compatibilité
 
