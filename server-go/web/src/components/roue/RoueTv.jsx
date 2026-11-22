@@ -20,9 +20,9 @@ const reducedMotion = () => { try { return !!window.matchMedia?.('(prefers-reduc
 
 /**
  * Bandeau « 🎁 BONUS ! case 800 » (v12.2.0, #316/#317). Retiré au choix de la lettre ; maintenu monté pendant le fondu
- * de 600 ms de la case (BONUS éphémère, même durée que la roue) sauf `prefers-reduced-motion`.
+ * de 600 ms de la case (BONUS éphémère seulement, même durée que la roue) ; sans fondu en permanent et en `prefers-reduced-motion`.
  */
-export function BonusBanner({ on, value }) {
+export function BonusBanner({ on, value, fade = true }) {
   const [fading, setFading] = useState(false)
   const last = useRef({ value: 0, was: false })
   if (on) last.current = { value, was: true }
@@ -30,11 +30,11 @@ export function BonusBanner({ on, value }) {
     if (on) { setFading(false); return undefined }
     if (!last.current.was) return undefined
     last.current.was = false
-    if (reducedMotion()) return undefined
+    if (!fade || reducedMotion()) return undefined // permanent : retiré sans fondu (§17.5)
     setFading(true)
     const t = setTimeout(() => setFading(false), FADE_MS)
     return () => clearTimeout(t)
-  }, [on])
+  }, [on]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!on && !fading) return null
   const v = on ? value : last.current.value
   return (
@@ -104,7 +104,7 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
   const solved = sub === 'SOLVED'
   const flipMs = wheel?.FLIP_INTERVAL_MS || 600
   const bonus = isBonusEvent(gs) // 🎁 BONUS (v12.1.0, #308) : bandeau sur le plateau
-  const bonusBanner = <BonusBanner on={bonus} value={bonusValue(gs)} />
+  const bonusBanner = <BonusBanner on={bonus} value={bonusValue(gs)} fade={gs.ROUE_BONUS_MODE !== 'PERMANENT'} />
 
   if (isVPlayer) {
     const mine = !!teamName && teamName === current

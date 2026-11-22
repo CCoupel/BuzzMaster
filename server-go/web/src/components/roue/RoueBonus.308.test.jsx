@@ -340,3 +340,12 @@ describe('RoueEditor — cases BONUS (modèle #309 : suit le global, ou personna
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/BONUS|64/), { timeout: 2000 })
   })
 })
+
+describe('RoueTv — bandeau en BONUS permanent (§17.5)', () => {
+  it('permanent : retiré tout de suite, sans fondu', () => {
+    const { container, rerender } = render(<RoueTv gameState={gs({ ROUE_BONUS_MODE: 'PERMANENT' })} teams={teams} />)
+    expect(container.querySelector('[data-testid="roue-bonus"]')).toBeTruthy()
+    rerender(<RoueTv gameState={gs({ ROUE_BONUS_MODE: 'PERMANENT', ROUE_SUBPHASE: 'LIT', ROUE_LAST_EVENT: { ...BONUS_EVENT, SEQ: 8, KIND: 'FLIP', LETTER: 'R', VALUE: 0 } })} teams={teams} />)
+    expect(container.querySelector('[data-testid="roue-bonus"]')).toBeNull()
+  })
+})
