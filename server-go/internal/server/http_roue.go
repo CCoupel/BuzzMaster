@@ -177,6 +177,11 @@ func applyRoueWheelFields(r *http.Request, question map[string]interface{}) (int
 	if berr != nil || (bonusGiven && (bonus < 0 || bonus > game.RoueMaxBonusCount)) {
 		return http.StatusBadRequest, game.RoueErrBonusCountInvalid + ": roue_bonus_count doit être un entier de 0 à 4"
 	}
+	// v12.2.0 #317: "" = follows the global mode (field removed); an unknown value is refused, nothing is written.
+	bonusMode := strings.TrimSpace(r.FormValue("roue_bonus_mode"))
+	if bonusMode != "" && !game.ValidRoueBonusMode(bonusMode) {
+		return http.StatusBadRequest, game.RoueErrBonusModeInvalid + ": roue_bonus_mode doit valoir EPHEMERAL ou PERMANENT"
+	}
 
 	g, _, gerr := game.NormalizeRoueWheelParams(wheelParamsFromConfig(config.GetGameSettings().Wheel))
 	if gerr != nil {
@@ -204,8 +209,8 @@ func applyRoueWheelFields(r *http.Request, question map[string]interface{}) (int
 	if bonusGiven {
 		effBonus = bonus
 	}
-	if effBonus > game.RoueMaxBonusFor(np) { // the inherited global BONUS count counts too (contract §16.5, effective composition)
-		return http.StatusBadRequest, game.RoueErrBonusCountInvalid + ": roue_bonus_count ferait dépasser 64 cases de la roue"
+	if max := game.RoueMaxBonusFor(np); effBonus > max { // the inherited global BONUS count counts too (contract §16.5, effective composition)
+		return http.StatusBadRequest, game.RoueErrBonusCountInvalid + ": " + game.RoueBonusCountMessage(max)
 	}
 	if fields[1].given {
 		fields[1].val = np.Step // the corrected step is the one saved
@@ -215,6 +220,10 @@ func applyRoueWheelFields(r *http.Request, question map[string]interface{}) (int
 		if f.given {
 			question[f.key] = f.val
 		}
+	}
+	delete(question, "ROUE_BONUS_MODE")
+	if bonusMode != "" {
+		question["ROUE_BONUS_MODE"] = bonusMode
 	}
 	delete(question, "ROUE_BONUS_COUNT")
 	if bonusGiven {
@@ -258,14 +267,14 @@ func (h *HTTPServer) handleRouePreview(w http.ResponseWriter, r *http.Request) {
 
 func wheelParamsFromConfig(w config.WheelConfig) game.RoueWheelParams {
 	return game.RoueWheelParams{
-		MaxPoints: w.MaxPoints, Step: w.Step, BankruptCount: w.BankruptCount, LoseTurnCount: w.LoseTurnCount, BonusCount: w.BonusCount,
+		MaxPoints: w.MaxPoints, Step: w.Step, BankruptCount: w.BankruptCount, LoseTurnCount: w.LoseTurnCount, BonusCount: w.BonusCount, BonusMode: w.BonusMode,
 		SpinPeriodMs: w.SpinPeriodMs, SpinMaxMs: w.SpinMaxMs, StopDurationMs: w.StopDurationMs, FlipIntervalMs: w.FlipIntervalMs,
 	}
 }
 
 func wheelConfigFromParams(p game.RoueWheelParams) config.WheelConfig {
 	return config.WheelConfig{
-		MaxPoints: p.MaxPoints, Step: p.Step, BankruptCount: p.BankruptCount, LoseTurnCount: p.LoseTurnCount, BonusCount: p.BonusCount,
+		MaxPoints: p.MaxPoints, Step: p.Step, BankruptCount: p.BankruptCount, LoseTurnCount: p.LoseTurnCount, BonusCount: p.BonusCount, BonusMode: p.BonusMode,
 		SpinPeriodMs: p.SpinPeriodMs, SpinMaxMs: p.SpinMaxMs, StopDurationMs: p.StopDurationMs, FlipIntervalMs: p.FlipIntervalMs,
 	}
 }
@@ -303,12 +312,25 @@ func (h *HTTPServer) handleRoueWheelPreview(w http.ResponseWriter, r *http.Reque
 		writeRoueWheelError(w, "paramètres invalides : "+err.Error())
 		return
 	}
+	if body.BonusCount < 0 || body.BonusCount > game.RoueMaxBonusCount { // contract §17.3
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"CODE": game.RoueErrBonusCountInvalid, "MESSAGE": "bonus_count doit être un entier de 0 à 4"})
+		return
+	}
+	body.BonusMode = "" // accepted and ignored (contract §17.6): the mode does not change the wheel
 	np, adjusted, err := game.NormalizeRoueWheelParams(wheelParamsFromConfig(body))
 	if err != nil {
 		writeRoueWheelError(w, err.Error())
 		return
 	}
-	segs := game.BuildRoueWheel(np)
+	if max := game.RoueMaxBonusFor(np); np.BonusCount > max { // contract §17.3: refused, never reduced in the preview
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"CODE": game.RoueErrBonusCountInvalid, "MESSAGE": game.RoueBonusCountMessage(max)})
+		return
+	}
+	segs := game.BuildRoueWheel(np, nil) // one draw: a new call can place the marks elsewhere
 	// TIMING (§11.3): the durations as the game would use them (clamped like at save time), SPIN_UP_MS by the
 	// very rule of the START — the card keeps no copy of it.
 	timing := map[string]int{

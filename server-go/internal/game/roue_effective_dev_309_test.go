@@ -30,10 +30,10 @@ func TestRoueEffectiveDev309_StepCorrectedAgainstEffectiveMax(t *testing.T) {
 }
 
 func TestRoueEffectiveDev309_BonusReducedThenFallback(t *testing.T) {
-	global := RoueWheelParams{MaxPoints: 3100, Step: 50} // 62 cases
+	global := RoueWheelParams{MaxPoints: 1000, Step: 100, BankruptCount: 3, LoseTurnCount: 2} // 14 cases : 1 BONUS au plus
 	four := 4
 	p, fb := RoueEffectiveParams(TypedContent{RoueBonusCount: &four}, global)
-	if fb || p.BonusCount != 2 || RoueWheelSize(p) != 64 {
+	if fb || p.BonusCount != 1 || RoueWheelSize(p) != 14 {
 		t.Fatalf("reduce bonus: %+v fb=%v", p, fb)
 	}
 	// invalid without bonus (step >= max): whole global wheel
@@ -45,19 +45,20 @@ func TestRoueEffectiveDev309_BonusReducedThenFallback(t *testing.T) {
 	}
 }
 
-func TestRoueEffectiveDev309_Lot1BonusOnlyKeepsLot1Wheel(t *testing.T) {
+func TestRoueEffectiveDev309_BonusOnlyKeepsTheWheelCases(t *testing.T) {
 	two := 2
 	p, _ := RoueEffectiveParams(TypedContent{RoueBonusCount: &two}, DefaultRoueWheelParams())
-	a := BuildRoueWheel(p)
+	a := BuildRoueWheel(p, nil)
 	q := DefaultRoueWheelParams()
-	q.BonusCount = 2
 	nq, _, _ := NormalizeRoueWheelParams(q)
-	b := BuildRoueWheel(nq)
-	if len(a) != 24 || len(a) != len(b) {
-		t.Fatalf("size %d/%d", len(a), len(b))
+	b := BuildRoueWheel(nq, nil)
+	if len(a) != 22 || len(a) != len(b) {
+		t.Fatalf("size %d/%d (v12.2.0 : marks never add cases)", len(a), len(b))
 	}
 	for i := range a {
-		if a[i] != b[i] {
+		x := a[i]
+		x.Bonus = false
+		if x != b[i] {
 			t.Fatalf("case %d differs", i)
 		}
 	}

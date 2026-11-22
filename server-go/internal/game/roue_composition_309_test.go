@@ -42,18 +42,30 @@ func cEngine309(t *testing.T, over vopt, global RoueWheelParams) *Engine {
 	return e
 }
 
-// oracle309 : la roue d'une composition effective donnée (paramètres normalisés, pas corrigé, BONUS bornés à 64 cases).
+// oracle309 : la roue (sans marque) d'une composition effective donnée (paramètres normalisés, pas corrigé). Depuis
+// v12.2.0 (§17.2) les BONUS sont des marques tirées au hasard : la roue ne se compare qu'une fois les marques retirées
+// (`wheelOf309`) ; le nombre de marques attendu se vérifie à part (`marks309`, `bonus` = nombre attendu).
 func oracle309(t *testing.T, p RoueWheelParams, bonus int) []RoueSegment {
 	t.Helper()
 	np, _, err := NormalizeRoueWheelParams(p)
 	if err != nil {
 		t.Fatalf("composition attendue invalide : %v", err)
 	}
-	np.BonusCount = bonus
-	return BuildRoueWheel(np)
+	np.BonusCount = 0
+	return BuildRoueWheel(np, nil)
 }
 
-func wheelOf309(e *Engine) []RoueSegment { return e.GetState().RoueWheel.Segments }
+// wheelOf309 : les cases de la manche, marques BONUS retirées (voir oracle309).
+func wheelOf309(e *Engine) []RoueSegment {
+	segs := append([]RoueSegment(nil), e.GetState().RoueWheel.Segments...)
+	for i := range segs {
+		segs[i].Bonus = false
+	}
+	return segs
+}
+
+// marks309 : nombre de cases marquées BONUS de la manche.
+func marks309(e *Engine) int { return len(markIndexes308(e.GetState().RoueWheel.Segments)) }
 
 func glob309(max, step, b, p, bonus int) RoueWheelParams {
 	g := DefaultRoueWheelParams()
@@ -76,7 +88,8 @@ func TestRoueComposition309_NoFieldIsGlobalWheelAndV120(t *testing.T) {
 		t.Run(fmt.Sprintf("%d/%d/%d/%d", g.MaxPoints, g.Step, g.BankruptCount, g.LoseTurnCount), func(t *testing.T) {
 			e := cEngine309(t, nil, g)
 			np, _, _ := NormalizeRoueWheelParams(g)
-			eq309(t, wheelOf309(e), BuildRoueWheel(np), "v12.0")
+			np.BonusCount = 0
+			eq309(t, wheelOf309(e), BuildRoueWheel(np, nil), "v12.0")
 		})
 	}
 }
@@ -131,12 +144,12 @@ func TestRoueComposition309_ZeroIsCustomValueNotAbsent(t *testing.T) {
 	g := glob309(1000, 50, 2, 1, 2)
 	cnt := func(e *Engine, kind string) int { return countKind308(wheelOf309(e), kind) }
 	e := cEngine309(t, nil, g) // tout global
-	if cnt(e, RoueKindBankrupt) != 2 || cnt(e, RoueKindLoseTurn) != 1 || cnt(e, RoueKindBonus) != 2 {
-		t.Fatalf("tout global : %d / %d / %d", cnt(e, RoueKindBankrupt), cnt(e, RoueKindLoseTurn), cnt(e, RoueKindBonus))
+	if cnt(e, RoueKindBankrupt) != 2 || cnt(e, RoueKindLoseTurn) != 1 || marks309(e) != 2 {
+		t.Fatalf("tout global : %d / %d / %d", cnt(e, RoueKindBankrupt), cnt(e, RoueKindLoseTurn), marks309(e))
 	}
 	e = cEngine309(t, vopt{"ROUE_WHEEL_BANKRUPT_COUNT": 0, "ROUE_WHEEL_LOSE_TURN_COUNT": 0, "ROUE_BONUS_COUNT": 0}, g)
-	if cnt(e, RoueKindBankrupt) != 0 || cnt(e, RoueKindLoseTurn) != 0 || cnt(e, RoueKindBonus) != 0 {
-		t.Fatalf("0 personnalisés (≠ absents) : %d / %d / %d, attendu 0 / 0 / 0", cnt(e, RoueKindBankrupt), cnt(e, RoueKindLoseTurn), cnt(e, RoueKindBonus))
+	if cnt(e, RoueKindBankrupt) != 0 || cnt(e, RoueKindLoseTurn) != 0 || marks309(e) != 0 {
+		t.Fatalf("0 personnalisés (≠ absents) : %d / %d / %d, attendu 0 / 0 / 0", cnt(e, RoueKindBankrupt), cnt(e, RoueKindLoseTurn), marks309(e))
 	}
 	eq309(t, wheelOf309(e), oracle309(t, glob309(1000, 50, 0, 0, 0), 0), "0/0/0 personnalisés")
 }
@@ -190,13 +203,13 @@ func TestRoueComposition309_StepCorrectedAgainstEffectiveMaximum(t *testing.T) {
 
 // ---- composition devenue invalide ------------------------------------------------------------------------------------
 
-// BONUS réduits d'abord (pas de repli) : 63 cases + 4 BONUS demandés → 1 BONUS.
+// BONUS réduits d'abord (pas de repli) : roue 1000/100/3/2 (14 cases, 1 BONUS au plus, §17.3) + 4 demandés → 1 marque.
 func TestRoueComposition309_BonusReducedBeforeAnyFallback(t *testing.T) {
-	g := glob309(63, 1, 0, 0, 0)
+	g := glob309(1000, 100, 3, 2, 0)
 	e := cEngine309(t, vopt{"ROUE_BONUS_COUNT": 4}, g)
 	segs := wheelOf309(e)
-	if len(segs) != 64 || countKind308(segs, RoueKindBonus) != 1 {
-		t.Fatalf("attendu 64 cases dont 1 BONUS, got %d cases / %d BONUS", len(segs), countKind308(segs, RoueKindBonus))
+	if len(segs) != 14 || marks309(e) != 1 {
+		t.Fatalf("attendu 14 cases dont 1 marque, got %d cases / %d marque(s)", len(segs), marks309(e))
 	}
 }
 
@@ -216,6 +229,9 @@ func TestRoueComposition309_InvalidCompositionFallsBackToWholeGlobalWheel(t *tes
 		t.Run(name, func(t *testing.T) {
 			e := cEngine309(t, over, g)
 			eq309(t, wheelOf309(e), want, name)
+			if marks309(e) != 1 {
+				t.Fatalf("roue globale ENTIÈRE : sa marque BONUS globale reste, got %d", marks309(e))
+			}
 			if e.GetState().RoueSubPhase != RoueSubTurn {
 				t.Fatalf("la manche doit démarrer en TURN : %s", e.GetState().RoueSubPhase)
 			}

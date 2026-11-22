@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"math/rand"
 	"sort"
 )
 
@@ -15,8 +16,16 @@ const (
 	RoueKindValue    = "value"
 	RoueKindBankrupt = "bankrupt"
 	RoueKindLoseTurn = "lose_turn"
-	RoueKindBonus    = "bonus" // v12.1.0 #308: no gain, the team replays
 )
+
+// Modes of the BONUS mark (v12.2.0 #317, contract §17.5).
+const (
+	RoueBonusEphemeral = "EPHEMERAL" // the mark disappears after its first draw, until the end of the round (default)
+	RoueBonusPermanent = "PERMANENT" // the mark stays
+)
+
+// ValidRoueBonusMode reports whether m is a BONUS mode ("" is not: it means "absent").
+func ValidRoueBonusMode(m string) bool { return m == RoueBonusEphemeral || m == RoueBonusPermanent }
 
 // RoueMaxBonusCount bounds ROUE_BONUS_COUNT (contract §15.2.1).
 const RoueMaxBonusCount = 4
@@ -33,6 +42,8 @@ type RoueSegment struct {
 	ID    string `json:"ID"`
 	Kind  string `json:"KIND"`
 	Value int    `json:"VALUE"`
+	// Bonus (v12.2.0 #316, contract §17): a points case carrying the BONUS mark. No omitempty (project rule).
+	Bonus bool `json:"BONUS"`
 }
 
 // RoueWheelParams is the `wheel` section of game-config.json (contract §10).
@@ -41,7 +52,8 @@ type RoueWheelParams struct {
 	Step           int
 	BankruptCount  int
 	LoseTurnCount  int
-	BonusCount     int // v12.1.0 #308: not a game-config.json field, it comes from the question (ROUE_BONUS_COUNT)
+	BonusCount     int    // BONUS marks laid on points cases (v12.2.0: no longer added cases), 0 to 4
+	BonusMode      string // EPHEMERAL (default, "" = EPHEMERAL once normalised) | PERMANENT (v12.2.0 #317)
 	SpinPeriodMs   int
 	SpinMaxMs      int
 	StopDurationMs int
@@ -56,6 +68,7 @@ func RoueSpinUpMs(spinPeriodMs int) int { return 2 * spinPeriodMs }
 func DefaultRoueWheelParams() RoueWheelParams {
 	return RoueWheelParams{
 		MaxPoints: 1000, Step: 50, BankruptCount: 2, LoseTurnCount: 1,
+		BonusMode:    RoueBonusEphemeral,
 		SpinPeriodMs: 2500, SpinMaxMs: 10000, StopDurationMs: 4000, FlipIntervalMs: 600,
 	}
 }
@@ -88,6 +101,12 @@ func NormalizeRoueWheelParams(p RoueWheelParams) (out RoueWheelParams, adjustedF
 	}
 	if p.FlipIntervalMs == 0 {
 		p.FlipIntervalMs = def.FlipIntervalMs
+	}
+	if p.BonusMode == "" {
+		p.BonusMode = RoueBonusEphemeral
+	}
+	if !ValidRoueBonusMode(p.BonusMode) {
+		return p, 0, fmt.Errorf("bonus_mode doit valoir %s ou %s", RoueBonusEphemeral, RoueBonusPermanent)
 	}
 	p.SpinPeriodMs = clampInt(p.SpinPeriodMs, 1000, 6000)
 	p.SpinMaxMs = clampInt(p.SpinMaxMs, 3000, 30000)
@@ -143,25 +162,77 @@ func NormalizeRoueWheelParams(p RoueWheelParams) (out RoueWheelParams, adjustedF
 	return p, adjustedFrom, nil
 }
 
-// RoueWheelSize is the number of cases of the wheel for parameters whose step divides the maximum (BONUS
-// cases included, contract §15.2.2).
+// RoueWheelSize is the number of cases of the wheel for parameters whose step divides the maximum. The BONUS marks
+// are not cases (v12.2.0, contract §17.2): N = V + B + P.
 func RoueWheelSize(p RoueWheelParams) int {
-	n := p.MaxPoints/p.Step + p.BankruptCount + p.LoseTurnCount + p.BonusCount
+	n := p.MaxPoints/p.Step + p.BankruptCount + p.LoseTurnCount
 	if p.LoseTurnCount >= 1 && p.MaxPoints%2 == 0 && (p.MaxPoints/2)%p.Step == 0 {
 		n-- // the TOUR PERDU takes the place of the MAX/2 value
 	}
 	return n
 }
 
-// RoueMaxBonusFor returns how many BONUS cases fit (0..RoueMaxBonusCount) in 64 cases for NORMALISED parameters.
-func RoueMaxBonusFor(p RoueWheelParams) int {
-	p.BonusCount = 0
-	room := RoueMaxSegments - RoueWheelSize(p)
-	return clampInt(room, 0, RoueMaxBonusCount)
+// roueIntervals returns the lengths of the intervals of points cases between two consecutive special cases of a base
+// wheel (circular: the last case touches the first). A wheel with no special case has no interval (nil).
+func roueIntervals(segs []RoueSegment) []int {
+	n := len(segs)
+	start := -1
+	for i, s := range segs {
+		if s.Kind != RoueKindValue {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return nil
+	}
+	var out []int
+	run := 0
+	for k := 1; k <= n; k++ {
+		if segs[(start+k)%n].Kind == RoueKindValue {
+			run++
+			continue
+		}
+		if run > 0 {
+			out = append(out, run)
+		}
+		run = 0
+	}
+	return out
 }
 
-// ValidateRoueBonusCount checks ROUE_BONUS_COUNT against the wheel of the current configuration (contract §15.2.2):
-// 0 to 4 and no more than 64 cases. p is normalised here.
+// RoueMaxBonusFor is the most BONUS marks a wheel can take (contract §17.3), for NORMALISED parameters: the smallest of
+// 4, the free room of the intervals (sum of ⌊(g−1)/2⌋; ⌊N/2⌋ without BANQUEROUTE nor PERDU) and the spacing rule
+// X ≤ ⌊(V−B−P)/2⌋ (V = number of points cases).
+func RoueMaxBonusFor(p RoueWheelParams) int {
+	p.BonusCount = 0
+	base := buildRoueBase(p)
+	n := len(base)
+	special := p.BankruptCount + p.LoseTurnCount
+	room := 0
+	if special == 0 {
+		room = n / 2
+	} else {
+		for _, g := range roueIntervals(base) {
+			room += (g - 1) / 2
+		}
+	}
+	spacing := (n - 2*special) / 2
+	if spacing < 0 {
+		spacing = 0
+	}
+	m := RoueMaxBonusCount
+	if room < m {
+		m = room
+	}
+	if spacing < m {
+		m = spacing
+	}
+	return m
+}
+
+// ValidateRoueBonusCount checks ROUE_BONUS_COUNT against the wheel of the current configuration (contract §17.3):
+// 0 to 4 and no more than RoueMaxBonusFor. p is normalised here.
 func ValidateRoueBonusCount(n int, p RoueWheelParams) error {
 	if n < 0 || n > RoueMaxBonusCount {
 		return &RoueError{RoueErrBonusCountInvalid, "roue_bonus_count doit être un entier de 0 à 4"}
@@ -170,17 +241,24 @@ func ValidateRoueBonusCount(n int, p RoueWheelParams) error {
 	if err != nil {
 		np, _, _ = NormalizeRoueWheelParams(DefaultRoueWheelParams())
 	}
-	if n > RoueMaxBonusFor(np) {
-		return &RoueError{RoueErrBonusCountInvalid, "roue_bonus_count ferait dépasser 64 cases de la roue"}
+	if max := RoueMaxBonusFor(np); n > max {
+		return &RoueError{RoueErrBonusCountInvalid, RoueBonusCountMessage(max)}
 	}
 	return nil
 }
 
+// RoueBonusCountMessage is the refusal message of too many BONUS (contract §17.3).
+func RoueBonusCountMessage(max int) string {
+	return fmt.Sprintf("Trop de BONUS : %d au plus pour cette roue (un BONUS ne touche jamais une Banqueroute, un Perdu ni un autre BONUS).", max)
+}
+
 // RoueEffectiveParams is the composition of the wheel of a question (contract §16.3): each of the 5 composition
 // parameters is the question's own value when present, else the global one; the durations are always global. The
-// result is NORMALISED. Pure function. fallback is true when the composition stayed invalid even without BONUS cases:
-// the whole global wheel is returned. BONUS cases are first reduced to fit in 64 cases (the caller can compare
+// result is NORMALISED. Pure function. fallback is true when the composition stayed invalid even without BONUS marks:
+// the whole global wheel is returned. BONUS marks are first reduced to what the wheel can take (the caller can compare
 // result.BonusCount with the requested one to log it). The start of a round is never refused.
+// v12.2.0 (#316/#317, contract §17): BonusCount is the number of BONUS MARKS (reduced to RoueMaxBonusFor), BonusMode the
+// effective mode of the round.
 func RoueEffectiveParams(tc TypedContent, global RoueWheelParams) (p RoueWheelParams, fallback bool) {
 	g, _, err := NormalizeRoueWheelParams(global)
 	if err != nil {
@@ -202,21 +280,28 @@ func RoueEffectiveParams(tc TypedContent, global RoueWheelParams) (p RoueWheelPa
 	if tc.RoueBonusCount != nil {
 		eff.BonusCount = *tc.RoueBonusCount
 	}
+	if ValidRoueBonusMode(tc.RoueBonusMode) { // present = customised (contract §17.5); an unknown value follows the global one
+		eff.BonusMode = tc.RoueBonusMode
+	}
 	eff.BonusCount = clampInt(eff.BonusCount, 0, RoueMaxBonusCount)
 	wanted := eff.BonusCount
 	eff.BonusCount = 0
 	np, _, nerr := NormalizeRoueWheelParams(eff)
 	if nerr != nil {
+		g.BonusCount = clampInt(g.BonusCount, 0, RoueMaxBonusFor(g))
+		if tc.RoueBonusMode != "" && ValidRoueBonusMode(tc.RoueBonusMode) {
+			g.BonusMode = tc.RoueBonusMode
+		}
 		return g, true
 	}
 	np.BonusCount = clampInt(wanted, 0, RoueMaxBonusFor(np))
 	return np, false
 }
 
-// BuildRoueWheel generates the segments of the wheel for NORMALISED
-// parameters (contract §10.1 — the examples there are test cases).
-func BuildRoueWheel(p RoueWheelParams) []RoueSegment {
-	max, step, B, P, X := p.MaxPoints, p.Step, p.BankruptCount, p.LoseTurnCount, p.BonusCount
+// buildRoueBase generates the wheel WITHOUT BONUS marks for NORMALISED parameters (contract §10.1 — the examples there
+// are test cases, unchanged since v12.0.0).
+func buildRoueBase(p RoueWheelParams) []RoueSegment {
+	max, step, B, P := p.MaxPoints, p.Step, p.BankruptCount, p.LoseTurnCount
 
 	// 1. Values, strongest first; the TOUR PERDU takes the place of MAX/2.
 	var values []int
@@ -255,7 +340,7 @@ func BuildRoueWheel(p RoueWheelParams) []RoueSegment {
 	}
 
 	// 3. Special cases.
-	K := B + P + X
+	K := B + P
 	N := len(values) + K
 	segs := make([]RoueSegment, N)
 	taken := make([]bool, N)
@@ -270,19 +355,15 @@ func BuildRoueWheel(p RoueWheelParams) []RoueSegment {
 		segs[idx] = RoueSegment{Kind: kind}
 	}
 	var kinds []string
-	remB, remP, remX := B, P, X
+	remB, remP := B, P
 	if remB > 0 {
 		kinds = append(kinds, RoueKindBankrupt)
 		remB--
 	}
-	for remB > 0 || remP > 0 || remX > 0 {
+	for remB > 0 || remP > 0 {
 		if remP > 0 {
 			kinds = append(kinds, RoueKindLoseTurn)
 			remP--
-		}
-		if remX > 0 {
-			kinds = append(kinds, RoueKindBonus)
-			remX--
 		}
 		if remB > 0 {
 			kinds = append(kinds, RoueKindBankrupt)
@@ -315,6 +396,121 @@ func BuildRoueWheel(p RoueWheelParams) []RoueSegment {
 	}
 	for i := range segs {
 		segs[i].ID = fmt.Sprintf("s%d", i)
+	}
+	return segs
+}
+
+// roueCountWays is the number of ways to lay b marks, never side by side, on m free slots in a row: C(m−b+1, b).
+func roueCountWays(m, b int) int {
+	if b <= 0 {
+		return 1
+	}
+	if m < 0 || m-b+1 < b {
+		return 0
+	}
+	n, k := m-b+1, b
+	r := 1
+	for i := 1; i <= k; i++ {
+		r = r * (n - k + i) / i
+	}
+	return r
+}
+
+// BuildRoueWheel generates the segments of the wheel for NORMALISED parameters (contract §17.2): the cases of §10.1 (no
+// case moves when BONUS marks are laid), then p.BonusCount BONUS marks drawn at random on points cases — spread
+// homogeneously between the intervals, uniformly inside an interval, never next to a special case nor to each other.
+// randN(n) returns an int in [0, n); nil = math/rand. Fewer marks than asked are laid if the wheel cannot take them
+// (callers reduce beforehand with RoueMaxBonusFor).
+func BuildRoueWheel(p RoueWheelParams, randN func(n int) int) []RoueSegment {
+	if randN == nil {
+		randN = rand.Intn
+	}
+	rn := func(n int) int {
+		if n <= 1 {
+			return 0
+		}
+		v := randN(n) % n
+		if v < 0 { // a test double may answer out of range
+			v += n
+		}
+		return v
+	}
+	segs := buildRoueBase(p)
+	n := len(segs)
+	X := p.BonusCount
+	if X <= 0 || n == 0 {
+		return segs
+	}
+	// Runs of consecutive points cases (circular), start index of each one.
+	type run struct{ start, g, b int }
+	var runs []*run
+	if p.BankruptCount+p.LoseTurnCount == 0 {
+		// Without BANQUEROUTE nor PERDU the first mark is drawn on the whole wheel; it then plays the special case.
+		first := rn(n)
+		segs[first].Bonus = true
+		X--
+		if n-1 > 0 {
+			runs = append(runs, &run{start: (first + 1) % n, g: n - 1})
+		}
+	} else {
+		first := -1
+		for i, s := range segs {
+			if s.Kind != RoueKindValue {
+				first = i
+				break
+			}
+		}
+		cur := 0
+		for k := 1; k <= n; k++ {
+			if segs[(first+k)%n].Kind == RoueKindValue {
+				cur++
+				continue
+			}
+			if cur > 0 {
+				runs = append(runs, &run{start: (first + k - cur) % n, g: cur})
+			}
+			cur = 0
+		}
+	}
+	for ; X > 0; X-- {
+		// The non-full interval with the largest g/(b+1); a tie is drawn at random.
+		var best []*run
+		for _, r := range runs {
+			if r.b >= (r.g-1)/2 {
+				continue
+			}
+			if len(best) == 0 {
+				best = []*run{r}
+				continue
+			}
+			l, rr := r.g*(best[0].b+1), best[0].g*(r.b+1) // r.g/(r.b+1) against best.g/(best.b+1)
+			switch {
+			case l > rr:
+				best = []*run{r}
+			case l == rr:
+				best = append(best, r)
+			}
+		}
+		if len(best) == 0 {
+			break
+		}
+		best[rn(len(best))].b++
+	}
+	for _, r := range runs {
+		// r.b marks inside the interval, uniformly among the valid sets (not on its two extreme cases, not side by side).
+		m, b := r.g-2, r.b
+		for i := 0; i < m && b > 0; i++ {
+			left := m - i
+			total := roueCountWays(left, b)
+			if total <= 0 {
+				break
+			}
+			if rn(total) < roueCountWays(left-2, b-1) {
+				segs[(r.start+1+i)%n].Bonus = true
+				b--
+				i++ // the next slot is skipped
+			}
+		}
 	}
 	return segs
 }

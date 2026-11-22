@@ -47,20 +47,22 @@ type GameSettings struct {
 
 // WheelConfig is the `wheel` section of game-config.json (contract roue.md §10).
 type WheelConfig struct {
-	MaxPoints      int `json:"max_points"`
-	Step           int `json:"step"`
-	BankruptCount  int `json:"bankrupt_count"`
-	LoseTurnCount  int `json:"lose_turn_count"`
-	BonusCount     int `json:"bonus_count"` // v12.1.0 #309: global default of BONUS cases, 0 to 4, absent = 0
-	SpinPeriodMs   int `json:"spin_period_ms"`
-	SpinMaxMs      int `json:"spin_max_ms"`
-	StopDurationMs int `json:"stop_duration_ms"`
-	FlipIntervalMs int `json:"flip_interval_ms"`
+	MaxPoints     int `json:"max_points"`
+	Step          int `json:"step"`
+	BankruptCount int `json:"bankrupt_count"`
+	LoseTurnCount int `json:"lose_turn_count"`
+	BonusCount    int `json:"bonus_count"` // v12.1.0 #309: global default of BONUS marks (v12.2.0 #316: laid on points cases), 0 to 4, absent = 0
+	// BonusMode (v12.2.0 #317, contract roue.md §17.5): EPHEMERAL | PERMANENT, absent = EPHEMERAL.
+	BonusMode      string `json:"bonus_mode"`
+	SpinPeriodMs   int    `json:"spin_period_ms"`
+	SpinMaxMs      int    `json:"spin_max_ms"`
+	StopDurationMs int    `json:"stop_duration_ms"`
+	FlipIntervalMs int    `json:"flip_interval_ms"`
 }
 
 // DefaultWheelConfig is the default wheel: 1000 / 50 / 2 / 1 (22 cases).
 func DefaultWheelConfig() WheelConfig {
-	return WheelConfig{MaxPoints: 1000, Step: 50, BankruptCount: 2, LoseTurnCount: 1,
+	return WheelConfig{MaxPoints: 1000, Step: 50, BankruptCount: 2, LoseTurnCount: 1, BonusMode: "EPHEMERAL",
 		SpinPeriodMs: 2500, SpinMaxMs: 10000, StopDurationMs: 4000, FlipIntervalMs: 600}
 }
 
@@ -88,6 +90,9 @@ func ApplyGameSettingsDefaults(gs *GameSettings) {
 		}
 		if gs.Wheel.Step == 0 {
 			gs.Wheel.Step = def.Step
+		}
+		if gs.Wheel.BonusMode == "" {
+			gs.Wheel.BonusMode = def.BonusMode
 		}
 		if gs.Wheel.SpinPeriodMs == 0 {
 			gs.Wheel.SpinPeriodMs = def.SpinPeriodMs

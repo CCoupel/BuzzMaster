@@ -32,7 +32,7 @@ func buildWheel144(t *testing.T, max, step, b, p int) ([]RoueSegment, RoueWheelP
 	if err != nil {
 		t.Fatalf("NormalizeRoueWheelParams(%d/%d/%d/%d) : %v", max, step, b, p, err)
 	}
-	return BuildRoueWheel(norm), norm, adjusted
+	return BuildRoueWheel(norm, nil), norm, adjusted
 }
 
 func TestRoueWheel144_Game_ContractExamples(t *testing.T) {
@@ -125,7 +125,7 @@ func TestRoueWheel144_Game_DurationsClampedAndDefaulted(t *testing.T) {
 }
 
 func TestRoueWheel144_Game_DefaultIs22SegmentsWithUniqueIDs(t *testing.T) {
-	segs := BuildRoueWheel(DefaultRoueWheelParams())
+	segs := BuildRoueWheel(DefaultRoueWheelParams(), nil)
 	if len(segs) != 22 {
 		t.Fatalf("roue par défaut : %d cases, attendu 22", len(segs))
 	}

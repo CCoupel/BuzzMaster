@@ -2528,6 +2528,10 @@ func (h *HTTPServer) handleGameConfig(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, nerr.Error(), http.StatusBadRequest)
 				return
 			}
+			if max := game.RoueMaxBonusFor(np); np.BonusCount > max { // contract roue.md §17.3: refused, nothing written
+				http.Error(w, game.RoueErrBonusCountInvalid+": "+game.RoueBonusCountMessage(max), http.StatusBadRequest)
+				return
+			}
 			gs.Wheel = wheelConfigFromParams(np)
 			stepAdjustedFrom = adjusted
 		}

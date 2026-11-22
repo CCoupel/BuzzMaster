@@ -119,6 +119,9 @@ func (e *Engine) RoueBuyVowel(letter string) error {
 			return roueErr(RoueErrInsufficientBank, "Cagnotte insuffisante")
 		}
 
+		if sub == RoueSubLetter {
+			e.roueConsumeBonusUnsafe() // v12.2.0 #317: accepted purchase after the stop, it leaves LETTER (hit or miss)
+		}
 		count := 0
 		for _, row := range e.roue.rows {
 			for _, r := range row {

@@ -414,7 +414,9 @@ type TypedContent struct {
 	RoueWheelStep          *int `json:"ROUE_WHEEL_STEP,omitempty"`
 	RoueWheelBankruptCount *int `json:"ROUE_WHEEL_BANKRUPT_COUNT,omitempty"`
 	RoueWheelLoseTurnCount *int `json:"ROUE_WHEEL_LOSE_TURN_COUNT,omitempty"`
-	RoueBonusCount   *int   `json:"ROUE_BONUS_COUNT,omitempty"`   // v12.1.0 #308: BONUS cases added to the wheel, 0 (absent) to 4
+	RoueBonusCount   *int   `json:"ROUE_BONUS_COUNT,omitempty"`   // BONUS marks laid on points cases (v12.2.0 #316; v12.1.0 #308: added cases), 0 (absent) to 4
+	// v12.2.0 #317 (contract §17.5): EPHEMERAL | PERMANENT, present = customised for this question, absent = global.
+	RoueBonusMode string `json:"ROUE_BONUS_MODE,omitempty"`
 }
 
 // Effective vowel settings (contract §15.1.1: absent = default).
@@ -1064,6 +1066,8 @@ type GameState struct {
 	RoueVowelsLeft   bool           `json:"ROUE_VOWELS_LEFT"`
 	RoueTurnVowel    bool           `json:"ROUE_TURN_VOWEL"`
 	RoueStopVowel    bool           `json:"ROUE_STOP_VOWEL"`
+	// v12.2.0 #317 (contract §17.5) — NO omitempty: effective BONUS mode of the round (EPHEMERAL | PERMANENT), "" out of round.
+	RoueBonusMode string `json:"ROUE_BONUS_MODE"`
 	RoueWheel        RoueWheel      `json:"ROUE_WHEEL"`
 	RoueLastEvent    RoueEvent      `json:"ROUE_LAST_EVENT"`
 	RoueWinner       string         `json:"ROUE_WINNER"`
