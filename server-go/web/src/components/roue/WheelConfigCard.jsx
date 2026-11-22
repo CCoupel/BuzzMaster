@@ -16,12 +16,15 @@ import Button from '../Button'
 import FortuneWheel, { buildFortuneSegments } from './FortuneWheel'
 import './WheelConfigCard.css'
 
+// Deux groupes (maquette retenue B, #309) : Points / Cases spéciales ; « 🎁 BONUS » = nombre global de cases BONUS (0 à 4, défaut 0).
 const PARAMS = [
-  { key: 'max_points', label: 'Points maximum', hint: 'valeur de la meilleure case', min: 2 },
-  { key: 'step', label: 'Pas', hint: 'écart entre deux valeurs ; aussi la plus petite valeur', min: 1 },
-  { key: 'bankrupt_count', label: '💸 Banqueroute', hint: 'cases qui vident la cagnotte', min: 0 },
-  { key: 'lose_turn_count', label: '⏭ Perdu', hint: 'cases qui font passer le tour', min: 0 },
+  { key: 'max_points', label: 'Points maximum', hint: 'valeur de la meilleure case', min: 2, group: 'Points' },
+  { key: 'step', label: 'Pas', hint: 'écart entre deux valeurs ; aussi la plus petite valeur', min: 1, group: 'Points' },
+  { key: 'bankrupt_count', label: '💸 Banqueroute', hint: 'cases qui vident la cagnotte', min: 0, group: 'Cases spéciales' },
+  { key: 'lose_turn_count', label: '⏭ Perdu', hint: 'cases qui font passer le tour', min: 0, group: 'Cases spéciales' },
+  { key: 'bonus_count', label: '🎁 BONUS', hint: "0 à 4 — cadeau géré par l'animateur, aucun point", min: 0, max: 4, group: 'Cases spéciales', isNew: true },
 ]
+const GROUPS = ['Points', 'Cases spéciales']
 const DURATIONS = [
   { key: 'spin_period_ms', label: "Durée d'un tour de roue", hint: 'secondes (1 à 6) — vitesse de défilement', step: 0.5 },
   { key: 'spin_max_ms', label: 'Durée maximale de rotation', hint: "secondes (3 à 30) — sans buzz de l'équipe, la roue s'arrête d'elle-même", step: 1 },
@@ -37,6 +40,7 @@ function fromServer(w) {
   const x = w || {}
   return {
     max_points: x.max_points, step: x.step, bankrupt_count: x.bankrupt_count, lose_turn_count: x.lose_turn_count,
+    bonus_count: x.bonus_count ?? 0, // absent (config v12.0 / v12.1 LOT-1) = 0 BONUS
     spin_period_ms: x.spin_period_ms, spin_max_ms: x.spin_max_ms, stop_duration_ms: x.stop_duration_ms,
     flip_interval_ms: x.flip_interval_ms,
   }
@@ -159,15 +163,15 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
 
   // Les 4 paramètres qui déterminent la roue (les durées ne changent pas son dessin).
   // Les trois durées partent aussi (facultatives) : le serveur renvoie `TIMING` (bornes appliquées, montée) pour l'essai (§10.2, §11.3).
-  const { max_points: mp, step: st, bankrupt_count: bc, lose_turn_count: lc, spin_period_ms: dp, spin_max_ms: dm, stop_duration_ms: ds } = form
+  const { max_points: mp, step: st, bankrupt_count: bc, lose_turn_count: lc, bonus_count: bn, spin_period_ms: dp, spin_max_ms: dm, stop_duration_ms: ds } = form
   useEffect(() => {
-    const body = { max_points: num(mp), step: num(st), bankrupt_count: num(bc), lose_turn_count: num(lc) }
+    const body = { max_points: num(mp), step: num(st), bankrupt_count: num(bc), lose_turn_count: num(lc), bonus_count: Number.isFinite(num(bn)) ? num(bn) : 0 }
     if (Number.isFinite(num(dp))) body.spin_period_ms = num(dp)
     if (Number.isFinite(num(dm))) body.spin_max_ms = num(dm)
     if (Number.isFinite(num(ds))) body.stop_duration_ms = num(ds)
     if (![body.max_points, body.step, body.bankrupt_count, body.lose_turn_count].every(Number.isFinite)) {
       setPreview(null)
-      setError('les quatre réglages sont des nombres entiers')
+      setError('les réglages sont des nombres entiers')
       return undefined
     }
     const id = ++seq.current
@@ -201,7 +205,7 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
       }
     }, PREVIEW_DELAY_MS)
     return () => { clearTimeout(timer); ctrl?.abort() }
-  }, [mp, st, bc, lc, dp, dm, ds])
+  }, [mp, st, bc, lc, bn, dp, dm, ds])
 
   useEffect(() => { trial.interrupt() }, [preview]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -263,22 +267,29 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
   const values = segments.filter(s => s.kind === 'value').map(s => Number(s.label))
   const special = segments.length - values.length
   const total = values.reduce((a, b) => a + b, 0)
-  const defLabel = wheelDefault ? ` (${wheelDefault.max_points} · ${wheelDefault.step} · ${wheelDefault.bankrupt_count} · ${wheelDefault.lose_turn_count})` : ''
+  const defLabel = wheelDefault ? ` (${wheelDefault.max_points} · ${wheelDefault.step} · ${wheelDefault.bankrupt_count} · ${wheelDefault.lose_turn_count} · ${wheelDefault.bonus_count ?? 0})` : ''
 
   return (
     <div className="config-section wheel-cfg" data-testid="wheel-config-card">
       <h3 className="config-section-title">🎡 Roue de la Fortune</h3>
       <p className="config-section-hint">
-        La roue du mode ROUE est construite à partir de ces réglages. Elle est commune à toutes les questions ROUE ; sa forme (bandeau ou arc) se choisit sur chaque question.
+        <b>Réglages par défaut des questions ROUE</b> ; chaque question peut en personnaliser un ou plusieurs (éditeur de question). La forme de la roue (bandeau ou arc) se choisit sur chaque question.
       </p>
 
-      <div className="wheel-cfg-params">
-        {PARAMS.map(p => (
-          <div key={p.key} className="wheel-cfg-param">
-            <label htmlFor={`wheel-${p.key}`}>{p.label}</label>
-            <input id={`wheel-${p.key}`} type="number" min={p.min} step="1" value={form[p.key] ?? ''} onChange={(e) => edit(p.key, e.target.value)} />
-            <small>{p.hint}</small>
-          </div>
+      <div className="wheel-cfg-groups">
+        {GROUPS.map(g => (
+          <fieldset key={g} className="wheel-cfg-group" data-testid={`wheel-group-${g}`}>
+            <legend>{g}</legend>
+            <div className={`wheel-cfg-params wheel-cfg-params-${g === 'Points' ? 2 : 3}`}>
+              {PARAMS.filter(p => p.group === g).map(p => (
+                <div key={p.key} className={`wheel-cfg-param${p.isNew ? ' new' : ''}`}>
+                  <label htmlFor={`wheel-${p.key}`}>{p.label}</label>
+                  <input id={`wheel-${p.key}`} type="number" min={p.min} max={p.max} step="1" value={form[p.key] ?? ''} onChange={(e) => edit(p.key, e.target.value)} />
+                  <small>{p.hint}</small>
+                </div>
+              ))}
+            </div>
+          </fieldset>
         ))}
       </div>
 
@@ -293,7 +304,7 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
         <>
           <div className="wheel-cfg-sum">
             <b>{segments.length} cases</b> : {values.length} gagnantes de <b>{Math.min(...values)}</b> à <b>{Math.max(...values)}</b> par pas de {preview.step} ·{' '}
-            <b>{form.bankrupt_count}</b> Banqueroute · <b>{form.lose_turn_count}</b> Perdu —{' '}
+            <b>{form.bankrupt_count}</b> Banqueroute · <b>{form.lose_turn_count}</b> Perdu · <b>{form.bonus_count ?? 0}</b> BONUS —{' '}
             {special ? `une chance sur ${fmt(Number((segments.length / special).toFixed(1)))} de tomber sur une case spéciale` : 'aucune case spéciale'}
             {' '}· gain moyen d'une case : {Math.round(total / segments.length)}.
           </div>
@@ -309,7 +320,7 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
                 {segments.map((s, i) => (
                   <div key={s.id} className={`wheel-cfg-pc${s.kind === 'special' ? ' sp' : ''}`} style={s.kind === 'special' ? undefined : { background: s.color }}>
                     <i>{i + 1}</i>
-                    {s.kind === 'special' ? <>{s.icon}<small>{s.label.split('\n').map((l, k) => <span key={k}>{k > 0 && <br />}{l}</span>)}</small></> : s.label}
+                    {s.kind === 'special' || s.kind === 'bonus' ? <>{s.icon}<small>{s.label.split('\n').map((l, k) => <span key={k}>{k > 0 && <br />}{l}</span>)}</small></> : s.label}
                   </div>
                 ))}
               </div>
