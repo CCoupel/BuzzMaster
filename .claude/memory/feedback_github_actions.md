@@ -4,6 +4,8 @@ description: Fermer/rouvrir des issues GitHub ou créer des PR nécessite une va
 type: feedback
 ---
 
+> **PÉRIMÉ (2026-11-22)** — remplacé par les labels de phase posés dès l'événement et la fermeture des issues sur CI verte (`issues.close_on = ci`) : `CLAUDE.md` « Suivi des états des issues », `commands/context/GITHUB.template.md` §9.5/§9.12. Reste valable : pas de commentaire, PR ou réouverture hors de ces règles sans accord de l'utilisateur.
+
 Ne jamais fermer, rouvrir, commenter ou modifier des issues/PR GitHub sans validation explicite de l'utilisateur.
 
 **Why:** L'issue #64 a été fermée automatiquement par le code-reviewer pendant le workflow v3.6.7, sans que l'utilisateur l'ait validé. L'utilisateur l'a remarqué et a demandé à la rouvrir.

@@ -5,6 +5,8 @@ metadata:
   type: feedback
 ---
 
+> **PÉRIMÉ (2026-11-22)** — remplacé par le versionnage du template : milestone = `X.Y.Z` fixé à l'ouverture, QUALIF = `X.Y.Z.a` incrémenté à chaque commit dev, une seule branche `milestone/<version>` (`commands/context/VERSIONING.template.md`).
+
 Quand plusieurs issues du même milestone sont développées en parallèle sur des branches
 distinctes (ou empilées), chaque branche incrémente sa propre version pendant ses cycles QUALIF
 (ex: une pile VJoueur atteint 5.9.3 pendant qu'une feature séparée branchée depuis `main` n'est

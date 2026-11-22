@@ -4,6 +4,8 @@ description: Toujours builder et fournir le binaire Windows AVANT de demander à
 type: feedback
 ---
 
+> **PÉRIMÉ (2026-11-22)** — remplacé par BUILD (`.claude/agents/deploy.md`) puis PUBLISH QUALIF (`.claude/agents/environments/publish.qualif.md`) vers `build/qualif_v<X.Y.Z>/`. Reste valable : jamais de demande de test QUALIF avant que le binaire Windows soit publié.
+
 L'utilisateur teste TOUJOURS depuis Windows. Avant de demander une validation visuelle, il faut obligatoirement :
 
 1. Builder le binaire Windows : `GOOS=windows GOARCH=amd64 /usr/local/go/bin/go build -ldflags="-s -w" -o buzzcontrol-vX.Y.Z-windows-amd64.exe ./cmd/server/`
