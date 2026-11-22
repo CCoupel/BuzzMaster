@@ -29,7 +29,7 @@ BuzzControl est une solution complete pour animer des jeux de quiz avec des buzz
 | **NORMAL** | Question ouverte avec reponse libre |
 | **QCM** | 4 choix colores (Rouge, Vert, Jaune, Bleu) |
 | **MEMORY** | Jeu de paires a memoriser |
-| **ROUE** | Roue de la Fortune : phrase a deviner, les equipes tournent la roue et proposent des consonnes |
+| **ROUE** | Roue de la Fortune : phrase a deviner, les equipes tournent la roue, proposent des consonnes et achetent des voyelles ; cases BONUS (cadeau de l'animateur) ; composition de la roue par question (points, Banqueroute, Perdu, BONUS : global ou personnalise) |
 
 ### Interface d'Administration
 

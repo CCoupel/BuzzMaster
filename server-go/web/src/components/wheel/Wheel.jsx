@@ -33,6 +33,8 @@ function ariaLabelFor(segments, current) {
 }
 
 const labelLines = (seg) => String(seg.label ?? '').split('\n')
+/** Longueur (en caractères) de la plus longue ligne d'un libellé : sert à faire tenir le texte dans sa case. */
+const labelLen = (seg) => Math.max(1, ...labelLines(seg).map((l) => l.length))
 const frameNow = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
 const requestFrame = (f) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(f) : setTimeout(() => f(frameNow()), 16))
 const cancelFrame = (id) => (typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame(id) : clearTimeout(id))
@@ -230,6 +232,8 @@ export default function Wheel({
               const rad = (a * Math.PI) / 180
               const tx = 500 + 405 * Math.cos(rad)
               const ty = 500 + 405 * Math.sin(rad)
+              // Le texte suit la tangente : sa largeur disponible est la corde du secteur (88 %) ; 0,62 em par caractère.
+              const fitCap = (2 * 405 * Math.sin(Math.PI / Math.max(n, 2)) * 0.88) / (0.62 * labelLen(seg))
               return (
                 <g
                   key={seg.id ?? i}
@@ -244,7 +248,7 @@ export default function Wheel({
                       {seg.icon}
                     </text>
                   )}
-                  <text x={tx} y={ty} transform={`rotate(${a + 90} ${tx} ${ty})`} textAnchor="middle" dominantBaseline="central" fontSize={labelLines(seg).length > 1 || seg.icon ? Math.min(40, 800 / Math.max(n, 1)) : Math.min(90, 1800 / Math.max(n, 1))}>
+                  <text x={tx} y={ty} transform={`rotate(${a + 90} ${tx} ${ty})`} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(fitCap, labelLines(seg).length > 1 || seg.icon ? Math.min(40, 800 / Math.max(n, 1)) : Math.min(90, 1800 / Math.max(n, 1)))}>
                     {labelLines(seg).length > 1
                       ? labelLines(seg).map((l, k) => <tspan key={k} x={tx} dy={k === 0 ? '-0.55em' : '1.1em'}>{l}</tspan>)
                       : seg.label}
@@ -278,7 +282,7 @@ export default function Wheel({
               data-state={seg.state || undefined}
               data-kind={seg.kind || undefined}
               data-current={i === hl ? 'true' : undefined}
-              style={{ background: colorOf(seg, i) }}
+              style={{ background: colorOf(seg, i), '--n': labelLen(seg) }}
             >
               {seg.icon && <span className="wheel-icon">{seg.icon}</span>}
               <span className={`wheel-lab${labelLines(seg).length > 1 || seg.icon ? ' multi' : ''}`}>

@@ -12,11 +12,37 @@
 import { useRef } from 'react'
 import FortuneWheel from './FortuneWheel'
 import RoueGameBoard from './RoueGameBoard'
-import { fmtPts, roueAnnouncement, teamCss } from './roueState'
+import { fmtPts, isBonusEvent, isVowel, roueAnnouncement, teamCss, vowelInfo } from './roueState'
 import './RoueTv.css'
 
 function Announcement({ parts }) {
-  return <>{parts.map((p, i) => (p.strong !== undefined ? <em key={i}>{p.strong}</em> : <span key={i}>{p.text}</span>))}</>
+  return <>{parts.map((p, i) => (p.br ? <br key={i} /> : p.strong !== undefined ? <em key={i}>{p.strong}</em> : <span key={i}>{p.text}</span>))}</>
+}
+
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+
+/** Achat de voyelles actif (v12.1.0, #147, maquette TV C) : alphabet complet sur une ligne (statique), prix rappelé. */
+function Alphabet({ letters, price }) {
+  const played = {}
+  ;(letters || []).forEach(l => { played[l.LETTER] = l })
+  return (
+    <div className="roue-letters roue-alpha" data-testid="roue-alphabet">
+      <span className="lab">🔤 {fmtPts(price)}</span>
+      {ALPHABET.map(l => {
+        const p = played[l]
+        return <b key={l} className={`${p ? (p.HIT ? 'hit' : 'miss') : 'idle'}${isVowel(l) ? ' vu' : ''}`}>{l}</b>
+      })}
+    </div>
+  )
+}
+
+/** Variation de cagnotte d'une voyelle (débit à l'achat, gain au retournement), lue sur le dernier événement. */
+function bankDelta(gs, name) {
+  const ev = gs.ROUE_LAST_EVENT || {}
+  if (ev.TEAM !== name && name !== gs.ROUE_CURRENT_TEAM) return null
+  if ((ev.KIND === 'VOWEL_HIT' || ev.KIND === 'VOWEL_MISS') && ev.TEAM === name) return { dir: 'down', text: `−${fmtPts(ev.VALUE)}` }
+  if (ev.KIND === 'FLIP' && isVowel(ev.LETTER) && ev.GAIN > 0 && name === gs.ROUE_CURRENT_TEAM) return { dir: 'up', text: `+${fmtPts(ev.GAIN)}` }
+  return null
 }
 
 function Letters({ letters }) {
@@ -48,6 +74,7 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
   const showLetters = gs.ROUE_SHOW_LETTERS !== false
   const solved = sub === 'SOLVED'
   const flipMs = wheel?.FLIP_INTERVAL_MS || 600
+  const bonus = isBonusEvent(gs) // 🎁 BONUS (v12.1.0, #308) : bandeau sur le plateau
 
   if (isVPlayer) {
     const mine = !!teamName && teamName === current
@@ -69,7 +96,10 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
             {q.ROUE_PRESENTATION && <span className="roue-vp-pres">{q.ROUE_PRESENTATION}</span>}
           </div>
         )}
-        <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tablet" />
+        <div className="roue-bonus-wrap">
+          <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tablet" />
+          {bonus && <div className="roue-bonus-ribbon" role="status" data-testid="roue-bonus">🎁 BONUS !</div>}
+        </div>
         <div className="roue-vp-info">
           {solved ? (
             <div className="roue-vp-win">
@@ -81,7 +111,7 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
               {canStop ? <span>👆 Touchez la roue pour l'arrêter</span> : <Announcement parts={roueAnnouncement(gs, { mine })} />}
             </div>
           )}
-          {!solved && showLetters && <Letters letters={gs.ROUE_LETTERS} />}
+          {!solved && showLetters && (vowelInfo(gs).enabled ? <Alphabet letters={gs.ROUE_LETTERS} price={vowelInfo(gs).price} /> : <Letters letters={gs.ROUE_LETTERS} />)}
         </div>
         {/* Structure STABLE : la roue ne change jamais de parent (sinon React la démonte au passage tapable → non tapable, et
             `Wheel` remonté directement en `land` se placerait d'un coup sur la case : plus de freinage). Le bouton d'arrêt est un
@@ -100,10 +130,12 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
       <div className={`roue-banks${roster.length >= 7 ? ' dense' : ''}`}>
         {roster.map(name => {
           const win = solved && gs.ROUE_WINNER === name
+          const delta = vowelInfo(gs).enabled && !solved ? bankDelta(gs, name) : null
           return (
             <div key={name} className={`roue-bank${name === current && !solved ? ' active' : ''}${win ? ' win' : ''}`} style={{ '--c': colorOf(name) }}>
               <span className="n">{name}</span>
               <span className="v">{win && gs.ROUE_AWARDS?.[name] ? `+${fmtPts(gs.ROUE_AWARDS[name])}` : fmtPts(bank[name])}</span>
+              {delta && <span className={`delta ${delta.dir}`} data-testid="roue-bank-delta">{delta.text}</span>}
             </div>
           )
         })}
@@ -112,9 +144,12 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
         {catMeta && <span className="roue-cat">{catMeta.icon} {catMeta.label}</span>}
         {q.ROUE_PRESENTATION && <span className="roue-pres">{q.ROUE_PRESENTATION}</span>}
       </div>
-      <div className="roue-mid"><RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tv" /></div>
-      <div className="roue-event"><Announcement parts={roueAnnouncement(gs)} /></div>
-      {showLetters ? <Letters letters={gs.ROUE_LETTERS} /> : <div className="roue-letters" />}
+      <div className="roue-mid roue-bonus-wrap">
+        <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tv" />
+        {bonus && <div className="roue-bonus-ribbon" role="status" data-testid="roue-bonus">🎁 BONUS !</div>}
+      </div>
+      <div className="roue-event"><div><Announcement parts={roueAnnouncement(gs)} /></div></div>
+      {showLetters ? (vowelInfo(gs).enabled ? <Alphabet letters={gs.ROUE_LETTERS} price={vowelInfo(gs).price} /> : <Letters letters={gs.ROUE_LETTERS} />) : <div className="roue-letters" />}
       <div className={`roue-wheel-box roue-wheel-${layout}`}>
         <FortuneWheel wheel={wheel} subphase={sub} teamColor={gs.ROUE_CURRENT_TEAM_COLOR} />
       </div>

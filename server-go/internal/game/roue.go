@@ -27,6 +27,9 @@ const (
 	RoueSubAnswer    = "ANSWER"
 	RoueSubTurnEnd   = "TURN_END"
 	RoueSubSolved    = "SOLVED"
+	// v12.1.0 #147: vowel bought BEFORE spinning (step 1). A vowel bought after the stop reuses LIT / REVEALING.
+	RoueSubVowelLit       = "VOWEL_LIT"
+	RoueSubVowelRevealing = "VOWEL_REVEALING"
 )
 
 // ROUE_NEXT hands and the advised button (contract §5.2).
@@ -42,6 +45,13 @@ const (
 	RoueErrVowelNotAvailable = "VOWEL_NOT_AVAILABLE"
 	RoueErrNotALetter        = "NOT_A_LETTER"
 	RoueErrInvalidTeams      = "INVALID_TEAMS"
+	RoueErrNotAVowel         = "NOT_A_VOWEL"
+	RoueErrVowelsDisabled    = "VOWELS_DISABLED"
+	RoueErrVowelNotNow       = "VOWEL_NOT_NOW"
+	RoueErrVowelLimit        = "VOWEL_LIMIT_REACHED"
+	RoueErrInsufficientBank  = "INSUFFICIENT_BANK"
+	RoueErrLetterProposed    = "LETTER_ALREADY_PROPOSED"
+	RoueErrNoVowelLeft       = "NO_VOWEL_LEFT"
 	RoueErrNotFullSpeed      = "NOT_FULL_SPEED" // ROUE_STOP (admin or animateur) during the climb (contract §5.1)
 )
 
@@ -59,6 +69,9 @@ const (
 	RoueEvTurnEnd      = "TURN_END"
 	RoueEvPass         = "PASS"
 	RoueEvReveal       = "REVEAL"
+	RoueEvBonus        = "BONUS"      // v12.1.0 #308
+	RoueEvVowelHit     = "VOWEL_HIT"  // v12.1.0 #147
+	RoueEvVowelMiss    = "VOWEL_MISS" // v12.1.0 #147
 )
 
 // ROUE notices (OnRoueNotice) — what the application layer turns into sounds,
@@ -66,6 +79,7 @@ const (
 const (
 	RoueNoticeBad    = "BAD"    // letter absent / repeated, BANQUEROUTE: the existing "mauvaise réponse" sound
 	RoueNoticeCredit = "CREDIT" // a team was credited (Team, Points): the existing gain sound + comet + flash
+	RoueNoticeBonus  = "BONUS"  // v12.1.0 #308: stop on a BONUS case — the existing "bonne réponse" sound + comet, no flash
 )
 
 // RoueNotice is one side effect of a transition for the application layer.
@@ -99,6 +113,8 @@ type roueRuntime struct {
 	remaining time.Duration
 
 	stopDuration time.Duration
+
+	vowelGain int // gain of the vowel being lit / revealed, credited to the pot at ROUE_FLIP (v12.1.0 #147)
 }
 
 const (
@@ -190,6 +206,9 @@ func (e *Engine) resetRoueStateUnsafe() {
 	st.RoueLetters = []RoueLetter{}
 	st.RoueShowLetters = false
 	st.RoueConsonantsLeft = false
+	st.RoueBuyVowels, st.RoueVowelTiming, st.RoueVowelsBefore, st.RoueVowelsAfter = false, "", "", ""
+	st.RoueVowelPrice, st.RoueVowelGain = 0, ""
+	st.RoueVowelsLeft, st.RoueTurnVowel, st.RoueStopVowel = false, false, false
 	st.RoueWheel = RoueWheel{Segments: []RoueSegment{}, Current: -1}
 	st.RoueLastEvent = RoueEvent{}
 	st.RoueWinner = ""
@@ -199,7 +218,7 @@ func (e *Engine) resetRoueStateUnsafe() {
 
 func roueStepOf(sub string) int {
 	switch sub {
-	case RoueSubTurn:
+	case RoueSubTurn, RoueSubVowelLit, RoueSubVowelRevealing:
 		return 1
 	case RoueSubSpinning:
 		return 2
@@ -264,15 +283,20 @@ func (e *Engine) roueRefreshConsonantsLeftUnsafe() {
 			proposed[r] = true
 		}
 	}
-	left := false
+	left, vleft := false, false
 	for _, row := range e.roue.rows {
 		for _, r := range row {
-			if r >= 'A' && r <= 'Z' && !IsRoueVowel(r) && !proposed[r] {
-				left = true
+			if r >= 'A' && r <= 'Z' && !proposed[r] {
+				if IsRoueVowel(r) {
+					vleft = true
+				} else {
+					left = true
+				}
 			}
 		}
 	}
 	e.state.RoueConsonantsLeft = left
+	e.state.RoueVowelsLeft = vleft
 }
 
 func (e *Engine) roueSetCurrentTeamUnsafe(team string) {
@@ -330,10 +354,12 @@ func (e *Engine) roueBankUnsafe(team string, add int) {
 func (e *Engine) roueEnterTurnUnsafe() {
 	e.roueSetSubUnsafe(RoueSubTurn)
 	e.state.RoueTurnGain = 0
+	e.state.RoueTurnVowel, e.state.RoueStopVowel = false, false // v12.1.0 #147: every new turn (also after a BONUS)
 	e.state.RoueNextTeam = ""
 	e.state.RoueNextDefault = ""
 	e.state.RoueWheel.Stop = nil
 	e.roue.lit = 0
+	e.roue.vowelGain = 0
 	e.roueRefreshBoardUnsafe()
 }
 
@@ -385,9 +411,17 @@ func (e *Engine) startRoueRoundUnsafe() {
 	if params.MaxPoints == 0 {
 		params = DefaultRoueWheelParams()
 	}
-	params, _, perr := NormalizeRoueWheelParams(params)
-	if perr != nil {
-		params, _, _ = NormalizeRoueWheelParams(DefaultRoueWheelParams())
+	requested := 0
+	if q.RoueBonusCount != nil {
+		requested = *q.RoueBonusCount
+	} else {
+		requested = params.BonusCount
+	}
+	params, fallback := RoueEffectiveParams(q.TypedContent, params)
+	if fallback {
+		log.Printf("[Engine] ROUE: wheel composition of question %s invalid with the current settings, global wheel used", q.ID)
+	} else if params.BonusCount < clampInt(requested, 0, RoueMaxBonusCount) {
+		log.Printf("[Engine] ROUE: question %s asks %d BONUS cases, reduced to %d to stay within %d cases", q.ID, requested, params.BonusCount, RoueMaxSegments)
 	}
 	segs := BuildRoueWheel(params)
 	rt := &roueRuntime{
@@ -415,6 +449,12 @@ func (e *Engine) startRoueRoundUnsafe() {
 	}
 	st.RoueLetters = []RoueLetter{}
 	st.RoueShowLetters = q.EffectiveRoueShowLetters()
+	st.RoueBuyVowels = q.EffectiveRoueBuyVowels()
+	st.RoueVowelTiming = q.EffectiveRoueVowelTiming()
+	st.RoueVowelsBefore = q.EffectiveRoueVowelsBefore()
+	st.RoueVowelsAfter = q.EffectiveRoueVowelsAfter()
+	st.RoueVowelPrice = q.EffectiveRoueVowelPrice()
+	st.RoueVowelGain = q.EffectiveRoueVowelGain()
 	st.RoueWinner = ""
 	st.RoueAwards = map[string]int{}
 	st.RoueWheel = RoueWheel{
@@ -514,6 +554,8 @@ func (e *Engine) roueTimerFired(gen int, kind string) {
 		if e.state.RoueSubPhase == RoueSubRevealing {
 			e.roueSetSubUnsafe(RoueSubAnswer)
 			e.roueAdviceUnsafe(true)
+		} else if e.state.RoueSubPhase == RoueSubVowelRevealing {
+			e.roueVowelRevealDoneUnsafe()
 		}
 	}
 	e.mu.Unlock()
@@ -559,6 +601,8 @@ func (e *Engine) roueFinishStoppingUnsafe(fx *roueFx) {
 	case RoueKindLoseTurn:
 		e.roueEventUnsafe(RoueEvLoseTurn, team, "", 0, 0, 0)
 		e.roueEnterTurnEndUnsafe(false, false)
+	case RoueKindBonus:
+		e.roueBonusStopUnsafe(team, fx)
 	default:
 		e.roueEventUnsafe(RoueEvLandValue, team, "", 0, seg.Value, 0)
 		e.roueSetSubUnsafe(RoueSubLetter)
@@ -626,9 +670,10 @@ func (e *Engine) fireRoueChange() { e.fireRoueFx(roueFx{}) }
 // RoueSpin — ROUE_SPIN: step 1 → 2, the wheel spins.
 func (e *Engine) RoueSpin() error {
 	return e.roueAction(func(fx *roueFx) error {
-		if e.state.RoueSubPhase != RoueSubTurn || !e.state.RoueConsonantsLeft {
+		if e.state.RoueSubPhase != RoueSubTurn || !(e.state.RoueConsonantsLeft || e.roueAfterVowelPossibleUnsafe()) {
 			return roueErr(RoueErrWrongSubPhase, "la roue ne peut pas être lancée maintenant")
 		}
+		e.state.RoueStopVowel = false
 		e.state.RoueWheel.Stop = nil
 		e.roueSetSubUnsafe(RoueSubSpinning)
 		e.roueEventUnsafe(RoueEvSpin, e.state.RoueCurrentTeam, "", 0, 0, 0)
@@ -717,7 +762,7 @@ func (e *Engine) RoueLetter(letter string) error {
 // by one, then the step ends by itself (timer).
 func (e *Engine) RoueFlip() error {
 	return e.roueAction(func(fx *roueFx) error {
-		if e.state.RoueSubPhase != RoueSubLit {
+		if e.state.RoueSubPhase != RoueSubLit && e.state.RoueSubPhase != RoueSubVowelLit {
 			return roueErr(RoueErrWrongSubPhase, "aucune case éclairée")
 		}
 		rt := e.roue
@@ -733,8 +778,18 @@ func (e *Engine) RoueFlip() error {
 		rt.revealed[letter] = true
 		rt.lit = 0
 		e.roueRefreshBoardUnsafe()
-		e.roueSetSubUnsafe(RoueSubRevealing)
-		e.roueEventUnsafe(RoueEvFlip, e.state.RoueCurrentTeam, string(letter), count, 0, 0)
+		gain := 0
+		if IsRoueVowel(letter) { // v12.1.0 #147: the vowel's gain joins the pot NOW, at both moments
+			gain = rt.vowelGain
+			rt.vowelGain = 0
+			e.roueBankUnsafe(e.state.RoueCurrentTeam, gain)
+		}
+		if e.state.RoueSubPhase == RoueSubVowelLit {
+			e.roueSetSubUnsafe(RoueSubVowelRevealing)
+		} else {
+			e.roueSetSubUnsafe(RoueSubRevealing)
+		}
+		e.roueEventUnsafe(RoueEvFlip, e.state.RoueCurrentTeam, string(letter), count, 0, gain)
 		e.roueArmUnsafe(roueTimerFlip, time.Duration(count*e.state.RoueWheel.FlipIntervalMs)*time.Millisecond)
 		return nil
 	})
@@ -744,7 +799,7 @@ func (e *Engine) RoueFlip() error {
 func (e *Engine) RoueAnswer() error {
 	return e.roueAction(func(fx *roueFx) error {
 		sub := e.state.RoueSubPhase
-		if sub != RoueSubAnswer && !(sub == RoueSubTurn && !e.state.RoueConsonantsLeft) {
+		if sub != RoueSubAnswer && !(sub == RoueSubTurn && (!e.state.RoueConsonantsLeft || e.state.RoueTurnVowel)) {
 			return roueErr(RoueErrWrongSubPhase, "aucune réponse n'est attendue")
 		}
 		team := e.state.RoueCurrentTeam

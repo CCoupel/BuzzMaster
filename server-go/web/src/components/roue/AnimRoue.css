@@ -34,3 +34,15 @@
 .anim-roue-team.active { outline: 2px solid var(--c); font-weight: 800; background: #fff; }
 .anim-roue-team .v { font-weight: 800; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) { .anim-roue-body { grid-template-columns: 1fr; } .anim-roue-steps { grid-template-columns: repeat(4, 1fr); } }
+
+/* 🎁 BONUS (v12.1.0, #308) */
+.anim-roue-bonus { background: linear-gradient(90deg, #f59e0b, #fbbf24); color: #111827; font-weight: 900; font-size: 1.2rem; text-align: center; border-radius: 0.6rem; padding: 0.4rem; margin-bottom: 0.6rem; }
+.anim-roue-case.gold { background: linear-gradient(180deg, #fbbf24, #f59e0b); color: #111827; }
+
+/* Voyelles (v12.1.0, #147) */
+.anim-roue-vchip { color: #b45309; font-weight: 700; }
+.anim-roue .roue-vow-buy .roue-key { height: 4.4rem; min-width: 4rem; flex: 1 1 0; justify-content: center; border-width: 2px; border-radius: 0.5rem; }
+.anim-roue .roue-vow-buy .roue-key b { font-size: 1.35rem; line-height: 1; }
+.anim-roue .roue-vow-label { flex: 0 0 100%; font-size: 0.78rem; }
+.anim-roue-buy { font: inherit; font-weight: 800; font-size: 1.05rem; border-radius: 0.6rem; border: 0; background: #7c3aed; color: #fff; padding: 0.7rem; cursor: pointer; }
+.anim-roue-buy:disabled { background: var(--gray-200, #e5e7eb); color: var(--gray-500, #6b7280); cursor: default; }

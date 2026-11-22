@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"buzzcontrol/internal/config"
@@ -56,7 +57,52 @@ func applyRoueFields(r *http.Request, question map[string]interface{}) (int, str
 	if err := game.ValidateRoueFields(presentation, mode, gainsRule, layout); err != nil {
 		return http.StatusBadRequest, err.Error()
 	}
+	// v12.1.0 #309 (contract §16.5): the 5 composition parameters. Empty or absent = follows the global setting (the field is
+	// REMOVED from the question); present = customised, 0 included. Validated on the effective composition.
+	if status, msg := applyRoueWheelFields(r, question); status != 0 {
+		return status, msg
+	}
+	// v12.1.0 #147: vowel purchase fields (contract §15.3), all re-read at each save; absent = default.
+	timing := strings.TrimSpace(r.FormValue("roue_vowel_timing"))
+	before := strings.TrimSpace(r.FormValue("roue_vowels_before"))
+	after := strings.TrimSpace(r.FormValue("roue_vowels_after"))
+	vgain := strings.TrimSpace(r.FormValue("roue_vowel_gain"))
+	price, priceGiven := 0, false
+	if v := strings.TrimSpace(r.FormValue("roue_vowel_price")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return http.StatusBadRequest, game.RoueErrVowelPriceInvalid + ": roue_vowel_price doit être un entier de 1 à 1000000"
+		}
+		price, priceGiven = n, true
+	}
+	if err := game.ValidateRoueVowelFields(timing, before, after, price, priceGiven, vgain); err != nil {
+		return http.StatusBadRequest, err.Error()
+	}
 	question["ROUE_PHRASE"] = phrase
+	// Written only for false: absent means true. The other settings are always written (kept for a re-activation).
+	if r.FormValue("roue_buy_vowels") == "false" {
+		question["ROUE_BUY_VOWELS"] = false
+	}
+	if timing == "" {
+		timing = game.RoueVowelTimingBefore
+	}
+	if before == "" {
+		before = game.RoueVowelsMany
+	}
+	if after == "" {
+		after = game.RoueVowelsMany
+	}
+	if !priceGiven {
+		price = game.RoueDefaultVowelPrice
+	}
+	if vgain == "" {
+		vgain = game.RoueVowelGainNone
+	}
+	question["ROUE_VOWEL_TIMING"] = timing
+	question["ROUE_VOWELS_BEFORE"] = before
+	question["ROUE_VOWELS_AFTER"] = after
+	question["ROUE_VOWEL_PRICE"] = price
+	question["ROUE_VOWEL_GAIN"] = vgain
 	if presentation != "" {
 		question["ROUE_PRESENTATION"] = presentation
 	}
@@ -88,6 +134,91 @@ func applyRoueFields(r *http.Request, question map[string]interface{}) (int, str
 		} else {
 			question["QUESTION"] = RoueDefaultTitle
 		}
+	}
+	return 0, ""
+}
+
+// roueFormInt reads an optional integer form field: absent or empty → (0, false, nil).
+func roueFormInt(r *http.Request, name string) (int, bool, error) {
+	v := strings.TrimSpace(r.FormValue(name))
+	if v == "" {
+		return 0, false, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, true, err
+	}
+	return n, true, nil
+}
+
+// applyRoueWheelFields handles roue_wheel_max_points / _step / _bankrupt_count / _lose_turn_count and roue_bonus_count
+// (v12.1.0 #309). The effective composition (present fields + the current global settings) goes through the SAME code as
+// wheel-preview (NormalizeRoueWheelParams); the saved step is the corrected one. Nothing is written on a refusal.
+func applyRoueWheelFields(r *http.Request, question map[string]interface{}) (int, string) {
+	type field struct {
+		form, key string
+		val       int
+		given     bool
+	}
+	fields := []*field{
+		{form: "roue_wheel_max_points", key: "ROUE_WHEEL_MAX_POINTS"},
+		{form: "roue_wheel_step", key: "ROUE_WHEEL_STEP"},
+		{form: "roue_wheel_bankrupt_count", key: "ROUE_WHEEL_BANKRUPT_COUNT"},
+		{form: "roue_wheel_lose_turn_count", key: "ROUE_WHEEL_LOSE_TURN_COUNT"},
+	}
+	for _, f := range fields {
+		n, given, err := roueFormInt(r, f.form)
+		if err != nil {
+			return http.StatusBadRequest, game.RoueErrWheelInvalid + ": " + f.form + " doit être un entier"
+		}
+		f.val, f.given = n, given
+	}
+	bonus, bonusGiven, berr := roueFormInt(r, "roue_bonus_count")
+	if berr != nil || (bonusGiven && (bonus < 0 || bonus > game.RoueMaxBonusCount)) {
+		return http.StatusBadRequest, game.RoueErrBonusCountInvalid + ": roue_bonus_count doit être un entier de 0 à 4"
+	}
+
+	g, _, gerr := game.NormalizeRoueWheelParams(wheelParamsFromConfig(config.GetGameSettings().Wheel))
+	if gerr != nil {
+		g, _, _ = game.NormalizeRoueWheelParams(game.DefaultRoueWheelParams())
+	}
+	eff := g
+	eff.BonusCount = 0
+	if fields[0].given {
+		eff.MaxPoints = fields[0].val
+	}
+	if fields[1].given {
+		eff.Step = fields[1].val
+	}
+	if fields[2].given {
+		eff.BankruptCount = fields[2].val
+	}
+	if fields[3].given {
+		eff.LoseTurnCount = fields[3].val
+	}
+	np, _, err := game.NormalizeRoueWheelParams(eff) // without BONUS first: a refusal here is a wheel refusal
+	if err != nil {
+		return http.StatusBadRequest, game.RoueErrWheelInvalid + ": " + err.Error()
+	}
+	effBonus := g.BonusCount
+	if bonusGiven {
+		effBonus = bonus
+	}
+	if effBonus > game.RoueMaxBonusFor(np) { // the inherited global BONUS count counts too (contract §16.5, effective composition)
+		return http.StatusBadRequest, game.RoueErrBonusCountInvalid + ": roue_bonus_count ferait dépasser 64 cases de la roue"
+	}
+	if fields[1].given {
+		fields[1].val = np.Step // the corrected step is the one saved
+	}
+	for _, f := range fields {
+		delete(question, f.key) // a field absent from the form is removed: the parameter follows the global setting
+		if f.given {
+			question[f.key] = f.val
+		}
+	}
+	delete(question, "ROUE_BONUS_COUNT")
+	if bonusGiven {
+		question["ROUE_BONUS_COUNT"] = bonus // customised, 0 included (contract §16.2)
 	}
 	return 0, ""
 }
@@ -127,14 +258,14 @@ func (h *HTTPServer) handleRouePreview(w http.ResponseWriter, r *http.Request) {
 
 func wheelParamsFromConfig(w config.WheelConfig) game.RoueWheelParams {
 	return game.RoueWheelParams{
-		MaxPoints: w.MaxPoints, Step: w.Step, BankruptCount: w.BankruptCount, LoseTurnCount: w.LoseTurnCount,
+		MaxPoints: w.MaxPoints, Step: w.Step, BankruptCount: w.BankruptCount, LoseTurnCount: w.LoseTurnCount, BonusCount: w.BonusCount,
 		SpinPeriodMs: w.SpinPeriodMs, SpinMaxMs: w.SpinMaxMs, StopDurationMs: w.StopDurationMs, FlipIntervalMs: w.FlipIntervalMs,
 	}
 }
 
 func wheelConfigFromParams(p game.RoueWheelParams) config.WheelConfig {
 	return config.WheelConfig{
-		MaxPoints: p.MaxPoints, Step: p.Step, BankruptCount: p.BankruptCount, LoseTurnCount: p.LoseTurnCount,
+		MaxPoints: p.MaxPoints, Step: p.Step, BankruptCount: p.BankruptCount, LoseTurnCount: p.LoseTurnCount, BonusCount: p.BonusCount,
 		SpinPeriodMs: p.SpinPeriodMs, SpinMaxMs: p.SpinMaxMs, StopDurationMs: p.StopDurationMs, FlipIntervalMs: p.FlipIntervalMs,
 	}
 }
@@ -167,7 +298,7 @@ func (h *HTTPServer) handleRoueWheelPreview(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var body config.WheelConfig
+	var body config.WheelConfig // bonus_count (v12.1.0) is part of it, absent = 0
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
 		writeRoueWheelError(w, "paramètres invalides : "+err.Error())
 		return

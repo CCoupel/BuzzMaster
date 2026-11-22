@@ -51,6 +51,7 @@ type WheelConfig struct {
 	Step           int `json:"step"`
 	BankruptCount  int `json:"bankrupt_count"`
 	LoseTurnCount  int `json:"lose_turn_count"`
+	BonusCount     int `json:"bonus_count"` // v12.1.0 #309: global default of BONUS cases, 0 to 4, absent = 0
 	SpinPeriodMs   int `json:"spin_period_ms"`
 	SpinMaxMs      int `json:"spin_max_ms"`
 	StopDurationMs int `json:"stop_duration_ms"`

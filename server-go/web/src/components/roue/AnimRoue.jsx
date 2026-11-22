@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react'
 import { useGame } from '../../hooks/GameContext'
 import { RoueErrorLine, RoueKeyboard, useSpinCountdown } from './RoueControls'
-import { currentSegment, fmtPts, makeRoueActions, roueGates, segmentLabel, teamCss } from './roueState'
+import { currentSegment, fmtPts, isBonusEvent, isVowel, makeRoueActions, roueGates, segmentLabel, teamCss, vowelInfo } from './roueState'
 import './AnimRoue.css'
 
 const fold = (c) => c.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
@@ -26,7 +26,7 @@ function Phrase({ gs, colorOf }) {
       {[...phrase].map((ch, i) => {
         if (ch === ' ') return <span key={i}>&nbsp;&nbsp;</span>
         const f = fold(ch)
-        if (sub === 'LIT' && f === last) return <span key={i} className="lit">{ch}</span>
+        if ((sub === 'LIT' || sub === 'VOWEL_LIT') && f === last) return <span key={i} className="lit">{ch}</span>
         const team = found[f]
         return <span key={i} className={team ? 'f' : ''} style={team ? { '--c': colorOf(team) } : undefined}>{ch}</span>
       })}
@@ -38,7 +38,7 @@ function Phrase({ gs, colorOf }) {
 export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
   const [selected, setSelected] = useState('')
   const sub = gs.ROUE_SUBPHASE || ''
-  useEffect(() => { if (sub !== 'LETTER') setSelected('') }, [sub])
+  useEffect(() => { setSelected('') }, [sub])
   const cd = useSpinCountdown(gs)
   const gates = roueGates(gs)
   const colorOf = (name) => teamCss(teams?.[name]?.COLOR)
@@ -51,21 +51,29 @@ export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
   const ev = gs.ROUE_LAST_EVENT || {}
   const gain = gs.ROUE_TURN_GAIN || 0
   const bank = gs.ROUE_TEAM_BANK || {}
+  const vi = vowelInfo(gs)
+  const vowelOpen = live && (vi.canBuyBefore || vi.canBuyAfter)
+  const pickedVowel = isVowel(selected) ? selected : ''
+  const buyShown = live && (vi.showBefore || vi.showAfter)
 
   const cls = (n, extra = '') => `anim-roue-sb ${step > n ? 'done' : step === n ? 'cur' : ''} ${extra}`.trim()
   const lastLetter = (gs.ROUE_LETTERS || []).slice(-1)[0]
-  const gainText = sub === 'REVEALING' ? `${ev.LETTER} : ${ev.COUNT} cases × ${fmtPts(ev.VALUE)}`
+  const gainText = (sub === 'VOWEL_LIT' || (sub === 'LIT' && isVowel(ev.LETTER))) ? `${ev.LETTER} · ${ev.COUNT} case${ev.COUNT > 1 ? 's' : ''} · −${fmtPts(ev.VALUE)}`
+    : (sub === 'VOWEL_REVEALING' || (sub === 'REVEALING' && isVowel(ev.LETTER))) ? `${ev.LETTER} : ${ev.COUNT} case${ev.COUNT > 1 ? 's' : ''}${ev.GAIN > 0 ? ` = +${fmtPts(ev.GAIN)}` : ''}`
+    : sub === 'REVEALING' ? `${ev.LETTER} : ${ev.COUNT} cases × ${fmtPts(ev.VALUE)}`
     : sub === 'ANSWER' ? `Gain du tour : +${fmtPts(gain)}`
-      : sub === 'TURN_END' ? (ev.GAIN > 0 ? `+${fmtPts(ev.GAIN)} → cagnotte ${fmtPts(bank[current])}` : (lastLetter && lastLetter.HIT === false ? `${lastLetter.LETTER} absente — aucun gain` : 'Aucun gain'))
+      : sub === 'TURN_END' ? (ev.GAIN > 0 ? `+${fmtPts(ev.GAIN)} → cagnotte ${fmtPts(bank[current])}` : (lastLetter && lastLetter.HIT === false ? (isVowel(lastLetter.LETTER) ? `${lastLetter.LETTER} absente · −${fmtPts(vi.price)}` : `${lastLetter.LETTER} absente — aucun gain`) : 'Aucun gain'))
         : ''
 
   return (
     <div className="anim-roue" data-testid="anim-roue">
       <div className="anim-roue-bar">
         <span className="anim-roue-chip">🎡 <b>ROUE</b></span>
+        {vi.enabled && <span className="anim-roue-chip anim-roue-vchip">🔤 {fmtPts(vi.price)} · {({ BEFORE: 'avant', AFTER: 'après', BOTH: 'avant / après' })[vi.timing] || 'avant'}</span>}
         {q.ROUE_PRESENTATION && <span className="anim-roue-chip">« {q.ROUE_PRESENTATION} »</span>}
         {current && sub !== 'SOLVED' && <span className="anim-roue-hand" style={{ background: colorOf(current) }}>▶ {current}</span>}
       </div>
+      {isBonusEvent(gs) && <div className="anim-roue-bonus" role="status" data-testid="anim-roue-bonus">🎁 BONUS !</div>}
       <Phrase gs={gs} colorOf={colorOf} />
 
       {live && (
@@ -73,11 +81,11 @@ export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
           <button type="button" className={cls(1)} disabled={!gates.canSpin} onClick={actions.spin}><b>1</b>Lancer<br />la roue</button>
           <button type="button" className={cls(2)} disabled={!(gates.canStop && gates.fullSpeed)} onClick={actions.stop}><b>2</b>Forcer<br />l'arrêt</button>
           <button type="button" className={`${cls(3)} ${step === 3 ? 'wait' : ''}`} disabled><b>3</b>{step === 3 ? <>La roue<br />ralentit…</> : 'Case'}</button>
-          <button type="button" className={cls(4)} disabled={!gates.canLetter || !selected} onClick={() => selected && actions.letter(selected)}>
-            <b>4</b>{selected && gates.canLetter ? <>Valider la<br />lettre {selected}</> : <>Valider la<br />consonne</>}
+          <button type="button" className={cls(4)} disabled={!gates.canLetter || !selected || !!pickedVowel} onClick={() => selected && !pickedVowel && actions.letter(selected)}>
+            <b>4</b>{selected && !pickedVowel && gates.canLetter ? <>Valider la<br />lettre {selected}</> : <>Valider la<br />consonne</>}
           </button>
           <button type="button" className={cls(5)} disabled={!gates.canFlip} onClick={actions.flip}><b>5</b>Retourner<br />les cases</button>
-          <button type="button" className={`${cls(6)} ${step === 6 ? 'ok' : ''}`} disabled={!gates.canAnswer} onClick={actions.answer}><b>{step > 6 ? '✓' : '✓'}</b>Réponse<br />validée</button>
+          <button type="button" className={`${cls(6)} ${step === 6 ? 'ok' : ''}`} disabled={!gates.canAnswer} onClick={actions.answer}><b>✓</b>Réponse<br />validée</button>
           <button type="button" className={`anim-roue-sb ${gates.canSame ? (rec === 'SAME' || gates.solo ? 'cur' : 'alt') : ''}`} disabled={!gates.canSame} onClick={() => actions.next('SAME')}>
             <b>7</b>Tour suivant<br />▶ {current}
           </button>
@@ -93,14 +101,26 @@ export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
       <div className="anim-roue-body">
         <div className="anim-roue-panel">
           <RoueKeyboard letters={gs.ROUE_LETTERS} enabled={live && gates.canLetter} selected={selected} onSelect={setSelected}
-            onSubmit={() => selected && actions.letter(selected)} teamColor={colorOf} showVowels={false} />
+            onSubmit={() => (pickedVowel ? (vowelOpen && actions.buyVowel(pickedVowel)) : selected && actions.letter(selected))} teamColor={colorOf}
+            showVowels={buyShown} vowelsEnabled={vowelOpen} consonantsEnabled={live && gates.canLetter}
+            vowelsLabel={buyShown ? `🔤 ${fmtPts(vi.price)}` : null} />
+          {buyShown && (
+            <button type="button" className="anim-roue-buy" disabled={!vowelOpen || !pickedVowel}
+              onClick={() => pickedVowel && (actions.buyVowel(pickedVowel), setSelected(''))}>
+              {pickedVowel ? `🔤 Acheter le ${pickedVowel} — ${fmtPts(vi.price)}`
+                : !vi.left ? '🔤 Plus de voyelle'
+                  : !vi.rich ? `🔤 Cagnotte < ${fmtPts(vi.price)}`
+                    : (vi.limitBefore || vi.limitAfter) ? '🔤 1 voyelle à ce moment'
+                      : sub === 'ANSWER' ? `🔤 Autre voyelle · ${fmtPts(vi.price)}` : `🔤 Voyelle · ${fmtPts(vi.price)}`}
+            </button>
+          )}
           <div className="anim-roue-legend">
             {(gs.ROUE_TEAMS || []).map(n => <span key={n}><i style={{ background: colorOf(n) }} />{n}</span>)}
             <span>barrée = absente</span>
           </div>
         </div>
         <div className="anim-roue-panel">
-          <div className={`anim-roue-case${!seg && !cd.spinning ? ' none' : ''}${cd.spinning ? ' spin' : ''}`}>
+          <div className={`anim-roue-case${!seg && !cd.spinning ? ' none' : ''}${cd.spinning ? ' spin' : ''}${seg?.KIND === 'bonus' && !cd.spinning ? ' gold' : ''}`}>
             <small>Case de la roue</small>
             {cd.spinning ? (cd.fullSpeed ? `la roue tourne · ${Math.ceil(cd.remainingMs / 1000)} s` : 'la roue prend de la vitesse…') : seg ? segmentLabel(seg) : '—'}
           </div>

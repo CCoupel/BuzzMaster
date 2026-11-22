@@ -12,8 +12,9 @@
 .roue-head { display: flex; align-items: center; gap: 2vw; padding: 1.4vh 3vw 0.6vh; height: 7vh; flex: 0 0 auto; box-sizing: border-box; }
 .roue-cat { background: rgba(255, 255, 255, 0.12); border-radius: 999px; padding: 0.15em 1em; font-size: 2.6vh; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
 .roue-pres { font-size: 3.4vh; font-weight: 700; color: #fde68a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
-.roue-mid { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-.roue-event { text-align: center; font-size: 2.8vh; font-weight: 800; height: 4.6vh; line-height: 4.6vh; white-space: nowrap; overflow: hidden; flex: 0 0 auto; }
+.roue-mid { flex: 1; min-height: 0; container-type: size; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+/* Deux lignes au plus (points + « Une réponse ? À voix haute »), hauteur toujours réservée : le plateau ne saute pas d'une étape à l'autre. */
+.roue-event { display: flex; align-items: center; justify-content: center; text-align: center; font-size: 2.8vh; font-weight: 800; height: 8.4vh; line-height: 4vh; white-space: nowrap; overflow: hidden; flex: 0 0 auto; }
 .roue-event em, .roue-vp-msg em { font-style: normal; color: #fbbf24; }
 .roue-letters { text-align: center; font-size: 2vh; color: #9ca3af; height: 3.4vh; line-height: 3.4vh; white-space: nowrap; overflow: hidden; flex: 0 0 auto; }
 .roue-letters b { display: inline-block; min-width: 1.5em; margin: 0 0.1em; border-radius: 0.3em; background: rgba(255, 255, 255, 0.14); color: #fff; line-height: 1.5; }
@@ -22,10 +23,10 @@
 .roue-wheel-strip { height: 13vh; border-radius: 1.5vh; background: rgba(0, 0, 0, 0.35); border: 2px solid rgba(255, 255, 255, 0.15); }
 .roue-wheel-arc { height: 27vh; margin: 0; }
 .roue-wheel-strip .wheel-strip { --cell-w: 10vw; }
-.roue-wheel-strip .wheel-cell { font-size: 5.4vh; }
+.roue-wheel-strip .wheel-cell { --wheel-fs: 5.4vh; }
 
 /* Tablette (M5 révisée) : la roue remplace le bouton d'arrêt. Habillage de FortuneWheel seulement (géométrie de Wheel intacte). */
-.roue-vp { position: absolute; inset: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; overflow: hidden; color: #e5e7eb; }
+.roue-vp { container-type: size; position: absolute; inset: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; overflow: hidden; color: #e5e7eb; }
 .roue-vp-top { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; min-width: 0; }
 .roue-vp-me { border-radius: 999px; padding: 0.15rem 0.7rem; font-weight: 800; color: #fff; white-space: nowrap; }
 .roue-vp-bank { font-weight: 800; white-space: nowrap; margin-left: auto; }
@@ -55,9 +56,9 @@
 .roue-vp-glyph { display: none; position: absolute; left: 0; right: 0; bottom: 6%; text-align: center; font-size: 1rem; font-weight: 800; z-index: 4; pointer-events: none; }
 /* Bandeau : cases dimensionnées sur la zone (paysage : toute la hauteur ; portrait : bandeau de 120 px centré) */
 .roue-vp-zone .wheel-strip { --cell-w: clamp(52px, 16cqmin, 96px); }
-.roue-vp-zone .wheel-cell { font-size: clamp(16px, 9cqmin, 36px); }
+.roue-vp-zone .wheel-cell { --wheel-fs: clamp(16px, 9cqmin, 36px); }
 .roue-vp-zone .wheel-cell .wheel-icon { font-size: clamp(14px, 6cqmin, 24px); }
-.roue-vp-zone .wheel-cell .wheel-lab.multi { font-size: clamp(8px, 3.4cqmin, 11px); }
+.roue-vp-zone .wheel-cell .wheel-lab.multi { --wheel-mfs: clamp(8px, 3.4cqmin, 11px); }
 /* Arc : la partie haute du disque émerge de la zone */
 .roue-vp-zone .wheel-arc .wheel-svg { width: min(98cqw, 2.6 * 100cqh); height: min(98cqw, 2.6 * 100cqh); }
 @media (orientation: portrait) {
@@ -67,3 +68,23 @@
 .game-display:has(.roue-tv), .game-display:has(.roue-vp) { padding: 0; }
 .roue-tv { flex: 1 1 auto; }
 .roue-vp { z-index: 2; }
+
+/* 🎁 BONUS (v12.1.0, #308) — bandeau doré posé sur le plateau (TV statique : aucun scroll) */
+.roue-bonus-wrap { position: relative; }
+.roue-vp .roue-bonus-wrap { flex: 0 0 auto; min-height: 0; }
+.roue-bonus-ribbon { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%) rotate(-3deg); background: linear-gradient(90deg, transparent, #f59e0b 15%, #fbbf24 50%, #f59e0b 85%, transparent); color: #111827; text-align: center; font-size: 9vh; font-weight: 900; letter-spacing: 0.08em; padding: 0.8vh 0; box-shadow: 0 0 4vh #f59e0b; pointer-events: none; overflow: hidden; }
+.roue-vp .roue-bonus-ribbon { font-size: 6vh; }
+
+/* Voyelles (v12.1.0, #147) — alphabet complet sur une ligne, sans défilement */
+.roue-alpha { color: #e5e7eb; }
+.roue-alpha .lab { color: #fbbf24; font-weight: 800; margin-right: 0.6em; }
+.roue-alpha b { min-width: 1.2em; margin: 0 0.05em; }
+.roue-alpha b.idle { background: rgba(255, 255, 255, 0.07); color: #9ca3af; }
+.roue-alpha b.hit { background: rgba(34, 197, 94, 0.35); color: #fff; }
+.roue-alpha b.vu { box-shadow: inset 0 -0.25vh 0 #a78bfa; }
+.roue-alpha b.miss { text-decoration: line-through; color: #fca5a5; background: rgba(239, 68, 68, 0.18); }
+.roue-vp .roue-alpha { overflow: hidden; }
+.roue-vp .roue-alpha b { min-width: 0.95em; font-size: 0.68rem; margin: 0 0.02em; }
+.roue-bank .delta { font-size: 0.45em; font-weight: 800; margin-left: 0.4em; }
+.roue-bank .delta.down { color: #fca5a5; }
+.roue-bank .delta.up { color: #86efac; }

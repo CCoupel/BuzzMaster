@@ -2,6 +2,72 @@
 
 Historique des versions du projet BuzzControl.
 
+## [12.1.0] - 2026-11-22 — Roue de la Fortune : extensions (#147, #308, #309)
+
+Extensions de la Roue de la Fortune : l'achat de voyelles, une case BONUS dont l'effet est géré par l'animateur, et la composition de la roue par question (#309).
+
+### Added
+
+- **Achat de voyelles (#147)** — une voyelle s'achète sur la cagnotte de manche, au prix réglé par question (1 à
+  1 000 000, 250 par défaut). Moment : « Avant de tourner », « Après l'arrêt de la roue » (la voyelle remplace la
+  consonne de la case tirée) ou « Les deux ». Nombre : « 1 voyelle » ou « Plusieurs voyelles », réglé séparément pour
+  chaque moment. Gain d'une voyelle présente : « Sans gain », « Mise remboursée » ou « Prix × nombre de lettres ». Une
+  voyelle absente fait perdre le tour. Activé par défaut, y compris pour les questions existantes.
+- **Case BONUS (#308)** — 0 à 4 cases BONUS, réglées par défaut selon le réglage global (0) et personnalisables par
+  question (#309). Arrêt sur BONUS : bandeau « 🎁 BONUS ! » sur la TV et les tablettes, son « bonne réponse » et
+  comète LED ; l'équipe garde la main. Aucun gain n'est calculé par le système : le cadeau est géré par l'animateur, et
+  des points éventuels passent par l'attribution manuelle.
+- **Éditeur de question Roue** — section « Voyelles » (interrupteur, moment, nombres, prix, gain, exemple) et section
+  « 🎡 Roue — composition » (Points maximum, Pas, Banqueroute, Perdu, BONUS), avec aperçu de la roue.
+- **Actions WebSocket** — `ROUE_BUY_VOWEL` (admin et animateur), 7 codes `ROUE_ERROR` ajoutés (`NOT_A_VOWEL`,
+  `VOWELS_DISABLED`, `VOWEL_NOT_NOW`, `VOWEL_LIMIT_REACHED`, `INSUFFICIENT_BANK`, `LETTER_ALREADY_PROPOSED`,
+  `NO_VOWEL_LEFT`). Événements `ROUE_LAST_EVENT` : `VOWEL_HIT`, `VOWEL_MISS`, `BONUS`.
+- **Documentation** — `docs/GAME_STATE_MACHINE.md`, `docs/DATA_MODELS.md`, `docs/WEBSOCKET_PROTOCOL.md` et
+  `docs/ADMIN_GUIDE.md` décrivent les voyelles et la case BONUS.
+
+### Changed
+
+- **Roue générée** — les cases BONUS s'ajoutent à la roue, avec les cases Banqueroute et Tour perdu. Avec 0 BONUS, la
+  roue est identique à celle de la v12.0.0. Une roue de plus de 64 cases est refusée à l'enregistrement ; au lancement,
+  le nombre de cases BONUS est réduit si la configuration a changé.
+- **Phrase du plateau sur TV et tablette (#310)** — la phrase est centrée verticalement et horizontalement dans les
+  4 lignes du plateau : 1 ligne → ligne 2 ; 2 lignes → lignes 2 et 3 ; 3 lignes → lignes 1 à 3 ; 4 lignes inchangées.
+  L'aperçu de l'éditeur montre ce même placement. Changement voulu : il touche aussi les questions v12.0.0 de 1 ou
+  2 lignes, dont la phrase descend.
+- **Composition de la roue par question (#309)** — dans l'éditeur, la section « 🎡 Roue — composition » règle par question
+  Points maximum, Pas, 💸 Banqueroute, ⏭ Perdu et 🎁 BONUS. Chaque paramètre est soit 🔗 global (il suit le réglage
+  global), soit personnalisé ; le bouton 🔗 le remet au global. Les durées restent globales. Les questions existantes
+  suivent le réglage global pour tous les paramètres : aucun changement de roue.
+- **Carte « Roue » des paramètres (#309)** — deux groupes, Points et Cases spéciales, avec le nombre global de cases
+  BONUS (0 à 4, défaut 0) : c'est le défaut des questions.
+- **Choix de la forme de la roue (#311)** — les vignettes à 4 couleurs des cartes « Bandeau » et « Arc » sont retirées ;
+  les cartes ne gardent que le texte.
+
+### Fixed
+
+- **Aperçu de la phrase dans l'éditeur (#310)** — l'aperçu débordait de sa colonne ; il tient maintenant dans sa colonne,
+  plateau centré.
+- **Textes des cases (#313)** — les points, BANQUEROUTE et BONUS sont ajustés à la largeur de leur case, en bandeau
+  comme en arc, jusqu'à 64 cases.
+- **Plateau sur TV et tablette (#314)** — les 4 lignes du plateau tiennent dans la hauteur de l'écran ; la 4e ligne
+  n'est plus tronquée.
+- **Annonce de retournement d'une consonne (TV et tablette)** — l'annonce affichait « × 0 = +0 » depuis la v12.0.0. Seul
+  l'affichage était faux : les points crédités étaient corrects. L'annonce affiche maintenant la valeur de la case et le
+  gain réel du tour.
+- **Annonce à l'étape 6 (TV et tablette, #315)** — après le retournement d'une consonne, les points gagnés (par exemple
+  « R : 3 × 500 = +1 500 ») restent affichés ; « Une réponse ? À voix haute » s'affiche en dessous. Auparavant, ce texte
+  remplaçait les points.
+
+### Compatibilité
+
+- Les questions de la v12.0.0 gardent leur déroulé, sauf l'achat de voyelles, activé par défaut « avant de tourner » :
+  les équipes peuvent acheter une voyelle au début du tour. Pour garder le comportement v12.0.0, désactiver l'interrupteur de la question.
+- 0 case BONUS : roue identique à la v12.0.0. Un nombre de BONUS global supérieur à 0 (carte « Roue » des Paramètres)
+  s'applique à toutes les questions sans BONUS personnalisé, y compris celles de la v12.0.0 : tant que le global reste à 0,
+  rien ne change.
+- Affichage TV et tablettes des questions v12.0.0 de 1 ou 2 lignes : la phrase est désormais centrée verticalement
+  (1 ligne sur la ligne 2 ; 2 lignes sur les lignes 2 et 3). Aucune donnée ne change.
+
 ## [12.0.0] - 2026-11-17 — Roue de la Fortune (#144, #145)
 
 Nouveau type de question **Roue de la Fortune** : une phrase à deviner, des équipes qui tournent la roue, proposent des

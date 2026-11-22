@@ -7,12 +7,15 @@
  * `cols` colonnes ; les voyelles sont teintées (non proposables, dévoilées à la
  * résolution).
  */
+import { boardTopOffset } from './boardLayout'
 import './RoueBoard.css'
 
 const VOWELS = 'AEIOUY'
 
 export default function RoueBoard({ rows = [], cols = 14, maxRows = 4 }) {
-  const lines = rows.slice(0, maxRows)
+  const shown = rows.slice(0, maxRows)
+  // Phrase centrée verticalement dans le plateau, comme sur la TV (#310) ; chaque ligne est centrée horizontalement.
+  const lines = [...Array(boardTopOffset(shown.length, maxRows)).fill(''), ...shown]
   while (lines.length < maxRows) lines.push('')
   return (
     <div className="roue-board-wrap">
@@ -20,7 +23,7 @@ export default function RoueBoard({ rows = [], cols = 14, maxRows = 4 }) {
         className="roue-board"
         role="img"
         aria-label={rows.length ? `Plateau : ${rows.join(', ')}` : 'Plateau vide'}
-        style={{ gridTemplateColumns: `repeat(${cols}, var(--roue-cell, 26px))` }}
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, '--roue-cols': cols }}
       >
         {lines.map((row, ri) => {
           const pad = Math.floor((cols - row.length) / 2)

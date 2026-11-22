@@ -74,12 +74,13 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionRafaleInvalidate: {ClientTypeAdmin, ClientTypeAnim},
 	// ROUE (v12.0.0, #144, contract roue.md §8.2): the 7 step buttons of the
 	// animateur's tablet — SET_TEAMS, PASS and REVEAL stay admin only (below).
-	protocol.ActionRoueSpin:   {ClientTypeAdmin, ClientTypeAnim},
-	protocol.ActionRoueStop:   {ClientTypeAdmin, ClientTypeAnim},
-	protocol.ActionRoueLetter: {ClientTypeAdmin, ClientTypeAnim},
-	protocol.ActionRoueFlip:   {ClientTypeAdmin, ClientTypeAnim},
-	protocol.ActionRoueAnswer: {ClientTypeAdmin, ClientTypeAnim},
-	protocol.ActionRoueNext:   {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueSpin:     {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueStop:     {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueLetter:   {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueBuyVowel: {ClientTypeAdmin, ClientTypeAnim}, // v12.1.0 #147
+	protocol.ActionRoueFlip:     {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueAnswer:   {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionRoueNext:     {ClientTypeAdmin, ClientTypeAnim},
 	// QUESTION_SOUND (v11.1, #219, contract sound.md §10.2): the three
 	// conduite gestures (rejouer/pause/stop) on a question's attached
 	// sound — same périmètre as REVEAL/RAFALE_VALIDATE above.

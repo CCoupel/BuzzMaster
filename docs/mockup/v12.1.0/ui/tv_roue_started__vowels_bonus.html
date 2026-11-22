@@ -1,0 +1,134 @@
+<!--
+mockup:
+  composant: tv_roue_started
+  feature: vowels_bonus
+  version: 12.1.0
+  type: ui
+  issue: "#147 #308"
+  validee_le: 2026-11-21
+  proposition_retenue: "C — Alphabet complet + bandeau BONUS de la proposition B (rév. 3 : gain de voyelle crédité au retournement)"
+  complete: ["v12.0.0/ui/tv_roue_started__phrase_board_wheel.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV — Roue : alphabet complet et bandeau BONUS (#147 #308) — version retenue</title>
+<style>
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#111827; color:#e5e7eb; }
+.mock-bar { position:sticky; top:0; z-index:300; background:#000; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:#4f46e5; border-color:#818cf8; } .mock-bar button.t.on { background:#b45309; border-color:#fcd34d; } .mock-bar button[disabled] { opacity:.3; cursor:not-allowed; }
+.mock-note { max-width:1120px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:#9ca3af; line-height:1.45; } .mock-note b { color:#e5e7eb; }
+/* ---- Écran TV 16:9, STATIQUE : aucun défilement ---- */
+.tv { width:1120px; height:630px; margin:0 auto 1rem; position:relative; overflow:hidden; background:radial-gradient(circle at 50% 15%, #1f2a5a, #0b1020 70%); border:3px solid #374151; --vh:6.3px; --vw:11.2px; --team:#ef4444; display:flex; flex-direction:column; }
+.banks { display:flex; gap:calc(.8*var(--vw)); padding:calc(1.2*var(--vh)) calc(2.5*var(--vw)) 0; height:calc(10*var(--vh)); flex:0 0 auto; }
+.bank { flex:1; min-width:0; border-radius:calc(1*var(--vh)); padding:0 calc(.9*var(--vw)); background:rgba(255,255,255,.08); border-left:calc(.6*var(--vw)) solid var(--c); overflow:hidden; display:flex; align-items:center; justify-content:space-between; gap:.5em; position:relative; }
+.bank.active { background:rgba(255,255,255,.22); outline:calc(.35*var(--vh)) solid var(--c); }
+.bank .n { font-size:calc(2.2*var(--vh)); font-weight:700; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.bank .v { font-size:calc(3.6*var(--vh)); font-weight:900; white-space:nowrap; } .bank .v.up { color:#4ade80; } .bank .v.down { color:#fca5a5; }
+.bank .d { position:absolute; right:calc(.8*var(--vw)); bottom:calc(.2*var(--vh)); font-size:calc(1.6*var(--vh)); font-weight:800; color:#fca5a5; } .bank .d.up { color:#4ade80; }
+.head { display:flex; align-items:center; gap:calc(2*var(--vw)); padding:calc(1.4*var(--vh)) calc(3*var(--vw)) calc(.6*var(--vh)); height:calc(7*var(--vh)); flex:0 0 auto; }
+.cat { background:rgba(255,255,255,.12); border-radius:999px; padding:.15em 1em; font-size:calc(2.6*var(--vh)); font-weight:800; text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
+.pres { font-size:calc(3.4*var(--vh)); font-weight:700; color:#fde68a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
+.mid { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; position:relative; --cs:calc(7.4*var(--vh)); }
+.board { display:grid; grid-template-columns:repeat(14, var(--cs)); grid-auto-rows:var(--cs); gap:calc(.5*var(--vh)); justify-content:center; }
+.bc { display:flex; align-items:center; justify-content:center; font-weight:900; font-size:calc(var(--cs)*.62); border-radius:calc(.5*var(--vh)); background:rgba(255,255,255,.04); color:#111827; }
+.bc.tile { background:#1d4ed8; box-shadow:inset 0 0 0 2px rgba(255,255,255,.25); } .bc.shown { background:#f8fafc; }
+.bc.lit { background:#fde047; box-shadow:0 0 calc(2.5*var(--vh)) #fde047, inset 0 0 0 2px #fff; }
+.bc.new { background:#f8fafc; color:#b45309; }
+.ribbon { position:absolute; left:0; right:0; top:50%; transform:translateY(-50%) rotate(-3deg); background:linear-gradient(90deg,transparent,#f59e0b 15%,#fbbf24 50%,#f59e0b 85%,transparent); color:#111827; text-align:center; font-size:calc(9*var(--vh)); font-weight:900; letter-spacing:.08em; padding:calc(.8*var(--vh)) 0; box-shadow:0 0 calc(4*var(--vh)) #f59e0b; }
+.event { text-align:center; font-size:calc(2.8*var(--vh)); font-weight:800; height:calc(4.6*var(--vh)); line-height:calc(4.6*var(--vh)); white-space:nowrap; overflow:hidden; flex:0 0 auto; }
+.event em { font-style:normal; color:#fbbf24; }
+.letters { text-align:center; font-size:calc(2*var(--vh)); color:#9ca3af; height:calc(3.4*var(--vh)); line-height:calc(3.4*var(--vh)); white-space:nowrap; overflow:hidden; flex:0 0 auto; }
+.letters b { display:inline-block; min-width:1.5em; margin:0 .1em; border-radius:.3em; background:rgba(255,255,255,.14); color:#fff; line-height:1.5; }
+.letters b.miss { text-decoration:line-through; color:#fca5a5; background:rgba(239,68,68,.18); }
+.letters b.v { background:rgba(245,158,11,.3); color:#fde68a; } .letters b.idle { background:transparent; color:#475569; } .letters b.vu { border-bottom:2px solid #f59e0b; }
+.letters .lab { color:#fcd34d; font-weight:800; margin-right:.4em; }
+.strip { position:relative; height:calc(13*var(--vh)); margin:0 calc(3*var(--vw)) calc(1.5*var(--vh)); border-radius:calc(1.5*var(--vh)); background:rgba(0,0,0,.35); border:2px solid rgba(255,255,255,.15); overflow:hidden; flex:0 0 auto; }
+.track { position:absolute; top:0; bottom:0; left:50%; display:flex; }
+.cell { width:calc(10*var(--vw)); flex:0 0 calc(10*var(--vw)); display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:900; color:#111827; border-right:2px solid #0b1020; font-size:calc(5.4*var(--vh)); line-height:1; }
+.cell.special { background:#0f172a !important; color:#fff; } .cell.bonus { background:linear-gradient(180deg,#fbbf24,#f59e0b) !important; color:#111827; }
+.cell .pic { font-size:calc(4.6*var(--vh)); } .cell .lab { font-size:calc(1.7*var(--vh)); letter-spacing:.06em; margin-top:.25em; text-align:center; line-height:1.05; }
+.ptr { position:absolute; left:50%; top:0; bottom:0; width:calc(10*var(--vw)); transform:translateX(-50%); border:calc(.6*var(--vh)) solid var(--team); border-radius:calc(1*var(--vh)); z-index:3; box-shadow:0 0 calc(2*var(--vh)) var(--team); }
+.strip::before, .strip::after { content:''; position:absolute; top:0; bottom:0; width:16%; z-index:2; pointer-events:none; }
+.strip::before { left:0; background:linear-gradient(90deg, #0b1020, transparent); } .strip::after { right:0; background:linear-gradient(270deg, #0b1020, transparent); }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Moment de l'achat :</strong><span class="grp" id="timing"><button class="t on" data-t="BEFORE">Avant de tourner</button><button class="t" data-t="AFTER">Après l'arrêt</button><button class="t" data-t="BOTH">Les deux</button></span>
+  <strong>Moment :</strong><span class="grp" id="states">
+  <button data-s="turn" class="on">Début du tour</button><button data-s="s4">Case 500 (étape 4)</button><button data-s="vlit">Voyelle E éclairée</button><button data-s="vrev">E retournée</button>
+  <button data-s="vmiss">Voyelle Y absente</button><button data-s="bonus">Roue arrêtée sur BONUS</button></span></div>
+<div class="mock-note" id="pitch"></div>
+<div class="mock-note">Version retenue <b>C — Alphabet complet</b> avec le <b>bandeau BONUS de B</b>. Écran <b>statique</b> (aucun défilement), agencement v12.0 conservé : équipes et cagnottes en haut, plateau plein écran, annonce, ligne des lettres, roue permanente (bandeau ou arc selon la question). La ligne des lettres montre les <b>26 lettres</b> : jouées (blanches), absentes (barrées), restantes (grisées) ; les voyelles sont soulignées en doré, voyelles achetées sur fond doré, prix rappelé en tête. Elle reste masquée si la question désactive l'affichage des lettres. Débit et gain de voyelle sur la carte de l'équipe. Arrêt sur <b>🎁 BONUS</b> : grand bandeau doré en travers du plateau jusqu'au geste suivant, case dorée sous le pointeur. La <b>tablette joueur</b> reprend la même ligne, la même annonce et le même bandeau, sans bouton d'achat.</div>
+<div class="tv" id="tv"></div>
+<script>
+const st = { t:"BEFORE", s:"turn" };
+const ROWS = ["COMBIEN POUR", "CE CHIEN DANS", "LA VITRINE"];
+const bankR = () => ({ turn:900, s4:900, vlit:650, vrev:1650, vmiss:650, bonus:900 }[st.s]);
+const shown = () => st.s === "vrev" ? "TRNCE" : "TRNC";
+function board() {
+  let cells = "";
+  for (let r = 0; r < 4; r++) {
+    const row = ROWS[r] || ""; const pad = Math.floor((14 - row.length) / 2);
+    for (let c = 0; c < 14; c++) {
+      const ch = row[c - pad];
+      if (!ch || ch === " ") { cells += `<div class="bc"></div>`; continue; }
+      if (ch === "E" && st.s === "vlit") cells += `<div class="bc lit"></div>`;
+      else if (ch === "E" && st.s === "vrev") cells += `<div class="bc new">${ch}</div>`;
+      else if (shown().includes(ch)) cells += `<div class="bc shown">${ch}</div>`;
+      else cells += `<div class="bc tile"></div>`;
+    }
+  }
+  return `<div class="board">${cells}</div>`;
+}
+function banks() {
+  const T = [["Rouges","#ef4444"],["Bleus","#3b82f6"],["Verts","#22c55e"],["Jaunes","#eab308"]], vals = { Bleus:400, Verts:0, Jaunes:1300 };
+  return `<div class="banks">${T.map(([n, c], i) => {
+    if (i) return `<div class="bank" style="--c:${c}"><span class="n">${n}</span><span class="v">${vals[n].toLocaleString("fr-FR")}</span></div>`;
+    const credited = st.s === "vrev";
+    const dir = credited ? "up" : ["vlit","vmiss","vrev"].includes(st.s) ? "down" : "";
+    const d = ["vlit","vmiss"].includes(st.s) || (st.s === "vrev" && !credited) ? `<span class="d">−250 🔤</span>` : credited ? `<span class="d up">+1 000 🔤</span>` : "";
+    return `<div class="bank active" style="--c:${c}"><span class="n">${n}</span><span class="v ${dir}">${bankR().toLocaleString("fr-FR")}</span>${d}</div>`;
+  }).join("")}</div>`;
+}
+function event() {
+  const s = st.s, B = st.t !== "AFTER", A = st.t !== "BEFORE";
+  if (s === "turn") return `<div class="event">Aux <em>ROUGES</em> de jouer${B ? " — roue ou voyelle (250)" : ""}</div>`;
+  if (s === "s4") return `<div class="event">Case <em>500</em> — ${A ? "consonne, ou voyelle à 250" : "proposez une consonne"}</div>`;
+  if (s === "vlit") return `<div class="event">Voyelle <em>E</em> : 4 cases</div>`;
+  if (s === "vrev") return `<div class="event"><em>E</em> : 4 × 250 = <em>+1 000</em></div>`;
+  if (s === "vmiss") return `<div class="event"><em>Y</em> : absente — tour perdu</div>`;
+  return `<div class="event"><em>🎁 BONUS</em> — les ROUGES rejouent</div>`;
+}
+function letters() {
+  const played = { T:"", R:"", N:"", C:"", G:"miss" };
+  if (["vlit","vrev"].includes(st.s)) played.E = "v";
+  if (st.s === "vmiss") played.Y = "miss";
+  return `<div class="letters"><span class="lab">🔤 250</span>${"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(l => { const vw = "AEIOUY".includes(l); const c = l in played ? played[l] : "idle"; return `<b class="${c} ${vw ? "vu" : ""}">${l}</b>`; }).join("")}</div>`;
+}
+function wheel() {
+  const segs = st.s === "bonus" ? ["350","🎁|BONUS","800","150"] : ["900","500","💸|BANQUE ROUTE","700"];
+  const cols = ["#fca5a5","#fde68a","#a7f3d0","#bfdbfe","#ddd6fe","#fbcfe8"];
+  const html = ["300", ...segs, "250", "600"].map((v, i) => { const s = v.includes("|") ? v.split("|") : null; return s ? `<div class="cell ${s[1] === "BONUS" ? "bonus" : "special"}"><span class="pic">${s[0]}</span><span class="lab">${s[1]}</span></div>` : `<div class="cell" style="background:${cols[i % 6]}">${v}</div>`; }).join("");
+  return `<div class="strip"><div class="track" style="transform:translateX(calc(-2.5*10*var(--vw)))">${html}</div><div class="ptr"></div></div>`;
+}
+function render() {
+  const rib = st.s === "bonus" ? `<div class="ribbon">🎁 BONUS !</div>` : "";
+  document.getElementById("tv").innerHTML = banks() + `<div class="head"><span class="cat">🐾 Animaux</span><span class="pres">Chanson de Line Renaud</span></div><div class="mid">${board()}${rib}</div>` + event() + letters() + wheel();
+  document.querySelectorAll("#timing button").forEach(b => b.classList.toggle("on", b.dataset.t === st.t));
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", b.dataset.s === st.s));
+  document.getElementById("pitch").innerHTML = `<b>Réglage affiché : ${{ BEFORE:"Avant de tourner", AFTER:"Après l'arrêt de la roue", BOTH:"Les deux" }[st.t]}.</b> Gain d'une voyelle présente crédité à la cagnotte au retournement, aux deux moments (rév. 3).`;
+}
+document.getElementById("states").addEventListener("click", e => { if (e.target.dataset.s) { st.s = e.target.dataset.s; render(); } });
+document.getElementById("timing").addEventListener("click", e => { if (e.target.dataset.t) { st.t = e.target.dataset.t; render(); } });
+render();
+</script>
+</body>
+</html>

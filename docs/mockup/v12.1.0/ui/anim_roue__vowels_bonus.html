@@ -1,0 +1,127 @@
+<!--
+mockup:
+  composant: anim_roue
+  feature: vowels_bonus
+  version: 12.1.0
+  type: ui
+  issue: "#147 #308"
+  validee_le: 2026-11-21
+  proposition_retenue: "B — Voyelles dans le clavier (adaptée au moment de l'achat : avant de tourner et/ou après l'arrêt ; rév. 3 : voyelle suivante à l'étape 6, réglages 1 / plusieurs)"
+  complete: ["v12.0.0/ui/anim_roue__conduct_panel.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablette animateur — Roue : achat de voyelles et case BONUS (#147 #308) — version retenue</title>
+<style>
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#e5e7eb; color:#111827; }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:#4f46e5; border-color:#818cf8; } .mock-bar button.t.on { background:#b45309; border-color:#fcd34d; } .mock-bar button[disabled] { opacity:.3; cursor:not-allowed; }
+.mock-note { max-width:1060px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:#4b5563; line-height:1.45; } .mock-note b { color:#111827; }
+.tab { width:1024px; max-width:calc(100vw - 2rem); margin:0 auto 2rem; background:#0f172a; color:#e5e7eb; border-radius:1.2rem; border:10px solid #1f2937; padding:.8rem; }
+.bar { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.5rem; }
+.chip { background:rgba(255,255,255,.1); border-radius:999px; padding:.2rem .8rem; font-size:.85rem; } .hand { margin-left:auto; border-radius:999px; padding:.25rem .9rem; font-weight:800; background:#ef4444; color:#fff; }
+.sol { font-size:1.35rem; font-weight:900; letter-spacing:.14em; background:rgba(255,255,255,.06); border-radius:.6rem; padding:.5rem .8rem; margin-bottom:.6rem; color:#64748b; }
+.sol .f { color:var(--c); } .sol .lit { background:#fde047; color:#111827; border-radius:.2rem; }
+.bonus { background:linear-gradient(90deg,#f59e0b,#fbbf24); color:#111827; font-weight:900; font-size:1.2rem; text-align:center; border-radius:.6rem; padding:.4rem; margin-bottom:.6rem; }
+.steps { display:grid; grid-template-columns:repeat(8, 1fr); gap:.35rem; margin-bottom:.6rem; }
+.sb { font:inherit; font-size:.78rem; font-weight:700; line-height:1.15; padding:.55rem .2rem; border-radius:.6rem; border:2px solid #334155; background:#1e293b; color:#94a3b8; text-align:center; min-height:4.2rem; }
+.sb b { display:block; font-size:1.05rem; } .sb.cur { border-color:#818cf8; background:#4f46e5; color:#fff; } .sb.ok { background:#16a34a; border-color:#16a34a; color:#fff; } .sb.alt { border-color:#818cf8; color:#c7d2fe; } .sb[disabled] { opacity:.35; }
+.body { display:grid; grid-template-columns:1.35fr 1fr; gap:.6rem; }
+.panel { background:#1e293b; border-radius:.8rem; padding:.6rem; min-width:0; }
+.kbd { display:grid; grid-template-columns:repeat(10, 1fr); gap:.3rem; }
+.key { font:inherit; font-weight:900; font-size:1.1rem; padding:.55rem 0; border-radius:.45rem; border:1px solid #475569; background:#0f172a; color:#e2e8f0; text-align:center; }
+.key.f { background:var(--c); border-color:var(--c); color:#fff; } .key.miss { text-decoration:line-through; color:#f87171; opacity:.7; } .key[disabled] { opacity:.4; }
+.key.csel { background:#4f46e5; border-color:#c7d2fe; color:#fff; } .key.sel { background:#d97706; border-color:#fcd34d; color:#fff; }
+.vrow { display:grid; grid-template-columns:repeat(6, 1fr); gap:.3rem; margin-top:.5rem; } .vrow .key { border-color:#d97706; color:#fcd34d; } .vrow .key.f { color:#fff; }
+.buy { width:100%; margin-top:.5rem; font:inherit; font-size:1.05rem; font-weight:900; padding:.8rem; border-radius:.6rem; border:0; background:#d97706; color:#fff; } .buy[disabled] { opacity:.35; }
+.legend { display:flex; gap:.7rem; flex-wrap:wrap; font-size:.75rem; color:#94a3b8; margin-top:.4rem; } .legend i { display:inline-block; width:.7rem; height:.7rem; border-radius:.2rem; margin-right:.25rem; vertical-align:-1px; }
+.case { background:#0f172a; border-radius:.6rem; padding:.5rem; text-align:center; font-size:1.6rem; font-weight:900; } .case small { display:block; font-size:.7rem; color:#94a3b8; font-weight:600; }
+.case.gold { background:#f59e0b; color:#111827; } .case .off { text-decoration:line-through; opacity:.5; }
+.gain { text-align:center; font-weight:800; color:#4ade80; min-height:1.4rem; margin:.4rem 0; } .gain.cost { color:#f87171; }
+.panel h4 { margin:.3rem 0; font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; }
+.t { display:flex; justify-content:space-between; padding:.3rem .5rem; border-left:5px solid var(--c); border-radius:.3rem; margin-bottom:.25rem; background:#0f172a; font-weight:700; } .t.active { outline:2px solid var(--c); } .t .v { font-variant-numeric:tabular-nums; }
+.t .v.down { color:#f87171; } .t .v.up { color:#4ade80; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Moment de l'achat :</strong><span class="grp" id="timing"><button class="t on" data-t="BEFORE">Avant de tourner</button><button class="t" data-t="AFTER">Après l'arrêt</button><button class="t" data-t="BOTH">Les deux</button></span>
+  <strong>Nombre :</strong><span class="grp" id="count"><button class="t on" data-c="MANY">Plusieurs</button><button class="t" data-c="ONE">1</button></span>
+  <strong>Moment :</strong><span class="grp" id="states">
+  <button data-s="s1" class="on">1 Début du tour</button><button data-s="pick">1 Voyelle choisie</button><button data-s="poor">1 Cagnotte insuffisante</button><button data-s="vlit">1 E éclairée</button><button data-s="after">1 Après la voyelle</button>
+  <button data-s="s4">4 Case 500</button><button data-s="pick4">4 Voyelle choisie</button><button data-s="lit4">5 E éclairée</button><button data-s="ans4">6 Après la voyelle</button>
+  <button data-s="vmiss">7 Y absente</button><button data-s="bonus">Case BONUS</button></span></div>
+<div class="mock-note" id="pitch"></div>
+<div class="mock-note">Version retenue <b>B — Voyelles dans le clavier</b>, adaptée au moment de l'achat. La rangée des 8 boutons d'étape est <b>inchangée</b>. Sous les consonnes, une rangée de voyelles (prix rappelé) s'active <b>à l'étape 1</b> si l'achat se fait avant de tourner, <b>à l'étape 4</b> s'il se fait après l'arrêt, aux deux étapes avec « Les deux » ; avec le réglage « plusieurs », elle se rallume <b>à l'étape 6</b> après une voyelle achetée après l'arrêt (voyelle suivante), et à l'étape 1 après une voyelle achetée avant. Une voyelle choisie fait apparaître le grand bouton « Acheter le E — 250 » sous le clavier ; le retournement passe par le bouton <b>5</b> existant. Contraintes respectées : aucun texte explicatif au centre, aucun bouton découpé. Exemple exact : Rouges, cagnotte 900, E × 4 (+1 000), Y absente.</div>
+<div class="tab" id="pg"></div>
+<script>
+const st = { t:"BEFORE", s:"s1", c:"MANY" };
+const PHRASE = "COMBIEN POUR CE CHIEN DANS LA VITRINE";
+const CONS = "BCDFGHJKLMNPQRSTVWXZ".split(""), VOW = "AEIOUY".split("");
+const RED = "#ef4444";
+const BEF = () => st.t !== "AFTER", AFT = () => st.t !== "BEFORE";
+const ONLY = { pick:BEF, poor:BEF, vlit:BEF, after:BEF, pick4:AFT, lit4:AFT, ans4:AFT };
+const bank = () => ({ s1:900, pick:900, poor:150, vlit:650, after:1650, s4:900, pick4:900, lit4:650, ans4:1650, vmiss:650, bonus:900 }[st.s]);
+const step = () => ({ s4:4, pick4:4, lit4:5, ans4:6, vmiss:7 }[st.s] || 1);
+const atTurn = () => ["s1","pick","poor","after","bonus"].includes(st.s);
+const atLetter = () => ["s4","pick4"].includes(st.s);
+const atAnswer = () => st.s === "ans4";
+const vowOpen = () => bank() >= 250 && ((atTurn() && BEF() && !(st.s === "after" && st.c === "ONE")) || (atLetter() && AFT()) || (atAnswer() && AFT() && st.c === "MANY"));
+function vcls(l) { if (["vlit","after","lit4","ans4"].includes(st.s) && l === "E") return "f"; if (st.s === "vmiss" && l === "Y") return "miss"; if ((st.s === "pick" || st.s === "pick4") && l === "E") return "sel"; return ""; }
+function ccls(l) { return "TRNC".includes(l) ? "f" : l === "G" ? "miss" : ""; }
+function phrase() {
+  const lit = ["vlit","lit4"].includes(st.s);
+  return `<div class="sol">${[...PHRASE].map(ch => ch === " " ? "&nbsp;&nbsp;" : (ch === "E" && lit) ? `<span class="lit">${ch}</span>` : ("TRNC".includes(ch) || (ch === "E" && ["after","ans4"].includes(st.s))) ? `<span class="f" style="--c:${RED}">${ch}</span>` : `<span>${ch}</span>`).join("")}</div>`;
+}
+function steps() {
+  const s = step(), turn = atTurn();
+  const b = [
+    `<button class="sb ${turn ? "cur" : ""}" ${turn ? "" : "disabled"}><b>1</b>Lancer<br>la roue</button>`,
+    `<button class="sb" disabled><b>2</b>Forcer<br>l'arrêt</button>`,
+    `<button class="sb" disabled><b>3</b>Case</button>`,
+    `<button class="sb ${s === 4 ? "cur" : ""}" disabled><b>4</b>Valider la<br>consonne</button>`,
+    `<button class="sb ${["vlit","lit4"].includes(st.s) ? "cur" : ""}" ${["vlit","lit4"].includes(st.s) ? "" : "disabled"}><b>5</b>Retourner<br>les cases</button>`,
+    `<button class="sb ${["after","ans4"].includes(st.s) ? "ok" : ""}" ${["after","ans4"].includes(st.s) ? "" : "disabled"}><b>✓</b>Réponse<br>validée</button>`,
+    `<button class="sb ${st.s === "vmiss" ? "alt" : st.s === "ans4" ? "cur" : ""}" ${["vmiss","ans4"].includes(st.s) ? "" : "disabled"}><b>7</b>Tour suivant<br>▶ Rouges</button>`,
+    `<button class="sb ${st.s === "vmiss" ? "cur" : st.s === "ans4" ? "alt" : ""}" ${["vmiss","ans4"].includes(st.s) ? "" : "disabled"}><b>7</b>Équipe suivante<br>▶ Bleus</button>`];
+  return `<div class="steps">${b.join("")}</div>`;
+}
+function keyboard() {
+  const consOn = atLetter();
+  const k = `<div class="kbd">${CONS.map(l => `<button class="key ${ccls(l)}" style="--c:${RED}" ${consOn && !ccls(l) ? "" : "disabled"}>${l}</button>`).join("")}</div>`;
+  const open = vowOpen();
+  const v = `<div class="vrow">${VOW.map(l => `<button class="key ${vcls(l)}" style="--c:${RED}" ${open && !["f","miss"].includes(vcls(l)) ? "" : "disabled"}>${l}</button>`).join("")}</div>`;
+  const sel = st.s === "pick" || st.s === "pick4";
+  const showBuy = (atTurn() && BEF()) || (atLetter() && AFT()) || (atAnswer() && st.c === "MANY");
+  const buy = showBuy ? `<button class="buy" ${sel ? "" : "disabled"}>${sel ? "🔤 Acheter le E — 250" : bank() < 250 ? "🔤 Cagnotte < 250" : (st.s === "after" && st.c === "ONE") ? "🔤 1 voyelle par tour" : atAnswer() ? "🔤 Autre voyelle · 250" : "🔤 Voyelle · 250"}</button>` : "";
+  return k + v + buy + `<div class="legend"><span><i style="background:${RED}"></i>Rouges</span><span><i style="background:#3b82f6"></i>Bleus</span><span>barrée = absente</span></div>`;
+}
+function info() {
+  const seg = st.s === "bonus" ? `<div class="case gold"><small>Case de la roue</small>🎁 BONUS</div>`
+    : `<div class="case"><small>Case de la roue</small>${["pick4","lit4","ans4"].includes(st.s) ? `<span class="off">500</span>` : ["s4","s1","pick","poor","after"].includes(st.s) ? "500" : "—"}</div>`;
+  const g = ["vlit","lit4"].includes(st.s) ? `<div class="gain cost">E · 4 cases · −250</div>` : ["after","ans4"].includes(st.s) ? `<div class="gain">E : 4 × 250 = +1 000</div>` : st.s === "vmiss" ? `<div class="gain cost">Y absente · −250</div>` : `<div class="gain"></div>`;
+  const dir = ["after","ans4"].includes(st.s) ? "up" : ["vlit","vmiss","lit4"].includes(st.s) ? "down" : "";
+  return seg + g + `<h4>Cagnottes de la manche</h4><div class="t active" style="--c:${RED}"><span>Rouges</span><span class="v ${dir}">${bank().toLocaleString("fr-FR")}</span></div><div class="t" style="--c:#3b82f6"><span>Bleus</span><span class="v">400</span></div><div class="t" style="--c:#22c55e"><span>Verts</span><span class="v">0</span></div>`;
+}
+function render() {
+  if (ONLY[st.s] && !ONLY[st.s]()) st.s = "s1";
+  document.getElementById("pg").innerHTML = `<div class="bar"><span class="chip">🎡 <b>ROUE</b></span><span class="chip">« Chanson de Line Renaud »</span><span class="chip" style="color:#fcd34d">🔤 250 · ${{ BEFORE:"avant", AFTER:"après", BOTH:"avant / après" }[st.t]}</span><span class="hand">▶ Rouges</span></div>${st.s === "bonus" ? `<div class="bonus">🎁 BONUS !</div>` : ""}${phrase()}${steps()}<div class="body"><div class="panel">${keyboard()}</div><div class="panel">${info()}</div></div>`;
+  document.querySelectorAll("#timing button").forEach(b => b.classList.toggle("on", b.dataset.t === st.t));
+  document.querySelectorAll("#count button").forEach(b => b.classList.toggle("on", b.dataset.c === st.c));
+  document.querySelectorAll("#states button").forEach(b => { b.classList.toggle("on", b.dataset.s === st.s); b.disabled = !!(ONLY[b.dataset.s] && !ONLY[b.dataset.s]()); });
+  document.getElementById("pitch").innerHTML = `<b>Réglage affiché : ${{ BEFORE:"Avant de tourner", AFTER:"Après l'arrêt de la roue", BOTH:"Les deux" }[st.t]}.</b> Les moments grisés n'existent pas avec ce réglage.`;
+}
+document.getElementById("states").addEventListener("click", e => { if (e.target.dataset.s && !e.target.disabled) { st.s = e.target.dataset.s; render(); } });
+document.getElementById("timing").addEventListener("click", e => { if (e.target.dataset.t) { st.t = e.target.dataset.t; render(); } });
+document.getElementById("count").addEventListener("click", e => { if (e.target.dataset.c) { st.c = e.target.dataset.c; render(); } });
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!--
+mockup:
+  composant: admin_question_editor
+  feature: roue_vowels_bonus
+  version: 12.1.0
+  type: ui
+  issue: "#147 #308"
+  validee_le: 2026-11-21
+  proposition_retenue: "C — Sections avec aperçu de la roue + moment de l'achat + nombre de voyelles (1 / plusieurs) avant et après"
+  complete: ["v12.0.0/ui/admin_question_editor__roue_phrase.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Éditeur de question — Roue : voyelles et cases BONUS (#147 #308) — version retenue</title>
+<style>
+:root { --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --ok:#16a34a; --vow:#b45309; --vowbg:#fef3c7; --gold:#f59e0b; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem 1.1rem; font-size:.8rem; align-items:center; }
+.mock-bar strong { color:#fff; } .grp { display:flex; gap:.3rem; flex-wrap:wrap; }
+.mock-bar button { font:inherit; font-size:.78rem; padding:.28rem .65rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+.mock-bar button.on { background:var(--primary); border-color:#818cf8; }
+.mock-note { max-width:860px; margin:.6rem auto; padding:0 1rem; font-size:.82rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); }
+.form { max-width:860px; margin:0 auto 2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.fg { margin-bottom:1rem; } label.l { display:block; font-weight:700; font-size:.88rem; margin-bottom:.35rem; }
+input[type=text], input[type=number] { font:inherit; font-size:.9rem; padding:.45rem .6rem; border:1px solid var(--gray-300); border-radius:.4rem; width:100%; }
+input[type=number] { width:7rem; }
+.hint { font-size:.76rem; color:var(--gray-500); margin:.3rem 0 0; } .hint.ok { color:var(--ok); }
+.board { display:grid; grid-template-columns:repeat(14, 1.6rem); gap:.15rem; margin-top:.5rem; }
+.board div { height:1.6rem; border-radius:.2rem; background:var(--gray-100); } .board div.c { background:#1d4ed8; }
+.cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:.5rem; } .cards.two { grid-template-columns:repeat(2, 1fr); }
+@media (max-width:640px) { .cards { grid-template-columns:1fr; } }
+.card { border:1px solid var(--gray-300); border-radius:.5rem; padding:.5rem .6rem; font-size:.8rem; display:flex; gap:.45rem; align-items:flex-start; cursor:pointer; }
+.card.on { border-color:var(--primary); background:var(--primary-100); } .card strong { display:block; font-size:.84rem; } .card small { color:var(--gray-500); }
+.card.v.on { border-color:var(--vow); background:var(--vowbg); }
+.sw { display:flex; align-items:center; gap:.6rem; font-size:.88rem; font-weight:600; cursor:pointer; }
+.track { width:2.6rem; height:1.4rem; border-radius:999px; background:var(--gray-300); position:relative; flex:0 0 auto; } .track i { position:absolute; top:.15rem; left:.15rem; width:1.1rem; height:1.1rem; border-radius:50%; background:#fff; }
+.track.on { background:var(--primary); } .track.on i { left:1.35rem; }
+.sec { border-top:1px solid var(--gray-200); padding-top:.9rem; margin-top:.4rem; } .sec h3 { margin:0 0 .6rem; font-size:.95rem; } .sec.v h3 { color:var(--vow); }
+.stepper { display:inline-flex; align-items:center; border:1px solid var(--gray-300); border-radius:.5rem; overflow:hidden; } .stepper button { font:inherit; font-weight:800; width:2.2rem; height:2.2rem; border:0; background:var(--gray-100); cursor:pointer; } .stepper b { min-width:2.4rem; text-align:center; font-size:1.05rem; }
+.inline { display:flex; gap:.8rem; align-items:center; flex-wrap:wrap; }
+.wheel { display:flex; gap:2px; overflow:hidden; border-radius:.4rem; margin-top:.5rem; }
+.wheel span { flex:1 0 2.1rem; height:2.2rem; display:flex; align-items:center; justify-content:center; font-size:.66rem; font-weight:800; background:#e0e7ff; } .wheel span.s { background:#111827; color:#fff; } .wheel span.b { background:var(--gold); color:#111827; }
+.ex { background:var(--vowbg); color:var(--vow); border-radius:.4rem; padding:.35rem .6rem; font-size:.8rem; font-weight:700; display:inline-block; margin-top:.4rem; }
+.dim { opacity:.4; pointer-events:none; }
+.save { margin-top:1rem; display:flex; justify-content:flex-end; } .save button { font:inherit; font-weight:700; background:var(--primary); color:#fff; border:0; border-radius:.5rem; padding:.6rem 1.2rem; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Exemple :</strong><span class="grp" id="states">
+  <button data-s="on" class="on">Voyelles activées (les deux : 1 avant, plusieurs après), 2 cases BONUS</button><button data-s="off">Voyelles désactivées, 0 BONUS</button><button data-s="old">Question v12.0 rouverte (valeurs par défaut)</button></span>
+  <span style="color:#9ca3af">— cliquez les cartes, l'interrupteur et le compteur pour essayer</span></div>
+<div class="mock-note">Version retenue <b>C — Sections avec aperçu de la roue</b>, complétée au GATE 2 par la <b>sélection du moment de l'achat</b>. Éditeur de question, type <b>Roue</b> : la partie v12.0 (phrase + aperçu du plateau, présentation, mode, gains, forme de la roue, lettres proposées) est inchangée. Section <b>🔤 Voyelles</b> : interrupteur (activé par défaut, y compris pour les questions existantes), <b>moment de l'achat</b> (avant de tourner — défaut —, après l'arrêt, ou les deux), <b>nombre de voyelles « 1 / plusieurs »</b> pour chaque moment (défaut « plusieurs » ; le réglage d'un moment non choisi est grisé mais conservé), prix (défaut 250), gain d'une voyelle présente (3 options) avec exemple chiffré. Section <b>🎡 Roue</b> : compteur de cases <b>BONUS</b> (0 à 4, défaut 0) et aperçu de la roue générée, calculé par le serveur (ici une illustration). Les autres cases de la roue restent dans les Paramètres (DECISIONS : jamais de liste de cases à saisir).</div>
+<div class="form" id="f"></div>
+<script>
+const GAINS = [["NONE","Sans gain","La voyelle révèle seulement ses lettres"],["REFUND","Mise remboursée","Voyelle présente : le prix revient dans la cagnotte"],["PER_OCCURRENCE","Prix × nombre de lettres","Voyelle présente : prix × nombre de cases (ex. 3 E = 3 × 250 = 750)"]];
+const TIMINGS = [["BEFORE","Avant de tourner","Au début du tour, plusieurs voyelles d'affilée tant que la cagnotte le permet"],["AFTER","Après l'arrêt de la roue","À la place de la consonne : une voyelle, la case tirée n'est pas jouée"],["BOTH","Les deux","Avant de tourner et après l'arrêt"]];
+const COUNTS = [["ONE","1 voyelle","Une seule voyelle à ce moment"],["MANY","Plusieurs voyelles","D'affilée, tant que la cagnotte le permet et que chaque voyelle est présente"]];
+const PRESETS = { on:{ on:true, timing:"BOTH", before:"ONE", after:"MANY", price:300, gain:"PER_OCCURRENCE", bonus:2 }, off:{ on:false, timing:"BEFORE", before:"MANY", after:"MANY", price:250, gain:"NONE", bonus:0 }, old:{ on:true, timing:"BEFORE", before:"MANY", after:"MANY", price:250, gain:"NONE", bonus:0 } };
+let c = { ...PRESETS.on }, preset = "on";
+function base() {
+  const rows = ["COMBIEN POUR", "CE CHIEN DANS", "LA VITRINE", ""];
+  let b = ""; rows.forEach(r => { for (let i = 0; i < 14; i++) { const ch = r[i]; b += `<div class="${ch && ch !== " " ? "c" : ""}"></div>`; } });
+  return `<div class="fg"><label class="l">Phrase à deviner *</label><input type="text" value="Combien pour ce chien dans la vitrine"><p class="hint ok">✓ 3 lignes sur 4 · 9 consonnes différentes · 13 lettres différentes</p><div class="board">${b}</div></div>
+  <div class="fg"><label class="l">Phrase de présentation</label><input type="text" value="Chanson de Line Renaud"></div>
+  <div class="fg"><label class="l">Mode de jeu</label><div class="cards"><div class="card"><input type="radio"><span><strong>Solo</strong><small>une équipe</small></span></div><div class="card"><input type="radio"><span><strong>Chacun son tour</strong><small>la main tourne</small></span></div><div class="card on"><input type="radio" checked><span><strong>Tant que je gagne</strong><small>garde la main</small></span></div></div></div>
+  <div class="fg"><label class="l">Gains de la manche</label><div class="cards two"><div class="card on"><input type="radio" checked><span><strong>Seul le gagnant encaisse</strong></span></div><div class="card"><input type="radio"><span><strong>Tout le monde encaisse</strong></span></div></div></div>`;
+}
+const cards = (list, val, key) => `<div class="cards">${list.map(([k, t, d]) => `<div class="card v ${val === k ? "on" : ""}" data-k="${key}" data-v="${k}"><input type="radio" ${val === k ? "checked" : ""}><span><strong>${t}</strong><small>${d}</small></span></div>`).join("")}</div>`;
+function example() {
+  const p = c.price, g = c.gain === "NONE" ? "aucun gain" : c.gain === "REFUND" ? "remboursé +" + p : "gagné +" + 3 * p;
+  return `<span class="ex">Exemple : 3 E à ${p} → payé −${p}, ${g}${c.timing === "AFTER" ? " ; la case tirée n'est pas jouée" : ""}</span>`;
+}
+function vowels() {
+  return `<div class="sec v"><h3>🔤 Voyelles</h3><div class="fg"><div class="sw" id="sw"><span class="track ${c.on ? "on" : ""}"><i></i></span>Autoriser l'achat de voyelles</div><p class="hint">L'équipe paie une voyelle avec sa cagnotte de manche. Voyelle absente : payée, tour perdu.</p></div>
+    <div class="${c.on ? "" : "dim"}">
+      <div class="fg"><label class="l">Moment de l'achat</label>${cards(TIMINGS, c.timing, "timing")}</div>
+      <div class="cards two" style="margin-bottom:1rem">
+        <div class="${c.timing === "AFTER" ? "dim" : ""}"><label class="l">Avant de tourner : combien de voyelles par tour ?</label><div class="cards two">${COUNTS.map(([k, t, d]) => `<div class="card v ${c.before === k ? "on" : ""}" data-k="before" data-v="${k}"><input type="radio" ${c.before === k ? "checked" : ""}><span><strong>${t}</strong><small>${d}</small></span></div>`).join("")}</div></div>
+        <div class="${c.timing === "BEFORE" ? "dim" : ""}"><label class="l">Après l'arrêt : combien de voyelles par arrêt ?</label><div class="cards two">${COUNTS.map(([k, t, d]) => `<div class="card v ${c.after === k ? "on" : ""}" data-k="after" data-v="${k}"><input type="radio" ${c.after === k ? "checked" : ""}><span><strong>${t}</strong><small>${d}</small></span></div>`).join("")}</div></div>
+      </div>
+      <div class="fg"><label class="l">Prix d'une voyelle</label><div class="inline"><input type="number" value="${c.price}"> <span class="hint" style="margin:0">points de cagnotte (1 à 1 000 000)</span></div></div>
+      <div class="fg"><label class="l">Gain d'une voyelle présente</label>${cards(GAINS, c.gain, "gain")}${example()}</div>
+    </div></div>`;
+}
+function wheel() {
+  const vals = [1000,50,950,100,900,150,850,200,800,250,750,300,700,350,650,400,600,450,550];
+  const out = []; vals.forEach((v, i) => { out.push(`<span>${v}</span>`); if (i === 0) out.push(`<span class="s">💸</span>`); if (i === 6) out.push(`<span class="s">⏭</span>`); if (c.bonus >= 1 && i === 9) out.push(`<span class="b">🎁</span>`); if (c.bonus >= 2 && i === 15) out.push(`<span class="b">🎁</span>`); if (c.bonus >= 3 && i === 3) out.push(`<span class="b">🎁</span>`); if (c.bonus >= 4 && i === 17) out.push(`<span class="b">🎁</span>`); if (i === 12) out.push(`<span class="s">💸</span>`); });
+  return `<div class="sec"><h3>🎡 Roue</h3><div class="fg"><label class="l">Forme de la roue</label><div class="cards two"><div class="card on"><input type="radio" checked><span><strong>Bandeau</strong></span></div><div class="card"><input type="radio"><span><strong>Roue en arc</strong></span></div></div></div>
+    <div class="fg"><div class="inline"><b style="font-size:.88rem">🎁 Cases BONUS</b><span class="stepper"><button id="minus">−</button><b>${c.bonus}</b><button id="plus">+</button></span><span class="hint" style="margin:0">0 à 4 — ajoutées aux cases des Paramètres. Arrêt sur BONUS : aucun point, l'équipe rejoue ; le cadeau est géré par l'animateur.</span></div>
+    <div class="wheel">${out.join("")}</div><p class="hint">Aperçu de la roue générée (${out.length} cases) — calculé par le serveur (illustration). Les autres cases (maximum, pas, Banqueroute, Perdu) se règlent dans les Paramètres.</p></div>
+    <div class="fg"><div class="sw"><span class="track on"><i></i></span>Afficher sur la TV les lettres déjà proposées</div></div></div>`;
+}
+function render() {
+  document.getElementById("f").innerHTML = base() + vowels() + wheel() + `<div class="save"><button>Enregistrer</button></div>`;
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", b.dataset.s === preset));
+}
+document.getElementById("f").addEventListener("click", e => {
+  const card = e.target.closest(".card[data-k]"); if (card) { c[card.dataset.k] = card.dataset.v; render(); return; }
+  if (e.target.closest("#sw")) { c.on = !c.on; render(); return; }
+  if (e.target.id === "minus") { c.bonus = Math.max(0, c.bonus - 1); render(); return; }
+  if (e.target.id === "plus") { c.bonus = Math.min(4, c.bonus + 1); render(); }
+});
+document.getElementById("states").addEventListener("click", e => { if (e.target.dataset.s) { preset = e.target.dataset.s; c = { ...PRESETS[preset] }; render(); } });
+render();
+</script>
+</body>
+</html>

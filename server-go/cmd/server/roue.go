@@ -24,7 +24,7 @@ func (a *App) setupRoueCallbacks() {
 	a.engine.RoueWheelParamsFn = func() game.RoueWheelParams { // game-config.json `wheel`, read at each START
 		w := config.GetGameSettings().Wheel
 		return game.RoueWheelParams{
-			MaxPoints: w.MaxPoints, Step: w.Step, BankruptCount: w.BankruptCount, LoseTurnCount: w.LoseTurnCount,
+			MaxPoints: w.MaxPoints, Step: w.Step, BankruptCount: w.BankruptCount, LoseTurnCount: w.LoseTurnCount, BonusCount: w.BonusCount,
 			SpinPeriodMs: w.SpinPeriodMs, SpinMaxMs: w.SpinMaxMs, StopDurationMs: w.StopDurationMs, FlipIntervalMs: w.FlipIntervalMs,
 		}
 	}
@@ -43,6 +43,9 @@ func (a *App) setupRoueCallbacks() {
 			a.notifySound(audio.CueGagne)
 			a.startScoreFlash(n.Team, n.Points)
 			a.broadcastAwardedTeams()
+		case game.RoueNoticeBonus: // #308: no points, so neither score flash nor ambiance pulse
+			a.sendLEDSetComet(n.Team)
+			a.notifySound(audio.CueRafaleBonne) // existing "bonne réponse" cue
 		}
 	}
 	a.engine.RoueCategoryMeta = func(category string) game.CategoryMeta {
@@ -76,6 +79,13 @@ func (a *App) handleRoueAction(clientID string, msg *protocol.Message) {
 			err = &game.RoueError{Code: game.RoueErrNotALetter, Message: "payload invalide"}
 		} else {
 			err = a.engine.RoueLetter(p.Letter)
+		}
+	case protocol.ActionRoueBuyVowel:
+		var p protocol.RoueBuyVowelPayload
+		if jerr := json.Unmarshal(msg.Msg, &p); jerr != nil {
+			err = &game.RoueError{Code: game.RoueErrNotALetter, Message: "payload invalide"}
+		} else {
+			err = a.engine.RoueBuyVowel(p.Letter)
 		}
 	case protocol.ActionRoueFlip:
 		err = a.engine.RoueFlip()

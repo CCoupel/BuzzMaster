@@ -164,6 +164,7 @@ const (
 	ActionRoueSetTeams = "ROUE_SET_TEAMS" // Admin → Server: participating teams + rotation order
 	ActionRoueSpin     = "ROUE_SPIN"      // Admin/Anim → Server: step 1, spin the wheel
 	ActionRoueStop     = "ROUE_STOP"      // Admin/Anim → Server: step 2, « Forcer l'arrêt »
+	ActionRoueBuyVowel = "ROUE_BUY_VOWEL" // Admin/Anim → Server: v12.1.0 #147, buy a vowel {LETTER}
 	ActionRoueLetter   = "ROUE_LETTER"    // Admin/Anim → Server: step 4, the team's consonant
 	ActionRoueFlip     = "ROUE_FLIP"      // Admin/Anim → Server: step 5, « Retourner les cases »
 	ActionRoueAnswer   = "ROUE_ANSWER"    // Admin/Anim → Server: step 6, « Réponse validée »
@@ -610,6 +611,9 @@ type RoueSetTeamsPayload = MemorySetTeamsPayload
 type RoueLetterPayload struct {
 	Letter string `json:"LETTER"`
 }
+
+// RoueBuyVowelPayload for ROUE_BUY_VOWEL (v12.1.0).
+type RoueBuyVowelPayload = RoueLetterPayload
 
 // RoueNextPayload for ROUE_NEXT: HAND is SAME (« Tour suivant ») or NEXT (« Équipe suivante »).
 type RoueNextPayload struct {

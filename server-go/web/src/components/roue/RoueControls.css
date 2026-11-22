@@ -23,3 +23,11 @@
 .roue-btn.ghost { border-color: transparent; background: none; text-decoration: underline; font-weight: 500; font-size: 0.8rem; color: var(--gray-600, #4b5563); }
 .roue-btn[disabled] { opacity: 0.38; cursor: not-allowed; }
 .roue-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+
+/* Voyelles (v12.1.0, #147) */
+.roue-vow-buy { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; margin: 0.4rem 0; }
+.roue-vow-buy .roue-key { min-width: 2.6rem; flex: 0 0 auto; padding: 0.5rem 0.4rem; }
+.roue-vow-label { color: #7c3aed; font-size: 0.85rem; margin-right: 0.3rem; }
+.roue-btn.vow { border-color: #7c3aed; color: #6d28d9; }
+.roue-btn.vow.solid { background: #7c3aed; color: #fff; }
+.roue-cost { color: #dc2626; font-weight: 800; }

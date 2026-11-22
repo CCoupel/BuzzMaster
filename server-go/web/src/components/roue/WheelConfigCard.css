@@ -1,5 +1,10 @@
 /* WheelConfigCard — maquette M4 (#144). */
-.wheel-cfg-params { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.7rem; }
+.wheel-cfg-groups { display: grid; grid-template-columns: 1fr 1.5fr; gap: 0.8rem; }
+.wheel-cfg-group { border: 1px solid var(--gray-200); border-radius: 0.6rem; padding: 0.6rem; margin: 0; min-width: 0; }
+.wheel-cfg-group legend { font-weight: 800; font-size: 0.82rem; padding: 0 0.3rem; }
+.wheel-cfg-params { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.7rem; }
+.wheel-cfg-params-3 { grid-template-columns: repeat(3, 1fr); }
+.wheel-cfg-param.new label { color: #b45309; }
 .wheel-cfg-param { border: 1px solid var(--gray-200); border-radius: 0.6rem; padding: 0.6rem 0.7rem; background: var(--gray-50); }
 .wheel-cfg-param label { display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 0.3rem; }
 .wheel-cfg-param input { font: inherit; font-size: 1.2rem; font-weight: 800; width: 100%; box-sizing: border-box; padding: 0.3rem 0.5rem; }
@@ -23,6 +28,6 @@
 .wheel-cfg-toast { font-size: 0.82rem; margin: 0.6rem 0 0; }
 .wheel-cfg-toast.success { color: #16a34a; }
 .wheel-cfg-toast.error { color: #dc2626; font-weight: 600; }
-@media (max-width: 900px) { .wheel-cfg-params { grid-template-columns: repeat(2, 1fr); } .wheel-cfg-views { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .wheel-cfg-groups { grid-template-columns: 1fr; } .wheel-cfg-params-3 { grid-template-columns: repeat(2, 1fr); } .wheel-cfg-views { grid-template-columns: 1fr; } }
 .wheel-cfg-trial { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.5rem 0 0.2rem; }
 .wheel-cfg-trial-state { font-size: 0.86rem; font-weight: 700; color: var(--gray-600, #4b5563); min-height: 1.3em; }

@@ -1,6 +1,82 @@
 # Changelog des Contrats API
 
 ---
+## [20261122] — v12.1.0 LOT-2 — ROUE : refus d'une composition à l'enregistrement (#309, revue M1 / M2)
+
+`roue.md` révision 8.2, §16.5. Précision du contrat, alignée sur le comportement voulu ; **aucun champ ni payload ne
+change, aucun BREAKING**.
+
+- **[CHANGED]** `POST /questions` (`type=ROUE`) : la composition effective est validée **BONUS hérité du global
+  compris** ; une composition qui dépasse 64 cases est refusée à l'enregistrement (`400`, rien n'est écrit), même si
+  le BONUS n'est pas envoyé (M1). La réduction des BONUS et le repli sur la roue globale ne valent qu'au `START`.
+- **[CHANGED]** Code de refus : dépassement de 64 cases dû au **seul** BONUS (envoyé ou hérité) → `400
+  ROUE_BONUS_COUNT_INVALID` (comportement LOT-1 conservé) ; toute autre composition invalide → `400
+  ROUE_WHEEL_INVALID` (M2 : le texte du §16.5 est aligné sur son tableau).
+
+---
+## [20261121-d] — v12.1.0 LOT-1 — ROUE : placement de la phrase sur le plateau (#310)
+
+`roue.md` §3.1 (règle « Placement »). Correctif livré `051e5d9a`. **Aucun champ ni payload ne change, aucun BREAKING.**
+
+- **[CHANGED]** Affichage seulement : la phrase est centrée verticalement dans les 4 lignes (décalage ⌊(4 − n) / 2⌋)
+  et chaque ligne horizontalement, par une règle client unique (`boardLayout.js`) partagée par l'aperçu de l'éditeur
+  et la TV / tablette. Les phrases de 1 ou 2 lignes, y compris celles des questions v12.0, s'affichent désormais à
+  partir de la 2ᵉ ligne sur la TV et la tablette (auparavant dès la 1ʳᵉ).
+
+---
+## [20261121-c] — v12.1.0 LOT-2 — ROUE : composition de la roue par question (#309)
+
+`roue.md` révision 8.1, **§16** (nouveau). Décisions utilisateur : retour QUALIF 12.1.0.1 n° 1 et choix sur le plan
+LOT-2 (surcharge champ par champ). **Aucun BREAKING** : une question sans surcharge garde la roue globale ; une question
+LOT-1 avec `ROUE_BONUS_COUNT` garde sa roue.
+
+- **[NEW]** `game-config.json` `wheel.bonus_count` (0–4, absent = 0) : nombre de BONUS de la roue globale ; carte
+  « Roue » en deux groupes, Points / Cases spéciales (§16.1).
+- **[NEW]** Question `ROUE` : `ROUE_WHEEL_MAX_POINTS`, `ROUE_WHEEL_STEP`, `ROUE_WHEEL_BANKRUPT_COUNT`,
+  `ROUE_WHEEL_LOSE_TURN_COUNT` — **présent = personnalisé, absent = global**, chacun seul ; champs de formulaire
+  `POST /questions` (vide = global) et refus `400 ROUE_WHEEL_INVALID` sur la composition effective (§16.2, §16.5).
+- **[CHANGED]** `ROUE_BONUS_COUNT` suit la même règle : absent = BONUS global (0 par défaut, comportement inchangé),
+  présent = personnalisé, `0` compris (entier nullable).
+- **[CHANGED]** Construction de la roue au `START` : composition effective champ par champ, durées toujours globales,
+  repli sur la roue globale si la composition effective est devenue invalide (§16.3).
+
+---
+## [20261121-b] — v12.1.0 — ROUE : renvois §4 / §5 alignés sur §15.1.2 (#147)
+
+`roue.md` rév. 7.3, §4 (`ROUE_BOARD`) et §5 (tableau des étapes, `ROUE_STEP`) : `*` (case éclairée) aussi en
+`VOWEL_LIT`, `VOWEL_LIT` / `VOWEL_REVEALING` = étape 1 — renvoi vers §15.1.2, conforme à `roueStepOf`.
+**Aucun changement de comportement ni de protocole, aucun BREAKING** (revue code-reviewer).
+
+---
+## [20261121] — v12.1.0 — ROUE : achat de voyelles (#147) et case BONUS (#308)
+
+`roue.md` révision 7.2, **§15** (nouveau) ; renvois en tête, §3.1, §4, §8.3. Décisions utilisateur du 2026-11-21
+(`.claude/workflow/cadrage-v12.1.0-decisions.md`, révision GATE 2 comprise). **Aucun BREAKING** : champs, valeurs et
+actions ajoutés seulement. Changement de comportement par défaut **voulu** : l'achat de voyelles est activé pour les
+questions existantes (moment « avant de tourner »).
+
+- **[NEW]** Action `ROUE_BUY_VOWEL { LETTER }` (admin, animateur), selon le **moment** réglé sur la question :
+  avant de tourner (`TURN` → `VOWEL_LIT` → `ROUE_FLIP` → `VOWEL_REVEALING` → `TURN`) et/ou après l'arrêt, à la place
+  de la consonne (`LETTER` → `LIT` → `REVEALING` → `ANSWER`, puis voyelle suivante depuis `ANSWER`) ; 1 ou plusieurs
+  voyelles selon le réglage de chaque moment ; voyelle absente → `TURN_END` ; débit de la cagnotte de manche, gain
+  crédité au retournement (§15.1).
+- **[NEW]** Sous-phases `VOWEL_LIT`, `VOWEL_REVEALING` (`ROUE_STEP` = 1) ; événements `VOWEL_HIT`, `VOWEL_MISS`, `BONUS` ;
+  codes `ROUE_ERROR` `NOT_A_VOWEL`, `VOWELS_DISABLED`, `VOWEL_NOT_NOW`, `VOWEL_LIMIT_REACHED`, `INSUFFICIENT_BANK`, `LETTER_ALREADY_PROPOSED`,
+  `NO_VOWEL_LEFT`.
+- **[NEW]** `GameState` : `ROUE_BUY_VOWELS`, `ROUE_VOWEL_TIMING`, `ROUE_VOWELS_BEFORE`, `ROUE_VOWELS_AFTER`,
+  `ROUE_VOWEL_PRICE`, `ROUE_VOWEL_GAIN`, `ROUE_VOWELS_LEFT`, `ROUE_TURN_VOWEL`, `ROUE_STOP_VOWEL`.
+- **[NEW]** Question `ROUE` : `ROUE_BUY_VOWELS` (absent = activé), `ROUE_VOWEL_TIMING` (`BEFORE` | `AFTER` | `BOTH`,
+  absent = `BEFORE`), `ROUE_VOWELS_BEFORE` / `ROUE_VOWELS_AFTER` (`ONE` | `MANY`, absent = `MANY`), `ROUE_VOWEL_PRICE` (absent = 250), `ROUE_VOWEL_GAIN` (`NONE` | `REFUND` | `PER_OCCURRENCE`, absent =
+  `NONE`), `ROUE_BONUS_COUNT` (0–4, absent = 0) ; champs de formulaire `POST /questions` et refus `400` associés (§15.3).
+- **[CHANGED]** `ROUE_FLIP` accepté aussi en `VOWEL_LIT` ; `ROUE_ANSWER` accepté aussi en `TURN` quand
+  `ROUE_TURN_VOWEL` ; `ROUE_SPIN` accepté sans consonne restante quand un achat après l'arrêt est possible ;
+  `ROUE_LETTERS` contient aussi les voyelles ; `*` de `ROUE_BOARD` aussi en `VOWEL_LIT`. Rétrocompatible (les clients
+  sont servis par le même binaire).
+- **[NEW]** Case de roue `KIND: "bonus"` : aucun gain, l'équipe garde la main et rejoue un tour ; nombre par question ;
+  `bonus_count = 0` → roue identique à v12.0 (§15.2).
+- **[CHANGED]** `POST /api/roue/wheel-preview` — champ facultatif `bonus_count`. Additif.
+
+---
 ## [20261117-c] — v12.0.0 — ROUE : montée en 1 tour, essai « Tester » des réglages (#144, LOT-1)
 
 `roue.md` §4, §5, §5.1, §6, §10, §10.2 (nouveau), §11.3 ; `wheel-component.md` §5, §8. Décisions utilisateur de la

@@ -12,6 +12,13 @@ const ERROR_TEXT = {
   WRONG_SUBPHASE: "Action déjà prise en compte ou indisponible à cette étape",
   NOT_ALLOWED: 'Action non autorisée',
   INVALID_TEAMS: 'Équipe inconnue ou en double',
+  NOT_A_VOWEL: "Ce n'est pas une voyelle",
+  VOWELS_DISABLED: 'Achat de voyelles désactivé pour cette question',
+  VOWEL_NOT_NOW: "Pas d'achat de voyelle à ce moment pour cette question",
+  VOWEL_LIMIT_REACHED: 'Une seule voyelle à ce moment pour cette question',
+  INSUFFICIENT_BANK: 'Cagnotte insuffisante',
+  LETTER_ALREADY_PROPOSED: 'Voyelle déjà proposée',
+  NO_VOWEL_LEFT: 'Plus de voyelle à trouver',
   NOT_FULL_SPEED: 'La roue prend de la vitesse : attendez la pleine vitesse pour l\'arrêter',
 }
 
@@ -50,13 +57,13 @@ export function useSpinCountdown(gs) {
  * `teamColor(team)` (optionnel) : colore les consonnes jouées à la couleur de l'équipe qui les a proposées (M7).
  * `onSubmit` : Entrée. Le clavier physique sélectionne n'importe quelle lettre (le serveur refuse une voyelle).
  */
-export function RoueKeyboard({ letters = [], enabled = false, selected = '', onSelect, onSubmit, teamColor, showVowels = true }) {
+export function RoueKeyboard({ letters = [], enabled = false, selected = '', onSelect, onSubmit, teamColor, showVowels = true, vowelsEnabled = false, vowelsLabel = null, consonantsEnabled = enabled }) {
   const played = {}
   letters.forEach(l => { played[l.LETTER] = l })
   const latest = useRef({ onSelect, onSubmit })
   latest.current = { onSelect, onSubmit }
   useEffect(() => {
-    if (!enabled) return undefined
+    if (!enabled && !vowelsEnabled) return undefined
     const onKey = (e) => {
       const tag = e.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return
@@ -65,7 +72,7 @@ export function RoueKeyboard({ letters = [], enabled = false, selected = '', onS
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [enabled])
+  }, [enabled, vowelsEnabled])
   return (
     <>
       <div className="roue-kbd" role="group" aria-label="Consonnes">
@@ -73,18 +80,35 @@ export function RoueKeyboard({ letters = [], enabled = false, selected = '', onS
           const p = played[l]
           const cls = p ? (p.HIT ? 'hit' : 'miss') : (selected === l ? 'sel' : '')
           return (
-            <button key={l} type="button" className={`roue-key ${cls}${!enabled && !p ? ' off' : ''}`}
+            <button key={l} type="button" className={`roue-key ${cls}${!consonantsEnabled && !p ? ' off' : ''}`}
               style={p && teamColor ? { '--c': teamCss(teamColor(p.TEAM)) } : undefined}
-              disabled={!!p || !enabled} aria-pressed={selected === l} onClick={() => onSelect?.(l)}>
+              disabled={!!p || !consonantsEnabled} aria-pressed={selected === l} onClick={() => onSelect?.(l)}>
               <b>{l}</b>
               {teamColor && <small>{p ? p.TEAM : (selected === l ? 'choisie' : ' ')}</small>}
             </button>
           )
         })}
       </div>
-      {showVowels && (
+      {showVowels && !vowelsEnabled && !vowelsLabel && (
         <div className="roue-vow">Voyelles non disponibles :
           {VOWELS.map(v => <button key={v} type="button" className="roue-key" disabled>{v}</button>)}
+        </div>
+      )}
+      {showVowels && (vowelsEnabled || vowelsLabel) && (
+        <div className="roue-vow roue-vow-buy" role="group" aria-label="Voyelles">
+          {vowelsLabel && <b className="roue-vow-label">{vowelsLabel}</b>}
+          {VOWELS.map(v => {
+            const p = played[v]
+            const cls = p ? (p.HIT ? 'hit' : 'miss') : (selected === v ? 'sel' : '')
+            return (
+              <button key={v} type="button" className={`roue-key ${cls}${!vowelsEnabled && !p ? ' off' : ''}`}
+                style={p && teamColor ? { '--c': teamCss(teamColor(p.TEAM)) } : undefined}
+                disabled={!!p || !vowelsEnabled} aria-pressed={selected === v} onClick={() => onSelect?.(v)}>
+                <b>{v}</b>
+                {teamColor && <small>{p ? p.TEAM : (selected === v ? 'choisie' : ' ')}</small>}
+              </button>
+            )
+          })}
         </div>
       )}
     </>

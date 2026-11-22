@@ -27,6 +27,8 @@ const (
 	RoueErrModeInvalid             = "ROUE_MODE_INVALID"
 	RoueErrGainsRuleInvalid        = "ROUE_GAINS_RULE_INVALID"
 	RoueErrWheelLayoutInvalid      = "ROUE_WHEEL_LAYOUT_INVALID"
+	RoueErrWheelInvalid            = "ROUE_WHEEL_INVALID"       // v12.1.0 #309
+	RoueErrBonusCountInvalid       = "ROUE_BONUS_COUNT_INVALID" // v12.1.0 #308
 )
 
 // Valid values of the ROUE_* enumerations (contracts/roue.md §3).

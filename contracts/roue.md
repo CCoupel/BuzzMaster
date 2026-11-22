@@ -10,7 +10,11 @@ roue générée à partir de 4 paramètres) ; `_work/tasks/planner-20261116-1535
 de la roue, étape 6 à un seul bouton) ; `_work/tasks/planner-20261116-155000.md` (étape 7 à deux boutons, réponse =
 bonus, roue définie par maximum et pas) ; `_work/tasks/planner-20261116-160000.md` (PERDU à mi-tour, pas corrigé à
 la saisie, « Équipe suivante »)
-**Hors périmètre (v12.1)** : round bonus final (#146), achat de voyelles (#147), round spécial (#148)
+**Révision 7 — v12.1.0 (milestone #22)** : achat de voyelles (#147) et case BONUS (#308) — **§15**, qui prime sur les
+sections 3 à 12 pour ces deux points. Décisions : `.claude/workflow/cadrage-v12.1.0-decisions.md`.
+**Révision 8 — v12.1.0 LOT-2** : composition de la roue par question (#309) — **§16**, qui prime sur §10 et §15.2 pour la
+composition de la roue.
+**Hors périmètre** : round bonus final (#146) et round spécial (#148), fermés « not planned ».
 
 > Ce fichier est la **référence unique** pour `dev-backend` et `dev-frontend` sur le mode ROUE.
 > En cas de divergence backend/frontend, ce document tranche.
@@ -78,11 +82,17 @@ passe par l'action `BUTTON` existante). Non générable par IA.
   `rafaleAlphaKey` (`internal/game/rafale_alpha.go`), à factoriser, pas à dupliquer.
 - **Lettres à trouver** : les 26 lettres. Chiffres et ponctuation sont visibles dès le début.
 - **Consonnes** : les 20 lettres hors `A E I O U Y`. Les 6 voyelles ne sont jamais proposables en v12.0 ; elles
-  n'apparaissent qu'à la résolution.
+  n'apparaissent qu'à la résolution. **v12.1.0** : elles s'achètent (§15.1) ; `ROUE_LETTER` refuse toujours une voyelle.
 - **Mise en lignes** : 4 lignes de 14 colonnes au plus ; les mots ne sont jamais coupés ; remplissage glouton
   ligne après ligne. Un mot de plus de 14 caractères ou une phrase qui demande plus de 4 lignes est refusé.
 - **Une seule implémentation** de la mise en lignes : serveur. L'éditeur obtient l'aperçu par
   `POST /api/roue/preview` (§11.2) — aucune copie JavaScript de la règle.
+- **Placement (v12.1.0, #310)** : la phrase est **centrée verticalement** dans les 4 lignes du plateau — décalage
+  = ⌊(4 − n) / 2⌋ lignes vides avant la phrase de n lignes (1 ou 2 lignes : lignes 2 et suivantes ; 3 ou 4 lignes :
+  dès la ligne 1) — et **chaque ligne est centrée horizontalement** dans les 14 colonnes. Règle d'**affichage** client
+  unique (`web/src/components/roue/boardLayout.js`), partagée par l'aperçu de l'éditeur et la TV / tablette : l'aperçu
+  de l'éditeur montre exactement le placement de la TV. Le serveur ne fournit que les lignes de la phrase ;
+  **aucun champ ni payload ne change** (`ROUE_BOARD`, `POST /api/roue/preview` inchangés).
 
 Exemple : `Combien pour ce chien dans la vitrine` →
 ```
@@ -108,7 +118,7 @@ buzzers.
 | `ROUE_NEXT_DEFAULT` | string | En `ANSWER` et `TURN_END` : bouton conseillé, `SAME` (« Tour suivant ») ou `NEXT` (« Équipe suivante ») — §5.2 ; `""` ailleurs |
 | `ROUE_TEAM_BANK` | map équipe → int | Cagnotte de manche de chaque équipe participante |
 | `ROUE_TURN_GAIN` | int | Gain du tour en cours, pas encore ajouté à la cagnotte (0 sinon) |
-| `ROUE_BOARD` | `{ "COLS": 14, "ROWS": string[] }` | Une chaîne par ligne : espace = pas de case, `_` = lettre cachée, `*` = case cachée **éclairée** (sous-phase `LIT` uniquement, `ROUE_STEP = 5`), tout autre caractère = visible (§3.1) |
+| `ROUE_BOARD` | `{ "COLS": 14, "ROWS": string[] }` | Une chaîne par ligne : espace = pas de case, `_` = lettre cachée, `*` = case cachée **éclairée** (sous-phases `LIT`, `ROUE_STEP = 5`, et `VOWEL_LIT`, `ROUE_STEP = 1` — §15.1.2), tout autre caractère = visible (§3.1) |
 | `ROUE_LETTERS` | `{ "LETTER": string, "TEAM": string, "HIT": bool }[]` | Consonnes déjà proposées, dans l'ordre : la lettre, l'équipe qui l'a proposée, présente (`true`) ou absente. Sert à colorer les lettres trouvées à la couleur de l'équipe (animateur) et à lister les lettres proposées |
 | `ROUE_SHOW_LETTERS` | bool | Copie du réglage de la question : afficher ou non les lettres proposées sur TV et tablettes (admin et anim les affichent toujours) |
 | `ROUE_CONSONANTS_LEFT` | bool | Il reste au moins une consonne cachée |
@@ -145,7 +155,7 @@ buzzers.
   `SEQ` inchangé). La roue n'est arrêtable par les joueurs et l'animateur que lorsque `FULL_SPEED = true` (§5.1).
 
 `ROUE_LAST_EVENT.KIND` ∈ `SPIN | LAND_VALUE | BANKRUPT | LOSE_TURN | LETTER_HIT | LETTER_MISS | LETTER_REPEAT |
-FLIP | ANSWER_OK | TURN_END | PASS | REVEAL`.
+FLIP | ANSWER_OK | TURN_END | PASS | REVEAL` — **v12.1.0** : plus `VOWEL_HIT | VOWEL_MISS | BONUS` (§15).
 
 **Règle « un événement par action »** (arbitrage du 2026-11-16, défaut relevé par les tests du moteur, commit
 `38627055`) : `ROUE_LAST_EVENT` ne porte qu'un événement ; deux événements émis dans la même action rendraient le
@@ -174,13 +184,14 @@ Exemples `ROUE_BOARD` sur la phrase du §3.1, après `T`, `R`, `N`, quand l'équ
 | 3 | Affichage de la case | `STOPPING` | Serveur : case tirée, freinage |
 | 3 bis | *(à voix haute)* | `LETTER` | 🗣 L'équipe annonce une consonne — aucun appareil, aucun changement d'état |
 | 4 | Sélection de la consonne | `LETTER` | Admin ou animateur : `ROUE_LETTER`. Consonne présente : passage à l'étape 5 (`LIT`). Aucun `*` dans `ROUE_BOARD` à cette étape |
-| 5 | Affichage des cases | `LIT` puis `REVEALING` | `LIT` : les cases de la consonne sont éclairées (`*` dans `ROUE_BOARD`, seule sous-phase où `*` apparaît). Admin ou animateur : `ROUE_FLIP` (« Retourner les cases ») → `REVEALING` : elles se retournent une à une |
+| 5 | Affichage des cases | `LIT` puis `REVEALING` | `LIT` : les cases de la consonne sont éclairées (`*` dans `ROUE_BOARD` ; avec `VOWEL_LIT`, §15.1.2, seules sous-phases où `*` apparaît). Admin ou animateur : `ROUE_FLIP` (« Retourner les cases ») → `REVEALING` : elles se retournent une à une |
 | 5 bis | *(à voix haute)* | `ANSWER` | 🗣 L'équipe propose une réponse (ou n'en propose pas) — aucun appareil, aucun changement d'état |
 | 6 | Réponse | `ANSWER` | Admin ou animateur : `ROUE_ANSWER` (« Réponse validée », **un seul bouton** — la réponse est un bonus) — sinon directement un des deux boutons de l'étape 7 |
 | 7 | Fin du tour | `TURN_END` | Gain ajouté à la cagnotte ; admin ou animateur, **deux boutons** : `ROUE_NEXT {HAND: SAME}` (« Tour suivant », la même équipe rejoue) ou `ROUE_NEXT {HAND: NEXT}` (« Équipe suivante », équipe suivante) |
 
 `ROUE_STEP` est fonction de `ROUE_SUBPHASE` seule : `TURN` = 1, `SPINNING` = 2, `STOPPING` = 3, `LETTER` = 4,
-`LIT` et `REVEALING` = 5, `ANSWER` = 6, `TURN_END` = 7, `""` et `SOLVED` = 0. L'éclairage des cases (`*`) relève donc
+`LIT` et `REVEALING` = 5, `ANSWER` = 6, `TURN_END` = 7, `""` et `SOLVED` = 0 ; **v12.1.0** : `VOWEL_LIT` et
+`VOWEL_REVEALING` = 1 (achat avant de tourner, §15.1.2). L'éclairage des cases (`*`) d'une consonne relève donc
 de l'étape 5, pas de l'étape 4 : `ROUE_LETTER` est le geste de l'étape 4, son effet (`LIT`) ouvre l'étape 5.
 La montée et la pleine vitesse sont deux temps de la **même** sous-phase `SPINNING` (`ROUE_STEP = 2`), distingués
 par `ROUE_WHEEL.FULL_SPEED`.
@@ -409,7 +420,9 @@ sous-phase courante et refuse la suivante (`WRONG_SUBPHASE`), sans effet ni doub
 
 - `UPDATE` (`GameState`) après chaque transition — action existante.
 - `ROUE_ERROR` à l'émetteur seul : `{ "CODE": string, "MESSAGE": string }`, `CODE` ∈
-  `VOWEL_NOT_AVAILABLE | NOT_A_LETTER | WRONG_SUBPHASE | NOT_ALLOWED | INVALID_TEAMS | NOT_FULL_SPEED`.
+  `VOWEL_NOT_AVAILABLE | NOT_A_LETTER | WRONG_SUBPHASE | NOT_ALLOWED | INVALID_TEAMS | NOT_FULL_SPEED` — **v12.1.0** :
+  plus `NOT_A_VOWEL | VOWELS_DISABLED | VOWEL_NOT_NOW | VOWEL_LIMIT_REACHED | INSUFFICIENT_BANK | LETTER_ALREADY_PROPOSED |
+  NO_VOWEL_LEFT` (§15.1.7).
   `NOT_FULL_SPEED` = `ROUE_STOP` (admin ou animateur) pendant la montée de la roue (§5.1).
   `INVALID_TEAMS` = équipe inconnue ou en double dans `ROUE_SET_TEAMS` — jamais un nombre d'équipes (§8.1).
 
@@ -649,3 +662,333 @@ maximum n'est **pas** une erreur : il est corrigé (`step_adjusted_from`).
 - `RafaleLetterWheel` et la roue de lettres RAFALE gardent leur comportement (bascule courte) : les tests
   `Wheel.test.jsx`, `geometry.test.js`, `PlayerDisplay.rafale-alpha.282.test.jsx` restent verts sans modification.
 - Un `game-config.json` sans section `wheel` se charge sans erreur (roue par défaut).
+
+---
+
+## 15. v12.1.0 — Achat de voyelles (#147) et case BONUS (#308)
+
+> Révision 7 (2026-11-21 ; **rév. 7.1** : réglage « moment de l'achat » ; **rév. 7.2** : plusieurs voyelles après
+> l'arrêt, réglages « 1 / plusieurs » avant et après ; **rév. 7.3** : §3.1/§4/§5 alignés sur §15.1.2, renvoi seul). Décisions
+> produit : `.claude/workflow/cadrage-v12.1.0-decisions.md`, y compris la section « Révision GATE 2 » (font foi). Les
+> choix techniques marqués **[planner]** sont des propositions du plan, validées au GATE 2.
+> **Compatibilité** : une question sans les nouveaux champs garde le comportement v12.0, **sauf l'achat de voyelles,
+> activé par défaut** (décision utilisateur, questions existantes incluses) **au moment « avant de tourner »**
+> **[planner]**. Aucun BREAKING : tous les ajouts sont des champs, valeurs d'énumération et actions nouvelles.
+
+### 15.1 Achat de voyelles (#147)
+
+#### 15.1.1 Champs de la question (`TypedContent`, `OwnedFields` du type `ROUE`)
+
+| Champ JSON | Type | Règle |
+|---|---|---|
+| `ROUE_BUY_VOWELS` | bool | Achat de voyelles autorisé. **Absent = `true`** ; écrit seulement pour `false` (même patron que `ROUE_SHOW_LETTERS`) |
+| `ROUE_VOWEL_TIMING` | string | **Moment de l'achat** : `BEFORE` (« Avant de tourner ») \| `AFTER` (« Après l'arrêt de la roue », à la place de la consonne) \| `BOTH` (« Les deux »). **Absent = `BEFORE`** (décision utilisateur, GATE 2 n° 2) |
+| `ROUE_VOWELS_BEFORE` | string | Nombre de voyelles achetables **avant de tourner**, par tour : `ONE` (« 1 ») \| `MANY` (« plusieurs »). **Absent = `MANY`** **[planner]** |
+| `ROUE_VOWELS_AFTER` | string | Nombre de voyelles achetables **après l'arrêt**, par arrêt de la roue : `ONE` \| `MANY`. **Absent = `MANY`** **[planner]** |
+| `ROUE_VOWEL_PRICE` | int | Prix d'une voyelle, en points de cagnotte. 1 à 1 000 000. **Absent = 250** |
+| `ROUE_VOWEL_GAIN` | string | Gain d'une voyelle **présente** : `NONE` (défaut, absent = `NONE`) \| `REFUND` \| `PER_OCCURRENCE` |
+
+`ROUE_VOWELS_BEFORE` ne sert qu'avec `BEFORE` / `BOTH`, `ROUE_VOWELS_AFTER` qu'avec `AFTER` / `BOTH` ; tous deux sont
+enregistrés quel que soit le moment.
+
+Libellés fixés (éditeur, admin) **[planner]** :
+- moment : `BEFORE` « **Avant de tourner** » ; `AFTER` « **Après l'arrêt de la roue** » (sous-titre : « à la place de
+  la consonne, la case n'est pas jouée ») ; `BOTH` « **Les deux** » ;
+- nombre : `ONE` « **1 voyelle** » ; `MANY` « **Plusieurs voyelles** » (sous-titre : « d'affilée, tant que la cagnotte le
+  permet et que chaque voyelle est présente ») ;
+- gain : `NONE` « **Sans gain** » ; `REFUND` « **Mise remboursée** » ; `PER_OCCURRENCE` « **Prix × nombre de lettres** »
+  (ex. 3 E à 250 → +750).
+
+Une voyelle **absente** n'est jamais remboursée et fait **perdre le tour**, quel que soit le moment ou l'option.
+
+#### 15.1.2 Champs `GameState` ajoutés (§4 — mêmes règles : sans `omitempty`, jamais persistés, remis à vide dans `Ready`, `stopUnsafe`, `InitGameWith`)
+
+| Champ | Type | Contenu |
+|---|---|---|
+| `ROUE_BUY_VOWELS` | bool | Copie effective du réglage au `START` (`false` hors manche) |
+| `ROUE_VOWEL_TIMING` | string | Moment effectif (`BEFORE` si absent), copié au `START` (`""` hors manche) |
+| `ROUE_VOWELS_BEFORE` | string | Nombre effectif avant de tourner (`MANY` si absent), copié au `START` (`""` hors manche) |
+| `ROUE_VOWELS_AFTER` | string | Nombre effectif après l'arrêt (`MANY` si absent), copié au `START` (`""` hors manche) |
+| `ROUE_VOWEL_PRICE` | int | Prix effectif (250 si absent), copié au `START` (0 hors manche) |
+| `ROUE_VOWEL_GAIN` | string | Option effective (`NONE` si absente), copiée au `START` (`""` hors manche) |
+| `ROUE_VOWELS_LEFT` | bool | Il reste au moins une voyelle de la phrase **ni révélée ni proposée** (pendant de `ROUE_CONSONANTS_LEFT`) |
+| `ROUE_TURN_VOWEL` | bool | Une voyelle présente achetée **avant de tourner** a été révélée pendant le tour en cours : « Réponse validée » ouverte à l'étape 1 ; avec `ROUE_VOWELS_BEFORE = ONE`, plus d'achat avant de tourner dans ce tour. Remis à `false` à chaque entrée dans un tour (`ROUE_NEXT`, `ROUE_PASS`, case BONUS, `START`) |
+| `ROUE_STOP_VOWEL` | bool | Une voyelle présente a été achetée **après l'arrêt** courant : la case tirée n'est plus jouable (aucune consonne), d'autres voyelles s'achètent à l'étape 6 si `ROUE_VOWELS_AFTER = MANY`. Remis à `false` à `ROUE_SPIN` et à chaque entrée dans un tour |
+
+Champs existants dont le sens s'étend :
+- `ROUE_SUBPHASE` : plus `VOWEL_LIT` et `VOWEL_REVEALING`, **réservées à l'achat avant de tourner** (`ROUE_STEP` = 1).
+  L'achat après l'arrêt réutilise `LIT` et `REVEALING` (étape 5) puis `ANSWER` (étape 6), comme une consonne.
+- `ROUE_BOARD` : `*` (case éclairée) en `LIT` **et en `VOWEL_LIT`**.
+- `ROUE_LETTERS` : consonnes **et voyelles** proposées, dans l'ordre, même forme. Une entrée est une voyelle si
+  `LETTER` ∈ `A E I O U Y` (aucun champ supplémentaire). Le calcul de `ROUE_CONSONANTS_LEFT` ignore les voyelles.
+- `ROUE_LAST_EVENT` : `VOWEL_HIT` / `VOWEL_MISS` pour les deux moments.
+
+#### 15.1.3 Achat **avant de tourner** (`BEFORE` ou `BOTH`) — étape 1
+
+```
+TURN ─ROUE_BUY_VOWEL (présente)─► VOWEL_LIT ─ROUE_FLIP─► VOWEL_REVEALING ─fin du retournement─► TURN (même équipe)
+  │                                cagnotte − prix          cagnotte + gain (option)                ROUE_TURN_VOWEL = true
+  └─ROUE_BUY_VOWEL (absente)─► TURN_END  (cagnotte − prix, « mauvaise réponse », tour perdu)
+```
+
+- `ROUE_VOWELS_BEFORE = MANY` : de retour en `TURN`, l'équipe peut acheter une autre voyelle tant que sa cagnotte le
+  permet. `ONE` : une seule voyelle avant de tourner par tour (refus `VOWEL_LIMIT_REACHED` ensuite).
+- Une fois la roue lancée (`ROUE_SPIN`), plus d'achat « avant » avant le prochain `TURN`. **Le prochain `TURN`** = tout
+  nouveau tour : après `ROUE_NEXT` (`SAME` ou `NEXT`), `ROUE_PASS` **ou une case BONUS** (§15.2) **[planner]**.
+- **De retour en `TURN` après une voyelle** : « Lancer la roue », « Acheter une voyelle » (si `MANY`), et **« Réponse
+  validée »** (`ROUE_TURN_VOWEL`) **[planner]**. Une réponse fausse ne coûte rien.
+
+#### 15.1.4 Achat **après l'arrêt de la roue** (`AFTER` ou `BOTH`) — à la place de la consonne
+
+```
+STOPPING ─case valeur─► LETTER ─ROUE_LETTER (consonne)─► … chemin v12.0 inchangé
+                          │
+                          └─ROUE_BUY_VOWEL (présente)─► LIT ─ROUE_FLIP─► REVEALING ─fin─► ANSWER (étape 6)
+                          │   cagnotte − prix ; ROUE_STOP_VOWEL = true     cagnotte + gain     │  ├─ ROUE_ANSWER → SOLVED
+                          │                                                                    │  ├─ ROUE_NEXT → tour suivant
+                          │                ┌───────── ROUE_BUY_VOWEL (présente, si MANY) ◄──────┘  └─ ROUE_BUY_VOWEL (absente)
+                          │                ▼                                                            → TURN_END
+                          │               LIT …
+                          └─ROUE_BUY_VOWEL (absente)──► TURN_END  (cagnotte − prix, tour perdu)
+```
+
+- La première voyelle **remplace la consonne** : la valeur de la case tirée **n'est pas jouée**, aucune consonne n'est
+  plus acceptée jusqu'au prochain lancer (`ROUE_LETTER` refusé `WRONG_SUBPHASE` hors `LETTER`).
+- **`ROUE_VOWELS_AFTER = MANY`** : après chaque voyelle présente, l'étape 6 (`ANSWER`) propose « Réponse validée »,
+  « Tour suivant » / « Équipe suivante » **et « Acheter une autre voyelle »** — tant que la cagnotte le permet et qu'il
+  reste une voyelle. Une voyelle absente arrête l'enchaînement : tour perdu (`TURN_END`). **[planner]** L'équipe arrête
+  d'elle-même en choisissant la réponse ou l'un des deux boutons de fin de tour.
+- **`ONE`** : une seule voyelle par arrêt ; à l'étape 6, pas d'achat (refus `VOWEL_LIMIT_REACHED`).
+- Fin du tour (étape 7) : conseil « lettre trouvée » (§5.2) après une voyelle présente.
+- **Cases spéciales** : BANQUEROUTE et TOUR PERDU mènent à `TURN_END`, BONUS à `TURN` (§15.2) : **aucun achat
+  « après »** (il n'y a pas d'étape 4). Avec `BOTH`, l'achat « avant » redevient possible au `TURN` suivant.
+- **Plus aucune consonne** : avec `AFTER` ou `BOTH`, `ROUE_SPIN` reste accepté en `TURN` tant qu'un achat après
+  l'arrêt est possible (`ROUE_BUY_VOWELS`, `ROUE_VOWELS_LEFT`, cagnotte ≥ prix) : à l'arrêt, seules des voyelles peuvent
+  être jouées. Sinon `ROUE_SPIN` est refusé, comme en v12.0 (`WRONG_SUBPHASE`).
+
+#### 15.1.5 Règles communes
+
+- Paiement : **cagnotte de manche** `ROUE_TEAM_BANK[équipe]` ; aucun score de partie touché avant la résolution (§7).
+- **Gain d'une voyelle présente : crédité à la cagnotte au retournement (`ROUE_FLIP`), aux deux moments**
+  **[planner]** — il est donc aussitôt disponible pour la voyelle suivante. `ROUE_TURN_GAIN` ne porte que le gain de la
+  consonne (valeur de case × cases), inchangé.
+- Retournement **au bouton** (`ROUE_FLIP`), jamais automatique (DECISIONS `admin_game_roue`) ; minuterie de
+  retournement existante, suspendue par `PAUSE`, reprise par `CONTINUE`.
+- **Toutes les voyelles dites** (`!ROUE_VOWELS_LEFT`) : bouton grisé « Plus de voyelle à trouver », refus `NO_VOWEL_LEFT`.
+- `ROUE_REVEAL` pendant l'éclairage ou le retournement d'une voyelle : accepté ; le prix reste débité, aucun gain.
+- Buzzers et tablettes joueurs : aucun rôle dans l'achat (`BUTTON` ignoré hors `SPINNING`, §5.1).
+
+#### 15.1.6 Actions
+
+| Action | Payload | Phases / sous-phases acceptées | Émetteurs |
+|---|---|---|---|
+| `ROUE_BUY_VOWEL` **[NEW]** | `{ "LETTER": "E" }` | `STARTED` + `TURN` (moment `BEFORE` / `BOTH`) ; `LETTER` (moment `AFTER` / `BOTH`) ; `ANSWER` quand `ROUE_STOP_VOWEL` (moment `AFTER` / `BOTH`) | `/ws/admin`, `/ws/anim` |
+| `ROUE_SPIN` | `{}` | inchangé **+ `TURN` sans consonne restante quand un achat après l'arrêt est possible** (§15.1.4) | inchangé |
+| `ROUE_FLIP` | `{}` | `STARTED` + `LIT` **ou `VOWEL_LIT`** | inchangé |
+| `ROUE_ANSWER` | `{}` | inchangé **+ `TURN` quand `ROUE_TURN_VOWEL`** | inchangé |
+
+`ROUE_BUY_VOWEL` — contrôles dans cet ordre, refus = `ROUE_ERROR` à l'émetteur seul, état inchangé, rien de débité :
+1. sous-phase ni `TURN`, ni `LETTER`, ni `ANSWER` → `WRONG_SUBPHASE` ;
+2. `!ROUE_BUY_VOWELS` → `VOWELS_DISABLED` (« Achat de voyelles désactivé pour cette question ») ;
+3. moment non permis → `VOWEL_NOT_NOW` (« Pas d'achat de voyelle à ce moment pour cette question ») : `TURN` avec
+   `AFTER` ; `LETTER` avec `BEFORE` ; `ANSWER` sans `ROUE_STOP_VOWEL` (après une consonne) ou avec `BEFORE` ;
+4. limite atteinte → `VOWEL_LIMIT_REACHED` (« Une seule voyelle à ce moment pour cette question ») : `TURN` avec
+   `ROUE_VOWELS_BEFORE = ONE` et `ROUE_TURN_VOWEL` ; `ANSWER` avec `ROUE_VOWELS_AFTER = ONE` ;
+5. lettre normalisée (§5.3) qui n'est pas une lettre → `NOT_A_LETTER` ; consonne → `NOT_A_VOWEL` (« Ce n'est pas une voyelle ») ;
+6. voyelle déjà dans `ROUE_LETTERS` → `LETTER_ALREADY_PROPOSED` (« Voyelle déjà proposée ») **[planner : refus sans
+   débit, alors qu'une consonne répétée fait perdre le tour — le clavier grise déjà les lettres proposées]** ;
+7. `!ROUE_VOWELS_LEFT` → `NO_VOWEL_LEFT` (« Plus de voyelle à trouver ») ;
+8. cagnotte < prix → `INSUFFICIENT_BANK` (« Cagnotte insuffisante »).
+
+Effet (un événement par action, §4) — cagnotte − prix dans tous les cas, entrée `ROUE_LETTERS` (`HIT` présente / absente) :
+- **avant, présente** : cases éclairées, `VOWEL_LIT`, événement `VOWEL_HIT` { `TEAM`, `LETTER`, `COUNT`, `VALUE` = prix,
+  `GAIN` = gain à venir } ; `ROUE_FLIP` → `VOWEL_REVEALING`, **cagnotte + gain**, événement `FLIP` { `LETTER`, `COUNT`,
+  `GAIN` } ; fin de la minuterie → `TURN`, même équipe, `ROUE_TURN_VOWEL = true`, **aucun événement** (`SEQ` inchangé) ;
+- **après, présente** (depuis `LETTER` ou `ANSWER`) : `ROUE_STOP_VOWEL = true`, cases éclairées, `LIT`, événement
+  `VOWEL_HIT` (mêmes champs) ; `ROUE_FLIP` → `REVEALING`, **cagnotte + gain**, événement `FLIP` ; fin de la minuterie →
+  `ANSWER` (étape 6, conseil « lettre trouvée »), aucun événement ;
+- **absente (les deux moments)** : `TURN_END`, événement `VOWEL_MISS` { `TEAM`, `LETTER`, `VALUE` = prix } ; aucun
+  événement `TURN_END` (règle de cause, §4).
+
+#### 15.1.7 Codes `ROUE_ERROR` ajoutés (§8.3)
+
+`NOT_A_VOWEL`, `VOWELS_DISABLED`, `VOWEL_NOT_NOW`, `VOWEL_LIMIT_REACHED`, `INSUFFICIENT_BANK`, `LETTER_ALREADY_PROPOSED`,
+`NO_VOWEL_LEFT`.
+
+### 15.2 Case BONUS (#308)
+
+#### 15.2.1 Champ de la question
+
+| Champ JSON | Type | Règle |
+|---|---|---|
+| `ROUE_BONUS_COUNT` | int | Nombre de cases BONUS ajoutées à la roue générée. **0 à 4** **[planner]** ; **absent = 0** (non écrit pour 0) |
+
+#### 15.2.2 Roue générée (§10.1)
+
+- `ROUE_WHEEL.SEGMENTS[].KIND` ∈ `value | bankrupt | lose_turn | bonus`. Une case BONUS a `VALUE` 0.
+- Au `START`, la roue est construite à partir de la section `wheel` de `game-config.json` **et** de
+  `ROUE_BONUS_COUNT` de la question. Les cases BONUS **s'ajoutent** (elles ne prennent la place d'aucune valeur).
+- **Placement [planner]** : les cases spéciales sont réparties comme en v12.0, avec `K` = Banqueroute + Perdu +
+  BONUS. Ordre des types : la première Banqueroute (à côté du maximum, inchangé), puis en alternance Perdu, BONUS,
+  Banqueroute… **Avec `ROUE_BONUS_COUNT = 0`, la roue est identique, case pour case, à celle de v12.0** (test de
+  non-régression exigé).
+- Limite de 64 cases : à l'enregistrement de la question, `ROUE_BONUS_COUNT` qui ferait dépasser 64 avec la
+  configuration courante → refus `ROUE_BONUS_COUNT_INVALID`. Au `START` (configuration modifiée depuis), le nombre de
+  cases BONUS est réduit pour tenir dans 64, avec un journal ; le départ n'est jamais refusé.
+- Libellé de la case **[planner]** : « 🎁 BONUS » (TV, tablettes, admin, animateur, aperçus), case dorée.
+
+#### 15.2.3 Arrêt sur BONUS
+
+Fin du freinage sur une case `bonus` (§5.1, `STOPPING`) :
+- **aucun gain, aucune lettre, aucune cagnotte ni score modifié** — pas d'achat de voyelle « après l'arrêt » ;
+- `ROUE_WHEEL.CURRENT` = la case BONUS ; événement `BONUS` { `TEAM` } ;
+- **l'équipe garde la main** : entrée dans un nouveau tour (`TURN`, `ROUE_TURN_GAIN` 0, `ROUE_TURN_VOWEL` false) —
+  elle peut relancer la roue, acheter une voyelle si le moment `BEFORE` / `BOTH` le permet, ou « Passer la main » (admin) ;
+- annonce TV et tablettes : bandeau « 🎁 BONUS ! » tant que `ROUE_LAST_EVENT.KIND = BONUS` (jusqu'au geste suivant).
+- Le cadeau est géré **hors système** par l'animateur ; des points éventuels passent par l'attribution manuelle
+  existante (page Scores / `TEAM_POINTS`).
+
+### 15.3 HTTP
+
+`POST /questions` (§11.1), champs de formulaire ajoutés pour `type=ROUE` (tous relus à chaque enregistrement) :
+
+| Champ de formulaire | Champ enregistré | Refus `400` |
+|---|---|---|
+| `roue_buy_vowels` (`true` / `false`) | `ROUE_BUY_VOWELS` (écrit seulement pour `false`) | — |
+| `roue_vowel_timing` | `ROUE_VOWEL_TIMING` | `ROUE_VOWEL_TIMING_INVALID` |
+| `roue_vowels_before` (`ONE` / `MANY`) | `ROUE_VOWELS_BEFORE` | `ROUE_VOWELS_BEFORE_INVALID` |
+| `roue_vowels_after` (`ONE` / `MANY`) | `ROUE_VOWELS_AFTER` | `ROUE_VOWELS_AFTER_INVALID` |
+| `roue_vowel_price` | `ROUE_VOWEL_PRICE` | `ROUE_VOWEL_PRICE_INVALID` (pas un entier de 1 à 1 000 000) |
+| `roue_vowel_gain` | `ROUE_VOWEL_GAIN` | `ROUE_VOWEL_GAIN_INVALID` |
+| `roue_bonus_count` | `ROUE_BONUS_COUNT` (non écrit pour 0) | `ROUE_BONUS_COUNT_INVALID` (hors 0–4, ou roue de plus de 64 cases) |
+
+Champ absent du formulaire = valeur par défaut (achat activé, `BEFORE`, `MANY`, `MANY`, 250, `NONE`, 0). Moment, nombres,
+prix et option sont enregistrés même quand l'achat est désactivé (conservés pour une réactivation).
+
+`POST /api/roue/wheel-preview` (§11.3) : champ facultatif `bonus_count` (0 à 4, absent = 0), même placement qu'au
+`START`. Additif : la carte de réglage existante ne l'envoie pas ; l'éditeur l'envoie pour l'aperçu de la roue.
+
+### 15.4 Périphériques et sons (§12)
+
+| Événement | Son (existant) | LED / ambiance |
+|---|---|---|
+| `VOWEL_MISS` | « mauvaise réponse » (`CueRafaleMauvaise`, notice `BAD`, comme `LETTER_MISS`) | inchangé |
+| `VOWEL_HIT`, `FLIP` de voyelle, débit / crédit de cagnotte | aucun | inchangé |
+| `BONUS` | « bonne réponse » (`CueRafaleBonne`, nouvelle notice `BONUS`) **[planner]** | comète sur les buzzers de l'équipe (effet de gain existant) ; **ni flash de score ni pulsation d'ambiance** (aucun point) |
+
+**Aucun nouveau bruitage**, aucun changement de protocole BuzzClick. La tablette joueur n'envoie aucune action
+d'achat : elle affiche seulement (alphabet, cagnotte débitée, bandeau BONUS). Le nouveau site de son est inscrit au
+registre fermé `soundSiteRegistry`.
+
+### 15.5 Non-régression
+
+- `ROUE_BONUS_COUNT` absent : roue identique à v12.0 (même ordre, mêmes `ID`).
+- `ROUE_BUY_VOWELS = false` : manche strictement v12.0 (refus `VOWELS_DISABLED`, aucun champ visible changé hors
+  copies de réglage) ; `ROUE_SPIN` refusé sans consonne restante, comme en v12.0.
+- `ROUE_LETTER` refuse toujours une voyelle (`VOWEL_NOT_AVAILABLE`) : l'achat après l'arrêt passe par `ROUE_BUY_VOWEL`.
+- Sous-phases, étapes et boutons v12.0 inchangés pour le tour classique (consonne, réponse, fin de tour).
+
+---
+
+## 16. v12.1.0 LOT-2 — Composition de la roue par question (#309)
+
+> Révision 8 (2026-11-21, retour QUALIF 12.1.0.1 n° 1 ; **rév. 8.1** : surcharge champ par champ, choix utilisateur
+> sur le plan LOT-2 ; **rév. 8.2** (2026-11-22) : §16.5, code de refus d'un dépassement de 64 cases et BONUS hérité
+> validé à l'enregistrement — revue LOT-2 M1 / M2). Décisions : `.claude/workflow/cadrage-v12.1.0-decisions.md` « Retours QUALIF 12.1.0.1 » et
+> « LOT-2 #309 — choix utilisateur » (font foi) : **réglages globaux « Roue » = défauts, chaque paramètre de
+> composition personnalisable seul par question** — points maximum, pas, nombre de BANQUEROUTE, de TOUR PERDU
+> (« passe » = TOUR PERDU), de BONUS. Choix techniques marqués **[planner]**. **Aucun BREAKING**.
+
+### 16.1 Défaut global du nombre de BONUS — `game-config.json` `wheel`
+
+| Champ | Règle |
+|---|---|
+| `bonus_count` **[NEW]** | Nombre de cases BONUS de la roue globale. **0 à 4**, défaut **0** ; **absent = 0** (un `game-config.json` v12.0 / v12.1 LOT-1 se charge sans changement). Compté dans la limite de 64 cases (§10) ; hors bornes ou plus de 64 cases : refus `400`, rien n'est enregistré |
+
+`wheel_default` (bouton « Roue par défaut ») porte `bonus_count: 0`. La carte « Roue » des réglages présente ses
+paramètres en deux groupes, **Points** (points maximum, pas) et **Cases spéciales** (Banqueroute, Perdu, 🎁 BONUS) ;
+texte d'aide : « Réglages par défaut des questions ROUE ; chaque question peut en personnaliser un ou plusieurs. »
+
+### 16.2 Surcharge par question, champ par champ — `TypedContent` (`OwnedFields` du type `ROUE`)
+
+**Règle unique : champ présent = paramètre personnalisé pour cette question ; champ absent = le paramètre suit le
+réglage global.** Les 5 champs sont des entiers **nullables** (`*int` côté Go) : `0` est une valeur personnalisée
+valable (ex. 0 Banqueroute), distincte de « absent ».
+
+| Champ JSON | Type | Règle quand il est présent |
+|---|---|---|
+| `ROUE_WHEEL_MAX_POINTS` **[NEW]** | int | Mêmes règles que `max_points` (§10) |
+| `ROUE_WHEEL_STEP` **[NEW]** | int | Mêmes règles que `step` (§10) ; **corrigé** au diviseur le plus proche des points maximum **effectifs** (§16.3) au moment de l'enregistrement, jamais refusé ; la valeur enregistrée est la valeur corrigée **[planner]** |
+| `ROUE_WHEEL_BANKRUPT_COUNT` **[NEW]** | int | 0 ou plus |
+| `ROUE_WHEEL_LOSE_TURN_COUNT` **[NEW]** | int | 0 ou plus |
+| `ROUE_BONUS_COUNT` | int | Existant (§15.2.1), **même règle « présent = personnalisé »** : 0 à 4. Absent = BONUS global (`wheel.bonus_count`, 0 par défaut — donc aucun changement pour une question v12.0) |
+
+- **Compatibilité LOT-1** (décision 4, adaptée par l'utilisateur) : une question écrite par les QUALIF 12.1.0.x du
+  LOT-1 porte `ROUE_BONUS_COUNT` (jamais 0, le LOT-1 ne l'écrivait que s'il était positif) : elle a donc **seul son
+  BONUS personnalisé**, les autres paramètres suivent le global — c'est exactement sa roue du LOT-1. Aucune migration.
+- Une valeur personnalisée **égale** à la valeur globale reste personnalisée (elle ne suit plus le global) ; seul le
+  retour explicite au global (champ retiré) la fait suivre à nouveau **[planner]**.
+- Les durées (§10 : vitesse, durée maximale, freinage, retournement) restent **toujours globales**.
+- Les noms `ROUE_WHEEL_*` évitent toute confusion avec `ROUE_STEP` de `GameState` (étape du tour, §4).
+
+### 16.3 Composition effective et roue construite au `START`
+
+```
+pour chaque paramètre k ∈ {max_points, step, bankrupt_count, lose_turn_count, bonus_count} :
+    effectif[k] = champ de la question s'il est présent, sinon wheel[k] (réglage global courant)
+durées = toujours wheel.* (§10)
+```
+
+- Même normalisation et même construction qu'au §10.1 / §15.2.2 (une seule implémentation, `roue_wheel.go`) :
+  pas corrigé au diviseur le plus proche des points maximum effectifs.
+- **Composition effective devenue invalide** — un paramètre global a changé depuis l'enregistrement (pas ≥ maximum,
+  plus de 64 cases) ou fichier modifié à la main **[planner]** : au `START`, les BONUS sont d'abord réduits pour tenir
+  dans 64 cases (règle §15.2.2) ; si la composition reste invalide, **roue globale entière**, avec un journal. **Le
+  départ n'est jamais refusé.**
+- `GameState` : aucun champ nouveau ; `ROUE_WHEEL.SEGMENTS` reflète la composition effective.
+
+### 16.4 Éditeur (pour mémoire, maquette retenue au GATE)
+
+- Chaque paramètre est affiché **pré-rempli** : valeur de la question si elle est personnalisée, sinon valeur globale
+  courante, marquée comme telle.
+- Chaque paramètre se personnalise **seul** et revient **seul** au global (retour = champ retiré à l'enregistrement).
+- Les paramètres personnalisés sont signalés ; l'aperçu (`wheel-preview`) montre la composition effective.
+- La validation se fait sur la composition effective ; une composition qui n'est plus valable avec les réglages
+  globaux actuels est signalée à la réouverture de la question (message de `wheel-preview`).
+
+### 16.5 HTTP
+
+`POST /questions` (§11.1), champs de formulaire pour `type=ROUE` (tous relus à chaque enregistrement) :
+
+| Champ de formulaire | Champ enregistré | Refus `400` |
+|---|---|---|
+| `roue_wheel_max_points` | `ROUE_WHEEL_MAX_POINTS` | `ROUE_WHEEL_INVALID` (message du §10) |
+| `roue_wheel_step` | `ROUE_WHEEL_STEP` (valeur corrigée) | `ROUE_WHEEL_INVALID` |
+| `roue_wheel_bankrupt_count` | `ROUE_WHEEL_BANKRUPT_COUNT` | `ROUE_WHEEL_INVALID` |
+| `roue_wheel_lose_turn_count` | `ROUE_WHEEL_LOSE_TURN_COUNT` | `ROUE_WHEEL_INVALID` |
+| `roue_bonus_count` (existant) | `ROUE_BONUS_COUNT` | `ROUE_BONUS_COUNT_INVALID` (hors 0–4, ou dépassement de 64 cases dû au seul BONUS, voir ci-dessous) |
+
+- **Champ de formulaire absent ou vide = paramètre au global** : le champ est **retiré** de la question. Valeur
+  présente = paramètre personnalisé, enregistré (y compris `0`).
+- Validation sur la **composition effective** (champs présents + réglages globaux courants), **nombre de BONUS
+  compris, qu'il soit envoyé ou hérité du global** (`wheel.bonus_count`), par le même code que `wheel-preview`. Tout
+  refus = `400`, **rien n'est écrit** :
+  - **dépassement de 64 cases dû au seul BONUS** — la composition effective sans ses cases BONUS tient dans 64 cases,
+    avec elles non — → `400 ROUE_BONUS_COUNT_INVALID`, que le BONUS soit envoyé ou hérité (comportement du LOT-1
+    conservé, test #308) ; de même pour un BONUS envoyé hors 0–4 ;
+  - **toute autre composition invalide** — pas ≥ maximum, maximum hors 2–1 000 000, valeur non entière ou négative,
+    plus de 64 cases même sans BONUS — → `400 ROUE_WHEEL_INVALID`.
+- La **réduction des BONUS puis le repli sur la roue globale** (§16.3) ne s'appliquent **qu'au `START`**, pour une
+  composition devenue invalide après l'enregistrement (réglage global modifié depuis, ou fichier modifié à la main) ;
+  jamais à l'enregistrement, qui refuse.
+- `POST /game-config.json` : `wheel.bonus_count` accepté et validé (§16.1). Les questions ne sont pas revalidées
+  (§16.3 couvre une composition devenue invalide).
+- `POST /api/roue/wheel-preview` : inchangé (accepte déjà `bonus_count`) — l'éditeur lui envoie la composition
+  effective.
+
+### 16.6 Non-régression
+
+- Question sans aucun des 5 champs, `wheel.bonus_count` absent : roue identique à v12.0.
+- Question LOT-1 avec `ROUE_BONUS_COUNT` seul : roue identique à celle du LOT-1 (§16.2).
+- `game-config.json` sans `bonus_count` : chargé sans erreur, 0 BONUS.
+- Durées, sous-phases, actions, achat de voyelles et case BONUS (§15) : inchangés.
