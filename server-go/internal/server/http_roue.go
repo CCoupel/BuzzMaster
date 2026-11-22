@@ -204,7 +204,7 @@ func applyRoueWheelFields(r *http.Request, question map[string]interface{}) (int
 	if bonusGiven {
 		effBonus = bonus
 	}
-	if bonusGiven && effBonus > game.RoueMaxBonusFor(np) {
+	if effBonus > game.RoueMaxBonusFor(np) { // the inherited global BONUS count counts too (contract §16.5, effective composition)
 		return http.StatusBadRequest, game.RoueErrBonusCountInvalid + ": roue_bonus_count ferait dépasser 64 cases de la roue"
 	}
 	if fields[1].given {

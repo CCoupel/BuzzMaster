@@ -84,3 +84,26 @@ func TestRoueWheelFieldsDev309_GlobalBonusCount(t *testing.T) {
 		t.Errorf("wheel_default must carry bonus_count 0: %s", g.Body.String())
 	}
 }
+
+// M1 (review LOT-2): the BONUS count INHERITED from the global setting must be validated too at save time.
+func TestRoueWheelFieldsDev309_InheritedBonusOverflowRefused(t *testing.T) {
+	s, _ := setupTestHTTPServer(t)
+	const def = `{"wheel":{"max_points":1000,"step":50,"bankrupt_count":2,"lose_turn_count":1,"bonus_count":0}}`
+	t.Cleanup(func() { postGameConfigDev309(t, s, def) })
+	// global: 60 cases + 4 BONUS = 64
+	if w := postGameConfigDev309(t, s, `{"wheel":{"max_points":3000,"step":50,"bankrupt_count":0,"lose_turn_count":0,"bonus_count":4}}`); w.Code != http.StatusOK {
+		t.Fatalf("global: %d %s", w.Code, w.Body.String())
+	}
+	// the question brings the wheel to 63 cases without sending any BONUS count: 63 + 4 inherited > 64
+	w, saved := postRoue145(t, s, map[string]string{"roue_wheel_max_points": "3150"})
+	if w.Code != http.StatusBadRequest || !strings.HasPrefix(w.Body.String(), "ROUE_BONUS_COUNT_INVALID") {
+		t.Fatalf("attendu 400 ROUE_BONUS_COUNT_INVALID, got %d %q", w.Code, w.Body.String())
+	}
+	if saved != nil {
+		t.Errorf("rien ne doit être écrit : %v", saved)
+	}
+	// a customised BONUS count that fits is accepted
+	if w, _ := postRoue145(t, s, map[string]string{"roue_wheel_max_points": "3150", "roue_bonus_count": "1"}); w.Code != http.StatusOK {
+		t.Errorf("1 BONUS personnalisé : %d %s", w.Code, w.Body.String())
+	}
+}
