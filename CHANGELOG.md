@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [12.1.0] - YYYY-MM-DD — Roue de la Fortune : extensions (#147, #308, #309)
+## [12.1.0] - 2026-11-22 — Roue de la Fortune : extensions (#147, #308, #309)
 
 Extensions de la Roue de la Fortune : l'achat de voyelles, une case BONUS dont l'effet est géré par l'animateur, et la composition de la roue par question (#309).
 
