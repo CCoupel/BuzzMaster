@@ -3,30 +3,40 @@
 > Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
-## État courant (2026-11-22) — v12.1.0 en PROD
+## État courant (2026-11-22) — v12.2.0 en PROD
 
-- **PROD = v12.1.0** « Roue de la Fortune — Extensions » livrée le 2026-11-22 : tag `v12.1.0`, main `fae364e2`, release https://github.com/CCoupel/BuzzMaster/releases/tag/v12.1.0. Milestone #22 clos (11 issues).
-- **Marketing** : site publié (gh-pages `d33cfefa`), notes de version dans main (`4cf87307`). Les posts sont à publier par l'utilisateur.
-- **Contenu v12.1.0** :
-  - #147 achat de voyelles : par question, moment BEFORE / AFTER / BOTH, nombre ONE / MANY, prix, gain ;
-  - #308 case BONUS : annonce puis nouveau tour ; géré hors système par l'animateur ;
-  - #309 composition de la roue par question : 5 paramètres, global par défaut, surcharge champ par champ, 🔗 / ✏️ dans l'éditeur ;
-  - correctifs QUALIF #310 à #315.
-  - 5 cycles QUALIF : 12.1.0.1 à 12.1.0.5.
-- **Travail en cours** : aucun. Prochain milestone : **v12.2.0 (#47)**, non cadré.
-  - #316 : le BONUS se pose sur une case de points, sans case en plus ; l'équipe joue ensuite la valeur de la case et ne relance plus la roue.
-  - #317 : BONUS éphémère. Réglage global plus réglage par question ; la marque disparaît une fois tirée ; le bandeau s'estompe à la sélection d'une consonne ou d'une voyelle. Valeur par défaut à décider.
+- **PROD = v12.2.0** « Roue : BONUS sur case à points » livrée le 2026-11-22 : tag `v12.2.0`, main `3d353e71` (merge `--no-ff`), release https://github.com/CCoupel/BuzzMaster/releases/tag/v12.2.0 (CI 45043348860). Commit de version `d7142f35` ajouté avant merge (exigé par `release.yml` : 5 fichiers de version à X.Y.Z). Milestone #47 clos (2/2).
+- **Marketing** : site publié (gh-pages `6d31290e`, carte Roue « voyelles, BONUS et roue sur mesure » mise à jour, badge Nouveau v12.2.0, pas de nouvelle carte), notes + posts dans main (`036c71f2`). Posts à publier par l'utilisateur.
+- **Contenu v12.2.0** :
+  - #316 : BONUS = marque 🎁 posée sur une case à points (le nombre de cases ne change pas) ; arrêt dessus = bandeau « BONUS ! case 800 » puis consonne (ou voyelle) au montant, **sans relance** ; `ROUE_PASS` refusé (`WRONG_SUBPHASE`).
+    Case marquée : dorée + ruban, **🎁 seul** (montant sur le bandeau), aria-label « 800, BONUS ».
+    BANQUEROUTE / PERDU gardent leurs positions v12.0 ; seuls les BONUS s'adaptent (hasard, répartition homogène,
+    jamais voisins d'une case spéciale) ; max = min(4, place libre, « autant de cases à points normales que de spéciales ») ;
+    trop de BONUS = refus `ROUE_BONUS_COUNT_INVALID` à l'enregistrement, réduction au départ.
+  - #317 : mode **éphémère (défaut)** / permanent, global `wheel.bonus_mode` + par question `ROUE_BONUS_MODE` (🔗/✏️,
+    interrupteur sous le compteur BONUS) ; éphémère : la marque disparaît à la lettre acceptée, fondu 600 ms (case et
+    bandeau) ; permanent : marque conservée, bandeau retiré sans fondu.
+  - Contrats : `roue.md` rév. 9.1 §17, `wheel-component.md` §9. Un seul lot, 1 cycle QUALIF (12.2.0.7).
+- **Travail en cours** : aucun. Aucun milestone ouvert en développement ; prochains milestones ouverts : v13.0 PICTIONARY,
+  vX.0.x DNS, vx.x.x Scoring MEMORY (non cadrés).
 - **Décisions et leçons de la session** :
-  - #312 est passé en QA parce que les tests construisaient le GameState à la main. Garde : test sur le vrai hook, plus une fixture Go → hook couvrant tous les champs GameState (3 exceptions justifiées).
-  - Relecture M1/M2 du LOT-2 : la composition effective est validée à l'enregistrement, BONUS hérité compris. Si seul le BONUS dépasse 64 cases → `ROUE_BONUS_COUNT_INVALID` (contrat roue.md rév. 8.2).
-  - Les agents n'ont pas de navigateur. Le Chrome du cluster ne joint pas la QUALIF de l'utilisateur (localhost, 192.168.1.84 et port 9090 injoignables). Les contrôles visuels passent par une page d'aperçu statique autonome : vrai composant, vrai CSS, JS inline (un build module + assets affiche une page blanche via le launcher), servie par launcher.local/files.
-  - Badge « Nouveau » : les mineures comptées sont celles de la majeure en cours (à v12.1.0 : v12.0.0 et v12.1.0 seulement).
+  - Le raccord Go → hook (leçon #312) a de nouveau attrapé un vrai bug : `useWebSocket` ne recopiait pas
+    `ROUE_BONUS_MODE` — garder ce test de raccord pour tout nouveau champ GameState.
+  - Correctifs de review pendant une QA : worktree jetable `tmp/*` puis cherry-pick séquentiel après le verdict (OK).
+  - Relecture factuelle des docs : 1re passe KO (2 erreurs ADMIN_GUIDE « 64 cases »), 2e OK — la règle reste utile.
+  - Maquette marketing au GATE 4d : à ouvrir dans Chrome via le launcher (`MARKETING/index.html`), pas seulement l'Artifact.
+  - `.claude/workflow-state.json` : commité systématiquement en fin de session.
+  - Les sous-agents signent leurs commits avec leur propre modèle (Sonnet / Haiku) : ne pas imposer « Opus » dans les ordres.
 - **Backlog / points de vigilance** :
-  - les paquets Go sont lents sous `-race` (cmd/server ~161 s ; internal/server et internal/game ~125 s) ;
-  - pas de `eslint.config.*` ;
-  - découpage optionnel du fichier de tests Go des voyelles ;
-  - proposition de backlog : `StartImmediate` sans la garde `participantsConform` ;
-  - proposer `govulncheck` au template.
+  - retouches doc optionnelles : `ADMIN_GUIDE.md` « proposé » → « actif » (section BONUS) ; accents de la ligne ROUE du README ;
+    `contracts/roue.md` « case BONUS » (§15) ;
+  - review M3 non traitée : mutation de ref pendant le rendu dans `Wheel.jsx` (`markedId`/`everMarked`), sans effet visible ;
+  - refus « trop de BONUS » de `POST /game-config.json` en texte brut (pas JSON) ;
+  - tests Go lents sous `-race` : `cmd/server` ~158 s, `internal/server` ~126 s, `internal/game` ~125 s (découpage à prévoir) ;
+  - `gofmt -l` : 31 fichiers non conformes préexistants ;
+  - pas de script lint npm ;
+  - `StartImmediate` sans la garde `participantsConform` (proposé depuis v12.0, non traité) ;
+  - stash : 18 entrées anciennes toujours non nettoyées.
 
 ## Règles permanentes (adoptées par l'utilisateur)
 1. dev-* et test-writer ne lancent que les tests touchés ; `qa` et la CI seuls lancent les suites complètes.
@@ -69,4 +79,4 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
 ## Archives
 
-États antérieurs (v11.0.0 → v12.0.0, synchronisations du template v3.14 → v4.2) : `.claude/memory/ARCHIVE.md`.
+États antérieurs (v11.0.0 → v12.1.0, synchronisations du template v3.14 → v4.2) : `.claude/memory/ARCHIVE.md`.

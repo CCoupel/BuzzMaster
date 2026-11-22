@@ -5,6 +5,12 @@
 
 ## Archivé le 2026-11-22 (depuis MEMORY.md)
 
+### État précédent (2026-11-22) — v12.1.0 en PROD (archivé)
+
+- **PROD = v12.1.0** « Roue de la Fortune — Extensions » livrée le 2026-11-22 : tag `v12.1.0`, main `fae364e2`, release https://github.com/CCoupel/BuzzMaster/releases/tag/v12.1.0. Milestone #22 clos (11 issues). Marketing : site gh-pages `d33cfefa`, notes `4cf87307`.
+- **Contenu** : achat de voyelles (#147), case BONUS annonce puis nouveau tour (#308, remplacée en v12.2.0), composition de la roue par question (#309), correctifs QUALIF #310 à #315. 5 cycles QUALIF (12.1.0.1 à 12.1.0.5).
+- **Leçons** : fixture écrite à la main en test → bug caché (#312) ; les agents n'ont pas de navigateur, les contrôles visuels passent par une page d'aperçu statique servie par launcher.local/files.
+
 ### État précédent (2026-11-17) — v12.0.0 en PROD (archivé)
 
 - **PROD = v12.0.0** « Roue de la Fortune » livrée le 2026-11-17 : tag `v12.0.0`, main `7f09de4d` (bump `8dd4bfb9`, date du CHANGELOG), release https://github.com/CCoupel/BuzzMaster/releases/tag/v12.0.0, CI verte, govulncheck et npm audit propres. Milestone #21 clos (#144, #145 fermées), branche `milestone/v12.0.0` supprimée. CHANGELOG 12.0.0 final `cb234c78`, docs à jour `98b02865`, `f8490fdf`, `3177d63a`.
