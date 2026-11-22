@@ -1860,6 +1860,7 @@ Struct Go `config.WheelConfig` (`internal/config/gameconfig.go`). Une section ab
   "step": 50,
   "bankrupt_count": 2,
   "lose_turn_count": 1,
+  "bonus_count": 0,
   "spin_period_ms": 2500,
   "spin_max_ms": 10000,
   "stop_duration_ms": 4000,
@@ -1878,6 +1879,7 @@ Struct Go `config.WheelConfig` (`internal/config/gameconfig.go`). Une section ab
 | `spin_max_ms` | 10000 | 3000–30000 |
 | `stop_duration_ms` | 4000 | 1500–8000 |
 | `flip_interval_ms` | 600 | 200–1500 ; non exposé dans l'interface en v12.0 |
+| `bonus_count` | 0 | *(v12.1.0 LOT-2, #309)* Nombre global de cases BONUS, 0 à 4 ; absent = 0. Compté dans la limite de 64 cases ; `POST` refusé sinon |
 
 La roue (`SEGMENTS`) n'est pas saisie : elle est générée par le serveur (`internal/game/roue_wheel.go`, contrat §10.1)
 et figée dans `ROUE_WHEEL` au `START`. La forme de la roue n'est pas dans la configuration : c'est `ROUE_WHEEL_LAYOUT`
@@ -1898,7 +1900,7 @@ question v12.0 se lit sans changement (défauts ci-dessous).
 | `ROUE_VOWELS_AFTER` | string | `MANY` | `ONE` \| `MANY`, par arrêt de la roue |
 | `ROUE_VOWEL_PRICE` | int | 250 | 1 à 1 000 000 |
 | `ROUE_VOWEL_GAIN` | string | `NONE` | `NONE` \| `REFUND` \| `PER_OCCURRENCE` (gain d'une voyelle présente) |
-| `ROUE_BONUS_COUNT` | int | 0 | 0 à 4 ; écrit seulement si non nul |
+| `ROUE_BONUS_COUNT` | int | suit `wheel.bonus_count` | 0 à 4. Présent = personnalisé (0 compris) ; absent = suit le global (v12.1.0 LOT-2, §16.2) |
 
 Refus à l'enregistrement (`400`, rien n'est écrit) : `ROUE_VOWEL_TIMING_INVALID`, `ROUE_VOWELS_BEFORE_INVALID`,
 `ROUE_VOWELS_AFTER_INVALID`, `ROUE_VOWEL_PRICE_INVALID`, `ROUE_VOWEL_GAIN_INVALID`, `ROUE_BONUS_COUNT_INVALID`
@@ -1928,3 +1930,25 @@ dans `A E I O U Y` ; le calcul de `ROUE_CONSONANTS_LEFT` les ignore.
 
 - `ROUE_WHEEL.SEGMENTS[].KIND` accepte `bonus` (valeur 0, pas de gain). Placement et limite de 64 cases : contrat §15.2.2.
 - `ROUE_LAST_EVENT.KIND` accepte `VOWEL_HIT`, `VOWEL_MISS`, `BONUS` (et `FLIP` pour une voyelle).
+
+### Composition de la roue par question — v12.1.0 LOT-2 (#309)
+
+Contrat : `contracts/roue.md` §16. Règle unique : **champ présent = paramètre personnalisé pour cette question ; champ
+absent = le paramètre suit le réglage global** (`wheel` de `game-config.json`). Les 4 premiers champs sont des entiers
+nullables (`*int` côté Go) : `0` est une valeur personnalisée valable, distincte de « absent ».
+
+| Champ JSON | Type | Suit le global quand absent |
+|---|---|---|
+| `ROUE_WHEEL_MAX_POINTS` | int | `wheel.max_points` |
+| `ROUE_WHEEL_STEP` | int | `wheel.step` ; valeur enregistrée corrigée au diviseur le plus proche du maximum effectif |
+| `ROUE_WHEEL_BANKRUPT_COUNT` | int | `wheel.bankrupt_count` |
+| `ROUE_WHEEL_LOSE_TURN_COUNT` | int | `wheel.lose_turn_count` |
+| `ROUE_BONUS_COUNT` | int | `wheel.bonus_count` |
+
+- Les durées (vitesse, durée maximale, freinage, retournement) restent toujours globales.
+- Une valeur personnalisée égale au global reste personnalisée ; seul le retour explicite au global retire le champ.
+- Question LOT-1 avec `ROUE_BONUS_COUNT` seul : seul son BONUS est personnalisé, les autres paramètres suivent le global.
+- `GameState` : aucun champ nouveau. `ROUE_WHEEL.SEGMENTS` reflète la composition effective, construite au `START`.
+- Refus à l'enregistrement (`400`, rien n'est écrit) : `ROUE_WHEEL_INVALID` (composition invalide, sauf le seul cas BONUS) ;
+  `ROUE_BONUS_COUNT_INVALID` (BONUS hors 0 à 4, ou dépassement de 64 cases dû au seul BONUS, envoyé ou hérité du global).
+

@@ -1289,8 +1289,9 @@ Dans tous les cas, la voyelle est **payée** à l'achat, sur la cagnotte de manc
 quand même et **fait perdre le tour**. Une voyelle déjà proposée ne se rachète pas (refus, sans débit). Quand toutes les
 voyelles sont dites, le bouton « Plus de voyelle à trouver » est grisé.
 
-**Case BONUS** (0 par défaut) : nombre de cases BONUS à ajouter à la roue, de 0 à 4, réglé par question. L'aperçu de la
-roue se met à jour. Les cases BONUS se placent avec les cases spéciales (Banqueroute, Tour perdu).
+**Case BONUS** : nombre de cases BONUS à ajouter à la roue, de 0 à 4, réglé dans la section « 🎡 Roue — composition » de
+la question (voir ci-dessous). Par défaut, il suit le réglage global (0). Les cases BONUS se placent avec les cases
+spéciales (Banqueroute, Tour perdu).
 
 - Arrêt sur BONUS : la TV et les tablettes affichent « 🎁 BONUS ! ». Le système **ne calcule aucun gain** : l'équipe
   garde la main et relance la roue.
@@ -1299,22 +1300,43 @@ roue se met à jour. Les cases BONUS se placent avec les cases spéciales (Banqu
 - Une roue de plus de 64 cases est refusée à l'enregistrement. Si les paramètres de la roue changent après
   l'enregistrement, le nombre de cases BONUS est réduit au lancement pour tenir dans 64 cases (un message le signale dans le journal).
 
+### Composition de la roue par question (v12.1.0)
+
+Dans l'éditeur de question Roue, la section « 🎡 Roue — composition » règle les 5 paramètres de la roue de la question :
+Points maximum, Pas, 💸 Banqueroute, ⏭ Perdu et 🎁 BONUS.
+
+- Chaque paramètre affiche soit **🔗 global** (il suit le réglage global, dont la valeur est indiquée), soit
+  **personnalisé**.
+- Le bouton ✏️ (« Personnaliser ») passe le paramètre en personnalisé ; le bouton 🔗 (« Revenir au global ») le remet
+  au global. Une valeur personnalisée égale au global reste personnalisée.
+- Les durées de la roue restent globales.
+- Le pas est corrigé au diviseur le plus proche du maximum à l'enregistrement, comme dans les réglages globaux.
+- L'aperçu de la roue affiche la composition effective.
+- Une composition refusée (par exemple plus de 64 cases) n'est pas enregistrée : « Roue refusée » s'affiche avec le
+  motif, et la question n'est pas enregistrée.
+- Si un réglage global change après l'enregistrement et rend la composition invalide, l'éditeur le signale à la
+  réouverture de la question. Au lancement, le nombre de BONUS est réduit pour tenir dans 64 cases ; si la composition
+  reste invalide, la roue globale entière est utilisée, avec un message dans le journal. **Le départ n'est jamais refusé.**
+
 ### Régler la roue
 
-La roue est **générée** à partir de 4 paramètres, dans `/admin/settings` (carte « Roue ») :
+La roue **globale** est **générée** à partir de 5 paramètres, dans `/admin/settings` (carte « Roue », en deux groupes :
+**Points** et **Cases spéciales**). Ces réglages sont les défauts des questions : chaque question peut en personnaliser
+un ou plusieurs.
 
-| Paramètre | Rôle | Défaut |
-|---|---|---|
-| Points maximum | Valeur de la meilleure case (1 000 000 au plus) | 1000 |
-| Pas | Écart entre deux valeurs | 50 |
-| Banqueroute | Nombre de cases BANQUEROUTE | 2 |
-| Tour perdu | Nombre de cases TOUR PERDU (placée à mi-tour) | 1 |
+| Paramètre | Groupe | Rôle | Défaut |
+|---|---|---|---|
+| Points maximum | Points | Valeur de la meilleure case (1 000 000 au plus) | 1000 |
+| Pas | Points | Écart entre deux valeurs | 50 |
+| Banqueroute | Cases spéciales | Nombre de cases BANQUEROUTE | 2 |
+| Tour perdu | Cases spéciales | Nombre de cases TOUR PERDU (placée à mi-tour) | 1 |
+| 🎁 BONUS | Cases spéciales | Nombre de cases BONUS, 0 à 4 (cadeau géré par l'animateur, aucun point) | 0 |
 
 - Le total est de 64 cases au plus. Au-delà, l'enregistrement est refusé et rien n'est modifié.
 - **Pas corrigé** : si le pas ne divise pas le maximum, il est ramené au diviseur le plus proche (par exemple 30 → 25
   pour un maximum de 100). L'interface affiche « Pas ajusté à … ».
 - L'aperçu de la roue se calcule sur le serveur ; il se met à jour au fil de la saisie.
-- « Roue par défaut » rétablit 1000 / 50 / 2 / 1 (22 cases).
+- « Roue par défaut » rétablit 1000 / 50 / 2 / 1 / 0 (22 cases).
 - Une modification ne touche pas une manche en cours : la roue est figée au lancement de la manche.
 
 **Durées de la roue** (carte « Roue », en secondes) : durée d'un tour de roue (1 à 6 s), durée maximale de rotation (3 à

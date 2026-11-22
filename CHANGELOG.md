@@ -33,6 +33,12 @@ Deux extensions de la Roue de la Fortune : l'achat de voyelles, et une case BONU
   4 lignes du plateau : 1 ligne → ligne 2 ; 2 lignes → lignes 2 et 3 ; 3 lignes → lignes 1 à 3 ; 4 lignes inchangées.
   L'aperçu de l'éditeur montre ce même placement. Changement voulu : il touche aussi les questions v12.0.0 de 1 ou
   2 lignes, dont la phrase descend.
+- **Composition de la roue par question (#309)** — dans l'éditeur, la section « 🎡 Roue — composition » règle par question
+  Points maximum, Pas, 💸 Banqueroute, ⏭ Perdu et 🎁 BONUS. Chaque paramètre est soit 🔗 global (il suit le réglage
+  global), soit personnalisé ; le bouton 🔗 le remet au global. Les durées restent globales. Les questions existantes
+  suivent le réglage global pour tous les paramètres : aucun changement de roue.
+- **Carte « Roue » des paramètres (#309)** — deux groupes, Points et Cases spéciales, avec le nombre global de cases
+  BONUS (0 à 4, défaut 0) : c'est le défaut des questions.
 - **Choix de la forme de la roue (#311)** — les vignettes à 4 couleurs des cartes « Bandeau » et « Arc » sont retirées ;
   les cartes ne gardent que le texte.
 
