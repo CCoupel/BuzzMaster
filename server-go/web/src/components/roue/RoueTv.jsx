@@ -16,7 +16,7 @@ import { fmtPts, isBonusEvent, isVowel, roueAnnouncement, teamCss, vowelInfo } f
 import './RoueTv.css'
 
 function Announcement({ parts }) {
-  return <>{parts.map((p, i) => (p.strong !== undefined ? <em key={i}>{p.strong}</em> : <span key={i}>{p.text}</span>))}</>
+  return <>{parts.map((p, i) => (p.br ? <br key={i} /> : p.strong !== undefined ? <em key={i}>{p.strong}</em> : <span key={i}>{p.text}</span>))}</>
 }
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -148,7 +148,7 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
         <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tv" />
         {bonus && <div className="roue-bonus-ribbon" role="status" data-testid="roue-bonus">🎁 BONUS !</div>}
       </div>
-      <div className="roue-event"><Announcement parts={roueAnnouncement(gs)} /></div>
+      <div className="roue-event"><div><Announcement parts={roueAnnouncement(gs)} /></div></div>
       {showLetters ? (vowelInfo(gs).enabled ? <Alphabet letters={gs.ROUE_LETTERS} price={vowelInfo(gs).price} /> : <Letters letters={gs.ROUE_LETTERS} />) : <div className="roue-letters" />}
       <div className={`roue-wheel-box roue-wheel-${layout}`}>
         <FortuneWheel wheel={wheel} subphase={sub} teamColor={gs.ROUE_CURRENT_TEAM_COLOR} />

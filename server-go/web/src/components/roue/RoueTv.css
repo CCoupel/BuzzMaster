@@ -13,7 +13,8 @@
 .roue-cat { background: rgba(255, 255, 255, 0.12); border-radius: 999px; padding: 0.15em 1em; font-size: 2.6vh; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
 .roue-pres { font-size: 3.4vh; font-weight: 700; color: #fde68a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
 .roue-mid { flex: 1; min-height: 0; container-type: size; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-.roue-event { text-align: center; font-size: 2.8vh; font-weight: 800; height: 4.6vh; line-height: 4.6vh; white-space: nowrap; overflow: hidden; flex: 0 0 auto; }
+/* Deux lignes au plus (points + « Une réponse ? À voix haute »), hauteur toujours réservée : le plateau ne saute pas d'une étape à l'autre. */
+.roue-event { display: flex; align-items: center; justify-content: center; text-align: center; font-size: 2.8vh; font-weight: 800; height: 8.4vh; line-height: 4vh; white-space: nowrap; overflow: hidden; flex: 0 0 auto; }
 .roue-event em, .roue-vp-msg em { font-style: normal; color: #fbbf24; }
 .roue-letters { text-align: center; font-size: 2vh; color: #9ca3af; height: 3.4vh; line-height: 3.4vh; white-space: nowrap; overflow: hidden; flex: 0 0 auto; }
 .roue-letters b { display: inline-block; min-width: 1.5em; margin: 0 0.1em; border-radius: 0.3em; background: rgba(255, 255, 255, 0.14); color: #fff; line-height: 1.5; }

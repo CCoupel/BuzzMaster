@@ -81,6 +81,13 @@ export function vowelInfo(gs) {
 
 export const fmtPts = (n) => Number(n || 0).toLocaleString('fr-FR')
 
+/** « R : 3 × 500 = +1 500 » — le FLIP du moteur porte VALUE 0 : valeur de la case courante, gain du tour en attente. */
+function consonantPoints(gs, ev, seg) {
+  const value = ev.VALUE || seg?.VALUE || 0
+  const gain = ev.GAIN > 0 ? ev.GAIN : (gs.ROUE_TURN_GAIN || 0)
+  return [{ strong: ev.LETTER || '' }, { text: ` : ${ev.COUNT || 0} × ${value} = ` }, { strong: `+${fmtPts(gain)}` }]
+}
+
 /**
  * Phrase d'annonce (TV / tablette) selon la sous-phase — texte brut ; `team` = équipe qui a la main.
  * @returns {{ text: string, strong?: string }[]} segments (`strong` = mis en évidence)
@@ -128,12 +135,15 @@ export function roueAnnouncement(gs, { mine = null } = {}) {
       if (sub === 'VOWEL_REVEALING' || isVowel(ev.LETTER)) {
         return [T(ev.LETTER || ''), t(` : ${cnt} case${cnt > 1 ? 's' : ''}${ev.GAIN > 0 ? ' = ' : ''}`), ...(ev.GAIN > 0 ? [T(`+${fmtPts(ev.GAIN)}`)] : [])]
       }
-      const value = ev.VALUE || seg?.VALUE || 0
-      const gain = ev.GAIN > 0 ? ev.GAIN : (gs.ROUE_TURN_GAIN || 0)
-      return [T(ev.LETTER || ''), t(` : ${cnt} × ${value} = `), T(`+${fmtPts(gain)}`)]
+      return consonantPoints(gs, ev, seg)
     }
-    case 'ANSWER':
-      return [t('Une réponse ? À voix haute')]
+    case 'ANSWER': {
+      const say = t('Une réponse ? À voix haute')
+      // Les points de la consonne restent affichés (le FLIP reste le dernier événement), le texte vient en dessous (QUALIF 12.1.0.2).
+      // Voyelle : inchangé (gain déjà crédité au retournement).
+      if (ev.KIND === 'FLIP' && ev.LETTER && !isVowel(ev.LETTER) && (ev.COUNT || 0) > 0) return [...consonantPoints(gs, ev, seg), { br: true }, say]
+      return [say]
+    }
     case 'TURN_END': {
       if (seg?.KIND === 'bankrupt') return [t('💸 '), T('BANQUEROUTE'), t(` — la cagnotte des ${team} retombe à 0`)]
       if (seg?.KIND === 'lose_turn') return [t('⏭ '), T('TOUR PERDU')]
