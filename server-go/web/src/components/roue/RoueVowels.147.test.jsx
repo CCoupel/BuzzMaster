@@ -13,7 +13,7 @@ import { makeRoueActions, roueGates, roueAnnouncement } from './roueState'
 
 afterEach(() => cleanup())
 
-const SEGS = [{ ID: 's0', KIND: 'value', VALUE: 500 }, { ID: 's1', KIND: 'bankrupt', VALUE: 0 }, { ID: 's2', KIND: 'bonus', VALUE: 0 }]
+const SEGS = [{ ID: 's0', KIND: 'value', VALUE: 500 }, { ID: 's1', KIND: 'bankrupt', VALUE: 0 }, { ID: 's2', KIND: 'value', VALUE: 800, BONUS: true }]
 const NO_EVENT = { SEQ: 0, KIND: '', TEAM: '', LETTER: '', COUNT: 0, VALUE: 0, GAIN: 0 }
 
 /** Début de tour (TURN) d'une manche aux réglages par défaut d'une question v12.0 : Avant de tourner, Plusieurs, 250. */

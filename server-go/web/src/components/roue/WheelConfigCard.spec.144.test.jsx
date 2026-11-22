@@ -73,7 +73,7 @@ describe('WheelConfigCard — spécification', () => {
     expect(screen.getByText('Enregistrer').closest('button').disabled).toBe(true)
   })
 
-  it('l\'enregistrement envoie la section wheel COMPLÈTE (9 clés, dont bonus_count depuis #309), flip_interval_ms conservé tel quel', async () => {
+  it('l\'enregistrement envoie la section wheel COMPLÈTE (10 clés, dont bonus_count depuis #309 et bonus_mode depuis #317), flip_interval_ms conservé tel quel', async () => {
     respond((url, o) => (url === '/game-config.json' ? json({ wheel: DEF }) : echo(o)))
     render(<WheelConfigCard wheel={{ ...DEF, flip_interval_ms: 900 }} wheelDefault={DEF} />)
     await settle()
@@ -81,7 +81,7 @@ describe('WheelConfigCard — spécification', () => {
     const save = calls.find(c => c.url === '/game-config.json')
     expect(save.method).toBe('POST')
     expect(Object.keys(save.body.wheel).sort()).toEqual(
-      ['bankrupt_count', 'bonus_count', 'flip_interval_ms', 'lose_turn_count', 'max_points', 'spin_max_ms', 'spin_period_ms', 'step', 'stop_duration_ms'])
+      ['bankrupt_count', 'bonus_count', 'bonus_mode', 'flip_interval_ms', 'lose_turn_count', 'max_points', 'spin_max_ms', 'spin_period_ms', 'step', 'stop_duration_ms'])
     expect(save.body.wheel.flip_interval_ms).toBe(900)
   })
 

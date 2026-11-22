@@ -22,7 +22,7 @@ const PARAMS = [
   { key: 'step', label: 'Pas', hint: 'écart entre deux valeurs ; aussi la plus petite valeur', min: 1, group: 'Points' },
   { key: 'bankrupt_count', label: '💸 Banqueroute', hint: 'cases qui vident la cagnotte', min: 0, group: 'Cases spéciales' },
   { key: 'lose_turn_count', label: '⏭ Perdu', hint: 'cases qui font passer le tour', min: 0, group: 'Cases spéciales' },
-  { key: 'bonus_count', label: '🎁 BONUS', hint: "0 à 4 — cadeau géré par l'animateur, aucun point", min: 0, max: 4, group: 'Cases spéciales', isNew: true },
+  { key: 'bonus_count', label: '🎁 BONUS', hint: "0 à 4 (moins si la roue est petite) — marque posée sur une case à points ; cadeau géré par l'animateur, aucun point", min: 0, max: 4, group: 'Cases spéciales', isNew: true },
 ]
 const GROUPS = ['Points', 'Cases spéciales']
 const DURATIONS = [
@@ -41,6 +41,7 @@ function fromServer(w) {
   return {
     max_points: x.max_points, step: x.step, bankrupt_count: x.bankrupt_count, lose_turn_count: x.lose_turn_count,
     bonus_count: x.bonus_count ?? 0, // absent (config v12.0 / v12.1 LOT-1) = 0 BONUS
+    bonus_mode: x.bonus_mode === 'PERMANENT' ? 'PERMANENT' : 'EPHEMERAL', // absent = éphémère (§17.5)
     spin_period_ms: x.spin_period_ms, spin_max_ms: x.spin_max_ms, stop_duration_ms: x.stop_duration_ms,
     flip_interval_ms: x.flip_interval_ms,
   }
@@ -92,9 +93,11 @@ function Ring({ segments, sourceRef, active = false, restIndex = 0 }) {
         const fs = Math.min(46, 1000 / n)
         return (
           <g key={s.id}>
-            <path d={`M${x0} ${y0} A${R} ${R} 0 0 1 ${x1} ${y1} L${x2} ${y2} A${r} ${r} 0 0 0 ${x3} ${y3} Z`} fill={s.color || PALETTE[0]} stroke="#0b1020" strokeWidth="3" />
+            <path d={`M${x0} ${y0} A${R} ${R} 0 0 1 ${x1} ${y1} L${x2} ${y2} A${r} ${r} 0 0 0 ${x3} ${y3} Z`} fill={s.mark === 'bonus' ? '#fbbf24' : (s.color || PALETTE[0])} stroke="#0b1020" strokeWidth="3" />
+            {s.mark === 'bonus' && <line x1={pt(r, mid)[0]} y1={pt(r, mid)[1]} x2={pt(R, mid)[0]} y2={pt(R, mid)[1]} stroke="#b45309" strokeWidth={Math.max(8, 300 / n)} />}
             <text x={lx} y={ly} transform={`rotate(${mid + 90} ${lx} ${ly})`} textAnchor="middle" dominantBaseline="central" fontSize={fs} fontWeight="900" fill={s.kind === 'special' ? '#fff' : '#111827'}>
-              {s.icon || s.label}
+              {s.mark === 'bonus' ? '🎁' : (s.icon || s.label)}
+              {s.mark === 'bonus' && <title>{`${s.label}, BONUS`}</title>}
             </text>
           </g>
         )
@@ -113,7 +116,7 @@ function trialLabel(st, segments) {
     case 'up': return 'Montée…'
     case 'full': return `Pleine vitesse — arrêt automatique dans ${Math.ceil(st.remainingMs / 1000)} s`
     case 'brake': return 'Freinage'
-    case 'stopped': { const seg = segments[st.rest]; return seg ? `Arrêt sur ${seg.kind === 'special' ? seg.label.replace('\n', ' ') : seg.label}` : '' }
+    case 'stopped': { const seg = segments[st.rest]; return seg ? `Arrêt sur ${seg.kind === 'special' ? seg.label.replace('\n', ' ') : seg.label}${seg.mark === 'bonus' ? ' + 🎁' : ''}` : '' }
     default: return ''
   }
 }
@@ -286,6 +289,13 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
                   <label htmlFor={`wheel-${p.key}`}>{p.label}</label>
                   <input id={`wheel-${p.key}`} type="number" min={p.min} max={p.max} step="1" value={form[p.key] ?? ''} onChange={(e) => edit(p.key, e.target.value)} />
                   <small>{p.hint}</small>
+                  {p.key === 'bonus_count' && (
+                    <label className={`wheel-cfg-switch${(form.bonus_count ?? 0) === 0 ? ' off' : ''}`} htmlFor="wheel-bonus_mode" title="Éphémère : la marque disparaît après son premier tirage, jusqu'à la fin de la manche">
+                      <input id="wheel-bonus_mode" type="checkbox" role="switch" checked={form.bonus_mode !== 'PERMANENT'} disabled={(form.bonus_count ?? 0) === 0}
+                        onChange={(e) => { trial.interrupt(); setToast(null); setForm(f => ({ ...f, bonus_mode: e.target.checked ? 'EPHEMERAL' : 'PERMANENT' })) }} />
+                      <span>une seule fois par manche</span>
+                    </label>
+                  )}
                 </div>
               ))}
             </div>
@@ -318,9 +328,10 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
               <h4>Roue générée, dans l'ordre (la dernière case rejoint la première)</h4>
               <div className="wheel-cfg-strip">
                 {segments.map((s, i) => (
-                  <div key={s.id} className={`wheel-cfg-pc${s.kind === 'special' ? ' sp' : ''}`} style={s.kind === 'special' ? undefined : { background: s.color }}>
+                  <div key={s.id} className={`wheel-cfg-pc${s.kind === 'special' ? ' sp' : ''}${s.mark === 'bonus' ? ' bonus' : ''}`} style={s.kind === 'special' ? undefined : s.mark === 'bonus' ? undefined : { background: s.color }}
+                    title={s.mark === 'bonus' ? `${s.label}, BONUS` : undefined}>
                     <i>{i + 1}</i>
-                    {s.kind === 'special' || s.kind === 'bonus' ? <>{s.icon}<small>{s.label.split('\n').map((l, k) => <span key={k}>{k > 0 && <br />}{l}</span>)}</small></> : s.label}
+                    {s.mark === 'bonus' ? '🎁' : s.kind === 'special' ? <>{s.icon}<small>{s.label.split('\n').map((l, k) => <span key={k}>{k > 0 && <br />}{l}</span>)}</small></> : s.label}
                   </div>
                 ))}
               </div>

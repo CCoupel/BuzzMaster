@@ -31,3 +31,4 @@
 
 /* 🎁 BONUS (v12.1.0, #308) */
 .roue-bonus { background: linear-gradient(90deg, #fef3c7, #fde68a); border: 2px solid #f59e0b; border-radius: 0.6rem; padding: 0.55rem 0.8rem; font-weight: 800; color: #78350f; margin-bottom: 0.6rem; }
+.roue-seg.bonus { background: linear-gradient(90deg, transparent 42%, #b45309 42% 58%, transparent 58%), #fbbf24; }

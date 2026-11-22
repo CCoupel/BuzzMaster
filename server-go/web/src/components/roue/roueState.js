@@ -34,9 +34,19 @@ export function segmentLabel(seg) {
   if (!seg) return ''
   if (seg.KIND === 'bankrupt') return 'BANQUEROUTE'
   if (seg.KIND === 'lose_turn') return 'TOUR PERDU'
-  if (seg.KIND === 'bonus') return '🎁 BONUS'
+  // v12.2.0 (#316/#317) : un BONUS est une marque sur une case à points — visuel = 🎁 seul (ni montant ni « BONUS »).
+  if (seg.BONUS === true) return '🎁'
   return String(seg.VALUE)
 }
+
+/** Libellé accessible d'une case (§17.5) : « 800, BONUS » pour une case marquée, sinon son libellé. */
+export function segmentAria(seg) {
+  if (seg?.KIND === 'value' && seg.BONUS === true) return `${seg.VALUE}, BONUS`
+  return segmentLabel(seg)
+}
+
+/** Valeur de la case de l'arrêt BONUS (`ROUE_LAST_EVENT.VALUE`, sinon case courante). */
+export const bonusValue = (gs) => gs?.ROUE_LAST_EVENT?.VALUE || currentSegment(gs)?.VALUE || 0
 
 /** Arrêt sur une case BONUS (v12.1.0, #308, contrat §15.2.3) : bandeau tant que `ROUE_LAST_EVENT.KIND = BONUS`. */
 export const isBonusEvent = (gs) => gs?.ROUE_LAST_EVENT?.KIND === 'BONUS'
@@ -100,10 +110,6 @@ export function roueAnnouncement(gs, { mine = null } = {}) {
   const letter = lastLetter(gs)
   const T = (strong) => ({ strong })
   const t = (text) => ({ text })
-  // BONUS (#308) : la main est rendue à la même équipe (nouveau tour en TURN) tant que l'événement dure.
-  if (sub === 'TURN' && ev.KIND === 'BONUS') {
-    return [T('🎁 BONUS'), t(mine === true ? ' — vous rejouez' : ' — les '), ...(mine === true ? [] : [T(team.toUpperCase()), t(' rejouent')])]
-  }
   switch (sub) {
     case 'TURN': {
       const v = vowelInfo(gs)
@@ -123,6 +129,8 @@ export function roueAnnouncement(gs, { mine = null } = {}) {
       return [t('La roue ralentit…')]
     case 'LETTER': {
       const v = vowelInfo(gs)
+      // BONUS (v12.2.0) : la case marquée n'affiche pas son montant — il est dans l'annonce (« 🎁 BONUS — case 800 »).
+      if (ev.KIND === 'BONUS') return [T('🎁 BONUS'), t(` — case ${bonusValue(gs)}`), t(v.after ? ` : proposez une consonne, ou une voyelle à ${fmtPts(v.price)}` : ' : proposez une consonne')]
       return [t('Case '), T(segmentLabel(seg)), t(v.after ? ` — consonne, ou voyelle à ${fmtPts(v.price)}` : ' — proposez une consonne')]
     }
     case 'VOWEL_LIT':

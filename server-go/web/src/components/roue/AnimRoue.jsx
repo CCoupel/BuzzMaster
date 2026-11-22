@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react'
 import { useGame } from '../../hooks/GameContext'
 import { RoueErrorLine, RoueKeyboard, useSpinCountdown } from './RoueControls'
-import { currentSegment, fmtPts, isBonusEvent, isVowel, makeRoueActions, roueGates, segmentLabel, teamCss, vowelInfo } from './roueState'
+import { bonusValue, currentSegment, fmtPts, isBonusEvent, isVowel, makeRoueActions, roueGates, segmentAria, segmentLabel, teamCss, vowelInfo } from './roueState'
 import './AnimRoue.css'
 
 const fold = (c) => c.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
@@ -70,10 +70,11 @@ export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
       <div className="anim-roue-bar">
         <span className="anim-roue-chip">🎡 <b>ROUE</b></span>
         {vi.enabled && <span className="anim-roue-chip anim-roue-vchip">🔤 {fmtPts(vi.price)} · {({ BEFORE: 'avant', AFTER: 'après', BOTH: 'avant / après' })[vi.timing] || 'avant'}</span>}
+        {q.ROUE_BONUS_COUNT > 0 && <span className="anim-roue-chip" data-testid="anim-roue-bonus-chip">🎁 {q.ROUE_BONUS_COUNT} · {(gs.ROUE_BONUS_MODE || 'EPHEMERAL') === 'PERMANENT' ? 'permanent' : 'une fois'}</span>}
         {q.ROUE_PRESENTATION && <span className="anim-roue-chip">« {q.ROUE_PRESENTATION} »</span>}
         {current && sub !== 'SOLVED' && <span className="anim-roue-hand" style={{ background: colorOf(current) }}>▶ {current}</span>}
       </div>
-      {isBonusEvent(gs) && <div className="anim-roue-bonus" role="status" data-testid="anim-roue-bonus">🎁 BONUS !</div>}
+      {isBonusEvent(gs) && <div className="anim-roue-bonus" role="status" data-testid="anim-roue-bonus">🎁 BONUS ! case {bonusValue(gs)}</div>}
       <Phrase gs={gs} colorOf={colorOf} />
 
       {live && (
@@ -120,7 +121,7 @@ export function AnimRoueView({ gameState: gs, teams = {}, actions, error }) {
           </div>
         </div>
         <div className="anim-roue-panel">
-          <div className={`anim-roue-case${!seg && !cd.spinning ? ' none' : ''}${cd.spinning ? ' spin' : ''}${seg?.KIND === 'bonus' && !cd.spinning ? ' gold' : ''}`}>
+          <div className={`anim-roue-case${!seg && !cd.spinning ? ' none' : ''}${cd.spinning ? ' spin' : ''}${seg?.BONUS === true && !cd.spinning ? ' gold' : ''}`} aria-label={seg && !cd.spinning ? segmentAria(seg) : undefined}>
             <small>Case de la roue</small>
             {cd.spinning ? (cd.fullSpeed ? `la roue tourne · ${Math.ceil(cd.remainingMs / 1000)} s` : 'la roue prend de la vitesse…') : seg ? segmentLabel(seg) : '—'}
           </div>

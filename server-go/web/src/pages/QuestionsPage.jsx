@@ -141,6 +141,7 @@ export default function QuestionsPage() {
     roueWheelBankruptCount: null,
     roueWheelLoseTurnCount: null,
     roueBonusCount: null,
+    roueBonusMode: null, // v12.2.0 (#317) : null = suit le global ; 'EPHEMERAL' | 'PERMANENT' = personnalisé
     // Voyelles (v12.1.0, #147) — défauts d'une question v12.0 : achat avant de tourner, plusieurs / plusieurs, 250, sans gain
     roueBuyVowels: true,
     roueVowelTiming: 'BEFORE',
@@ -1240,6 +1241,7 @@ export default function QuestionsPage() {
       roueWheelBankruptCount: Number.isInteger(question.ROUE_WHEEL_BANKRUPT_COUNT) ? question.ROUE_WHEEL_BANKRUPT_COUNT : null,
       roueWheelLoseTurnCount: Number.isInteger(question.ROUE_WHEEL_LOSE_TURN_COUNT) ? question.ROUE_WHEEL_LOSE_TURN_COUNT : null,
       roueBonusCount: Number.isInteger(question.ROUE_BONUS_COUNT) ? question.ROUE_BONUS_COUNT : null,
+      roueBonusMode: question.ROUE_BONUS_MODE === 'PERMANENT' || question.ROUE_BONUS_MODE === 'EPHEMERAL' ? question.ROUE_BONUS_MODE : null,
       // Voyelles (#147) — absent = valeur par défaut (ROUE_BUY_VOWELS n'est écrit que pour false)
       roueBuyVowels: question.ROUE_BUY_VOWELS !== false,
       roueVowelTiming: question.ROUE_VOWEL_TIMING || 'BEFORE',
@@ -1415,6 +1417,7 @@ export default function QuestionsPage() {
       roueWheelBankruptCount: null,
       roueWheelLoseTurnCount: null,
       roueBonusCount: null,
+      roueBonusMode: null,
       roueBuyVowels: true,
       roueVowelTiming: 'BEFORE',
       roueVowelsBefore: 'MANY',
@@ -2028,6 +2031,7 @@ export default function QuestionsPage() {
       data.append('roue_wheel_bankrupt_count', wheelField(formData.roueWheelBankruptCount))
       data.append('roue_wheel_lose_turn_count', wheelField(formData.roueWheelLoseTurnCount))
       data.append('roue_bonus_count', wheelField(formData.roueBonusCount))
+      data.append('roue_bonus_mode', formData.roueBonusMode === 'PERMANENT' || formData.roueBonusMode === 'EPHEMERAL' ? formData.roueBonusMode : '') // vide = global (#317)
       data.append('answer', '—')
     } else if (formData.type === 'ENTRACTE') {
       // ENTRACTE (#214) — configuration du panneau PAR OCCURRENCE, envoyée

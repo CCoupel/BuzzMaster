@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react'
 import RoueSteps from './RoueSteps'
 import { RoueErrorLine, RoueKeyboard, RoueNextButtons, useSpinCountdown } from './RoueControls'
-import { currentSegment, fmtPts, isBonusEvent, isVowel, roueGates, roueSolo, segmentLabel, teamCss, vowelInfo, VOWELS } from './roueState'
+import { bonusValue, currentSegment, fmtPts, isBonusEvent, isVowel, roueGates, roueSolo, segmentAria, segmentLabel, teamCss, vowelInfo, VOWELS } from './roueState'
 import './RouePanel.css'
 
 const MODE_LABEL = { SOLO: 'Solo', CHACUN_SON_TOUR: 'Chacun son tour', TANT_QUE_JE_GAGNE: 'Tant que je gagne' }
@@ -123,7 +123,6 @@ function Action({ gs, gates, actions, selected, setSelected, picking, setPicking
         </>)
       }
       return (<>
-        {isBonusEvent(gs) && <div className="roue-bonus" role="status" data-testid="roue-bonus">🎁 BONUS ! — les {team} gardent la main. Remettez le cadeau, puis relancez la roue (aucun point compté).</div>}
         <h5>1 — {vi.before ? 'Lancer la roue ou acheter une voyelle' : 'Lancer la roue'}</h5>
         <div className="roue-row">
           <button type="button" className="roue-btn primary big" onClick={actions.spin} disabled={!gates.canSpin}>🎡 Lancer la roue</button>
@@ -167,16 +166,17 @@ function Action({ gs, gates, actions, selected, setSelected, picking, setPicking
       const target = Number.isInteger(to) ? gs.ROUE_WHEEL.SEGMENTS?.[to] : null
       return (<>
         <h5>3 — Affichage de la case</h5>
-        <div className="roue-row"><span>La roue ralentit et s'arrête sur</span>{target && <span className="roue-seg">{segmentLabel(target)}</span>}</div>
+        <div className="roue-row"><span>La roue ralentit et s'arrête sur</span>{target && <span className={`roue-seg${target.BONUS === true ? ' bonus' : ''}`} aria-label={segmentAria(target)}>{segmentLabel(target)}</span>}</div>
         <p className="roue-hint">Aucun geste : le clavier des consonnes s'ouvre dès l'arrêt.</p>
       </>)
     }
     case 'LETTER':
       return (<>
-        <h5>4 — {vi.after ? 'Consonne ou voyelle' : 'Sélection de la consonne'} {seg && <span className="roue-seg">{segmentLabel(seg)}</span>}</h5>
+        {isBonusEvent(gs) && <div className="roue-bonus" role="status" data-testid="roue-bonus">🎁 BONUS ! case {bonusValue(gs)} — remettez le cadeau, puis proposez {vi.after ? 'une consonne ou une voyelle' : 'une consonne'} (aucun point compté pour le BONUS).</div>}
+        <h5>4 — {vi.after ? 'Consonne ou voyelle' : 'Sélection de la consonne'} {seg && <span className={`roue-seg${seg.BONUS === true ? ' bonus' : ''}`} aria-label={segmentAria(seg)}>{segmentLabel(seg)}</span>}</h5>
         <RoueKeyboard letters={gs.ROUE_LETTERS} enabled selected={selected} onSelect={setSelected} onSubmit={() => submitLetter(selected)}
           vowelsLabel={vi.after ? `ou une voyelle — ${fmtPts(vi.price)} :` : null} vowelsEnabled={vi.canBuyAfter} />
-        {vi.after && <p className="roue-hint">Une voyelle remplace la consonne : la case {segmentLabel(seg)} n'est pas jouée.{vi.rich ? '' : ' Cagnotte insuffisante.'}</p>}
+        {vi.after && <p className="roue-hint">Une voyelle remplace la consonne : la case {seg?.BONUS === true ? `${seg.VALUE}` : segmentLabel(seg)} n'est pas jouée.{vi.rich ? '' : ' Cagnotte insuffisante.'}</p>}
         <div className="roue-row roue-gap">
           {selected && isVowel(selected) ? (
             <button type="button" className="roue-btn vow solid big" disabled={!vi.canBuyAfter} onClick={() => submitLetter(selected)}>Acheter le {selected} — {fmtPts(vi.price)}</button>
@@ -267,7 +267,7 @@ export default function RouePanel({ gameState, actions, error, teamList = [], wa
         <span className="roue-chip">Mode : <b>{MODE_LABEL[q.ROUE_MODE] || MODE_LABEL.TANT_QUE_JE_GAGNE}</b></span>
         <span className="roue-chip">Gains : <b>{GAINS_LABEL[q.ROUE_GAINS_RULE] || GAINS_LABEL.WINNER_ONLY}</b></span>
         {vowelInfo(gs).enabled && <span className="roue-chip" data-testid="roue-vowel-chip">Voyelles : <b>{fmtPts(vowelInfo(gs).price)}</b> · {TIMING_LABEL[vowelInfo(gs).timing] || TIMING_LABEL.BEFORE}{vowelInfo(gs).gain !== 'NONE' ? ` · ${VGAIN_LABEL[vowelInfo(gs).gain] || ''}` : ''}</span>}
-        {q.ROUE_BONUS_COUNT > 0 && <span className="roue-chip">🎁 BONUS : <b>{q.ROUE_BONUS_COUNT} case{q.ROUE_BONUS_COUNT > 1 ? 's' : ''}</b></span>}
+        {q.ROUE_BONUS_COUNT > 0 && <span className="roue-chip" data-testid="roue-bonus-chip">🎁 BONUS : <b>{q.ROUE_BONUS_COUNT}</b> · {(gs.ROUE_BONUS_MODE || 'EPHEMERAL') === 'PERMANENT' ? 'permanent' : 'une seule fois par manche'}</span>}
         {q.ROUE_PRESENTATION && <span className="roue-chip">Présentation : <b>{q.ROUE_PRESENTATION}</b></span>}
       </div>
       <Solution gs={gs} />

@@ -13,7 +13,7 @@ const GLOBAL = { max_points: 1000, step: 50, bankrupt_count: 2, lose_turn_count:
 const base = { rouePhrase: '', rouePresentation: '', roueMode: 'TANT_QUE_JE_GAGNE', roueGainsRule: 'WINNER_ONLY', roueWheelLayout: 'strip', roueShowLetters: true }
 const PREVIEW_OK = { COLS: 14, MAX_ROWS: 4, ROWS: ['COMBIEN POUR'], CONSONANTS: 12, LETTERS: 17 }
 const seg = (i, kind, v = 0) => ({ ID: `s${i}`, KIND: kind, VALUE: v })
-const WHEEL_OK = { COUNT: 4, step: 50, SEGMENTS: [seg(0, 'value', 1000), seg(1, 'bankrupt'), seg(2, 'bonus'), seg(3, 'lose_turn')] }
+const WHEEL_OK = { COUNT: 4, step: 50, SEGMENTS: [seg(0, 'value', 1000), seg(1, 'bankrupt'), { ...seg(2, 'value', 800), BONUS: true }, seg(3, 'lose_turn')] }
 const json = (data, ok = true, status = 200) => ({ ok, status, json: async () => data })
 
 let calls, globalWheel, wheelHandler
@@ -193,7 +193,7 @@ describe('RoueEditor — composition : aperçu par le serveur', () => {
     renderEditor({ roueBonusCount: 1 })
     await waitFor(() => expect(screen.getByTestId('roue-wheel-summary')).toBeTruthy(), { timeout: 2000 })
     expect(screen.getByTestId('roue-wheel-summary').textContent).toMatch(/4 cases/)
-    expect(screen.getByTestId('roue-bonus-preview').textContent).toMatch(/BONUS/)
+    expect(screen.getByTestId('roue-bonus-preview').textContent).toMatch(/🎁/) // marque BONUS (v12.2.0) : logo seul, jamais le mot
   })
 
   it('« Pas ajusté » : le pas corrigé par le serveur est signalé, jamais refusé', async () => {

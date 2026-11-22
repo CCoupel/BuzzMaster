@@ -59,7 +59,8 @@ const FALLBACK_ERRORS = {
   ROUE_VOWEL_PRICE_INVALID: "Prix d'une voyelle invalide (entier de 1 à 1 000 000).",
   ROUE_VOWEL_GAIN_INVALID: "Gain d'une voyelle invalide.",
   ROUE_WHEEL_INVALID: 'Composition de la roue invalide.',
-  ROUE_BONUS_COUNT_INVALID: 'Nombre de cases BONUS invalide (0 à 4, et la roue ne dépasse pas 64 cases).',
+  ROUE_BONUS_COUNT_INVALID: 'Trop de BONUS pour cette roue (0 à 4 ; un BONUS ne touche jamais une Banqueroute, un Perdu ni un autre BONUS).',
+  ROUE_BONUS_MODE_INVALID: 'Mode du BONUS invalide (éphémère ou permanent).',
 }
 
 /** Refus 400 de POST /questions (texte « ROUE_CODE: détail ») → message lisible ; autre texte inchangé. */
@@ -155,7 +156,7 @@ const WHEEL_PARAMS = [
   { id: 'step', field: 'roueWheelStep', global: 'step', label: 'Pas', hint: 'écart et plus petite valeur', min: 1, group: 'Points' },
   { id: 'B', field: 'roueWheelBankruptCount', global: 'bankrupt_count', label: '💸 Banqueroute', hint: 'vident la cagnotte', min: 0, group: 'Cases spéciales' },
   { id: 'P', field: 'roueWheelLoseTurnCount', global: 'lose_turn_count', label: '⏭ Perdu', hint: 'font passer le tour', min: 0, group: 'Cases spéciales' },
-  { id: 'X', field: 'roueBonusCount', global: 'bonus_count', label: '🎁 BONUS', hint: "0 à 4, cadeau de l'animateur", min: 0, max: ROUE_BONUS_MAX, group: 'Cases spéciales' },
+  { id: 'X', field: 'roueBonusCount', global: 'bonus_count', label: '🎁 BONUS', hint: "0 à 4, posés sur des cases à points", min: 0, max: ROUE_BONUS_MAX, group: 'Cases spéciales' },
 ]
 const WHEEL_FIELDS = WHEEL_PARAMS.map(p => p.field)
 const isCustom = (v) => v !== null && v !== undefined && v !== ''
@@ -167,6 +168,7 @@ function WheelCompositionSection({ values, onChange, onValidityChange }) {
   const [error, setError] = useState('')
   const touched = useRef(false)
   const seq = useRef(0)
+  const [draw, setDraw] = useState(0) // « 🎲 Autre tirage » : nouvel aperçu, marques BONUS placées ailleurs (le serveur tire)
   const validityRef = useRef(onValidityChange)
   validityRef.current = onValidityChange
 
@@ -187,7 +189,10 @@ function WheelCompositionSection({ values, onChange, onValidityChange }) {
 
   const eff = {}
   WHEEL_PARAMS.forEach(p => { eff[p.id] = isCustom(values[p.field]) ? Number(values[p.field]) : globalOf(globalWheel, p) })
-  const effKey = globalWheel ? JSON.stringify(eff) : ''
+  const globalMode = globalWheel?.bonus_mode === 'PERMANENT' ? 'PERMANENT' : 'EPHEMERAL'
+  const modeCustom = values.roueBonusMode === 'PERMANENT' || values.roueBonusMode === 'EPHEMERAL'
+  const effMode = modeCustom ? values.roueBonusMode : globalMode
+  const effKey = globalWheel ? JSON.stringify({ ...eff, draw }) : ''
 
   useEffect(() => {
     if (!globalWheel) { validityRef.current?.(true); return undefined }
@@ -218,6 +223,8 @@ function WheelCompositionSection({ values, onChange, onValidityChange }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effKey])
 
+  const toggleMode = () => { touched.current = true; onChange('roueBonusMode', modeCustom ? null : globalMode) }
+  const editMode = (once) => { touched.current = true; onChange('roueBonusMode', once ? 'EPHEMERAL' : 'PERMANENT') }
   const toggle = (p) => { touched.current = true; onChange(p.field, isCustom(values[p.field]) ? null : globalOf(globalWheel, p)) }
   const edit = (p, raw) => {
     touched.current = true
@@ -226,6 +233,8 @@ function WheelCompositionSection({ values, onChange, onValidityChange }) {
     onChange(p.field, Number.isFinite(n) ? (p.max != null ? Math.min(p.max, n) : n) : p.min)
   }
   const custom = WHEEL_PARAMS.filter(p => isCustom(values[p.field]))
+  // Question v12.1 : ROUE_BONUS_COUNT sans mode, à l'ouverture (§17.7) — ses BONUS sont désormais posés sur des cases à points.
+  const migrated = !touched.current && isCustom(values.roueBonusCount) && Number(values.roueBonusCount) > 0 && !modeCustom
   const stale = !!error && !touched.current && custom.length > 0
   const segs = preview?.SEGMENTS || []
   const vals = segs.filter(x => x.KIND === 'value').map(x => x.VALUE)
@@ -244,6 +253,18 @@ function WheelCompositionSection({ values, onChange, onValidityChange }) {
         </div>
         <span className="roue-wtag">{c ? 'personnalisé' : '🔗 global'}</span>
         <small>{c ? `global : ${g ?? '…'} — 🔗 pour y revenir` : p.hint}</small>
+        {p.id === 'X' && (
+          <div className={`roue-wmode${modeCustom ? ' c' : ''}${(eff.X ?? 0) === 0 ? ' off' : ''}`} data-testid="roue-wmode">
+            <label htmlFor="roue-w-mode">
+              <input id="roue-w-mode" type="checkbox" role="switch" checked={effMode !== 'PERMANENT'} disabled={!modeCustom || !globalWheel || (eff.X ?? 0) === 0}
+                onChange={(e) => editMode(e.target.checked)} />
+              <span>une seule fois par manche</span>
+            </label>
+            <button type="button" disabled={!globalWheel || (eff.X ?? 0) === 0} aria-label={modeCustom ? 'Revenir au global : mode du BONUS' : 'Personnaliser : mode du BONUS'}
+              title={modeCustom ? 'Revenir au global' : 'Personnaliser'} onClick={toggleMode}>{modeCustom ? '🔗' : '✏️'}</button>
+            <span className="roue-wtag">{modeCustom ? 'personnalisé' : '🔗 global'}</span>
+          </div>
+        )}
       </div>
     )
   }
@@ -259,6 +280,7 @@ function WheelCompositionSection({ values, onChange, onValidityChange }) {
           </fieldset>
         ))}
       </div>
+      {migrated && <div className="roue-wfix" role="status" data-testid="roue-bonus-migration">ℹ Question créée avant la v12.2 : ses {values.roueBonusCount} BONUS sont désormais posés sur des cases à points — la roue compte {values.roueBonusCount} case{values.roueBonusCount > 1 ? 's' : ''} de moins. Mode : {globalMode === 'PERMANENT' ? 'permanent' : 'éphémère'} (réglage global).</div>}
       <div className="roue-wstatus" data-testid="roue-wheel-status">
         {custom.length
           ? <>Personnalisé pour cette question : <b>{custom.map(p => p.label.replace(/^\S+ /, '')).join(', ')}</b> — le reste suit les Paramètres.</>
@@ -275,7 +297,8 @@ function WheelCompositionSection({ values, onChange, onValidityChange }) {
               <b>{preview.COUNT ?? segs.length} cases</b>{vals.length ? <> : {vals.length} gagnantes de {Math.min(...vals)} à {Math.max(...vals)} par pas de {preview.step}</> : null} · {eff.B} Banqueroute · {eff.P} Perdu · {eff.X} BONUS
             </div>
             <div className="roue-bonus-preview" data-testid="roue-bonus-preview"><FortuneWheel wheel={{ SEGMENTS: segs, LAYOUT: 'strip', CURRENT: -1 }} subphase="" size="compact" /></div>
-            <p className="roue-hint">Aperçu de la roue de cette question — calculé par le serveur.</p>
+            <p className="roue-hint">Aperçu de la roue de cette question — un tirage calculé par le serveur ; les BONUS changent de place à chaque manche.
+              {(eff.X ?? 0) > 0 && <button type="button" className="roue-redraw" data-testid="roue-redraw" onClick={() => setDraw(d => d + 1)}>🎲 Autre tirage</button>}</p>
           </>
         )}
     </div>

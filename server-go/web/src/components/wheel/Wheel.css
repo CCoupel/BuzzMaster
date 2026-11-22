@@ -89,3 +89,21 @@
 .wheel-size-compact .wheel-cell .wheel-icon { font-size: 18px; }
 .wheel-size-compact .wheel-cell .wheel-lab.multi { --wheel-mfs: 9px; }
 .wheel-arc .wheel-icon { fill: #fff; }
+
+/* Marque BONUS (v12.2.0, #316/#317, wheel-component §9) : case dorée + ruban cadeau, logo 🎁 seul. */
+.wheel-cell { position: relative; }
+.wheel-cell .wheel-lab, .wheel-cell .wheel-icon, .wheel-arc .wheel-lab-text { transition: opacity 600ms ease; }
+.wheel-cell.marked .wheel-lab, .wheel-cell.marked .wheel-icon, .wheel-arc .wheel-sector.marked .wheel-lab-text { opacity: 0; }
+.wheel-mark { position: absolute; inset: 0; border-radius: inherit; background: #fbbf24; opacity: 0; transition: opacity 600ms ease; pointer-events: none; overflow: hidden; }
+.wheel-mark.on { opacity: 1; }
+.wheel-ribbon { position: absolute; background: #b45309; }
+.wheel-ribbon-v { top: 0; bottom: 0; left: 50%; width: 16%; transform: translateX(-50%); }
+.wheel-ribbon-h { left: 0; right: 0; top: 50%; height: 7%; transform: translateY(-50%); }
+.wheel-mark .wheel-gift { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: min(4.6vh, calc(var(--cell-w) * 0.6)); line-height: 1; filter: drop-shadow(0 0 0.4vh rgba(0, 0, 0, 0.5)); }
+.wheel-size-compact .wheel-mark .wheel-gift { font-size: 22px; }
+.wheel-arc g.wheel-mark { position: static; opacity: 0; transition: opacity 600ms ease; }
+.wheel-arc g.wheel-mark.on { opacity: 1; }
+.wheel-arc g.wheel-mark path { stroke: none; }
+@media (prefers-reduced-motion: reduce) {
+  .wheel-mark, .wheel-cell .wheel-lab, .wheel-cell .wheel-icon, .wheel-arc .wheel-lab-text, .wheel-arc g.wheel-mark { transition: none !important; }
+}

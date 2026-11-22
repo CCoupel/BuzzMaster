@@ -14,7 +14,6 @@ import './FortuneWheel.css'
 
 const PALETTE = ['#fca5a5', '#93c5fd', '#86efac', '#fde68a', '#d8b4fe', '#fdba74']
 const SPECIAL_COLOR = '#0f172a'
-const BONUS_COLOR = '#fbbf24' // case BONUS (v12.1.0, #308) : dorée, texte sombre (kind 'bonus' ≠ 'special')
 
 export function buildFortuneSegments(rawSegments = []) {
   let k = 0
@@ -22,8 +21,11 @@ export function buildFortuneSegments(rawSegments = []) {
     const id = s.ID ?? `s${i}`
     if (s.KIND === 'bankrupt') return { id, kind: 'special', label: 'BANQUE\nROUTE', icon: '💸', color: SPECIAL_COLOR }
     if (s.KIND === 'lose_turn') return { id, kind: 'special', label: 'TOUR\nPERDU', icon: '⏭', color: SPECIAL_COLOR }
-    if (s.KIND === 'bonus') return { id, kind: 'bonus', label: 'BONUS', icon: '🎁', color: BONUS_COLOR }
-    return { id, kind: 'value', label: String(s.VALUE), color: PALETTE[k++ % PALETTE.length] }
+    // v12.2.0 (#316/#317, contrat §17.6) : plus de KIND 'bonus' — un BONUS est une marque posée sur une case à points.
+    // Le montant et la couleur de palette restent calculés (retour à la normale d'un BONUS éphémère) ; `Wheel` masque le montant.
+    const seg = { id, kind: 'value', label: String(s.VALUE), color: PALETTE[k++ % PALETTE.length] }
+    if (s.BONUS === true) seg.mark = 'bonus'
+    return seg
   })
 }
 

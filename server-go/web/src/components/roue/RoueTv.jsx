@@ -9,11 +9,40 @@
  * (le serveur ignore tout appui hors SPINNING ou d'une autre équipe).
  * Aucune phrase en entrée : seulement `ROUE_BOARD` (jamais une lettre non révélée, contrat §9).
  */
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import FortuneWheel from './FortuneWheel'
 import RoueGameBoard from './RoueGameBoard'
-import { fmtPts, isBonusEvent, isVowel, roueAnnouncement, teamCss, vowelInfo } from './roueState'
+import { bonusValue, fmtPts, isBonusEvent, isVowel, roueAnnouncement, teamCss, vowelInfo } from './roueState'
 import './RoueTv.css'
+
+const FADE_MS = 600
+const reducedMotion = () => { try { return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches } catch { return false } }
+
+/**
+ * Bandeau « 🎁 BONUS ! case 800 » (v12.2.0, #316/#317). Retiré au choix de la lettre ; maintenu monté pendant le fondu
+ * de 600 ms de la case (BONUS éphémère, même durée que la roue) sauf `prefers-reduced-motion`.
+ */
+export function BonusBanner({ on, value }) {
+  const [fading, setFading] = useState(false)
+  const last = useRef({ value: 0, was: false })
+  if (on) last.current = { value, was: true }
+  useEffect(() => {
+    if (on) { setFading(false); return undefined }
+    if (!last.current.was) return undefined
+    last.current.was = false
+    if (reducedMotion()) return undefined
+    setFading(true)
+    const t = setTimeout(() => setFading(false), FADE_MS)
+    return () => clearTimeout(t)
+  }, [on])
+  if (!on && !fading) return null
+  const v = on ? value : last.current.value
+  return (
+    <div className={`roue-bonus-ribbon${on ? '' : ' fading'}`} role="status" data-testid="roue-bonus">
+      🎁 BONUS !{v > 0 ? ` case ${v}` : ''}
+    </div>
+  )
+}
 
 function Announcement({ parts }) {
   return <>{parts.map((p, i) => (p.br ? <br key={i} /> : p.strong !== undefined ? <em key={i}>{p.strong}</em> : <span key={i}>{p.text}</span>))}</>
@@ -75,6 +104,7 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
   const solved = sub === 'SOLVED'
   const flipMs = wheel?.FLIP_INTERVAL_MS || 600
   const bonus = isBonusEvent(gs) // 🎁 BONUS (v12.1.0, #308) : bandeau sur le plateau
+  const bonusBanner = <BonusBanner on={bonus} value={bonusValue(gs)} />
 
   if (isVPlayer) {
     const mine = !!teamName && teamName === current
@@ -98,7 +128,7 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
         )}
         <div className="roue-bonus-wrap">
           <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tablet" />
-          {bonus && <div className="roue-bonus-ribbon" role="status" data-testid="roue-bonus">🎁 BONUS !</div>}
+          {bonusBanner}
         </div>
         <div className="roue-vp-info">
           {solved ? (
@@ -146,7 +176,7 @@ export default function RoueTv({ gameState, teams = {}, catMeta = null, isVPlaye
       </div>
       <div className="roue-mid roue-bonus-wrap">
         <RoueGameBoard board={gs.ROUE_BOARD} flipIntervalMs={flipMs} size="tv" />
-        {bonus && <div className="roue-bonus-ribbon" role="status" data-testid="roue-bonus">🎁 BONUS !</div>}
+        {bonusBanner}
       </div>
       <div className="roue-event"><div><Announcement parts={roueAnnouncement(gs)} /></div></div>
       {showLetters ? (vowelInfo(gs).enabled ? <Alphabet letters={gs.ROUE_LETTERS} price={vowelInfo(gs).price} /> : <Letters letters={gs.ROUE_LETTERS} />) : <div className="roue-letters" />}

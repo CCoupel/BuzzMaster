@@ -46,3 +46,12 @@
 .roue-wheel-section .roue-wstatus { margin-top: 0.6rem; font-size: 0.82rem; border-radius: 0.5rem; padding: 0.45rem 0.7rem; background: #fff; border: 1px solid var(--gray-200); color: var(--gray-700); overflow-wrap: anywhere; }
 .roue-wheel-section .roue-wstatus b { color: #c2410c; }
 .roue-wheel-section .roue-wfix { background: #e0f2fe; color: #0369a1; border-radius: 0.4rem; padding: 0.35rem 0.6rem; font-size: 0.78rem; margin: 0.4rem 0; }
+
+/* Mode du BONUS (v12.2.0, #317) : interrupteur sous le compteur BONUS, avec son propre 🔗/✏️ */
+.roue-wheel-section .roue-wmode { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-top: 0.35rem; font-size: 0.85rem; font-weight: 600; }
+.roue-wheel-section .roue-wmode.off { opacity: 0.45; }
+.roue-wheel-section .roue-wmode label { display: flex; align-items: center; gap: 0.35rem; }
+.roue-wheel-section .roue-wmode button { font: inherit; line-height: 1; border: 1px solid var(--gray-300); background: #fff; border-radius: 0.4rem; padding: 0.25rem 0.4rem; cursor: pointer; }
+.roue-wheel-section .roue-wmode.c button { border-color: #c2410c; }
+.roue-wheel-section .roue-wmode.c .roue-wtag { background: #c2410c; color: #fff; }
+.roue-wheel-section .roue-redraw { margin-left: 0.6rem; font: inherit; font-size: 0.85rem; border: 1px solid var(--gray-300); background: #fff; border-radius: 0.4rem; padding: 0.15rem 0.6rem; cursor: pointer; }
