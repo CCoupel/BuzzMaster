@@ -9,7 +9,7 @@
 @media (max-width: 700px) { .roue-options, .roue-options-two { grid-template-columns: 1fr; } }
 
 /* 🎁 Cases BONUS (v12.1.0, #308) */
-.roue-bonus-preview { margin-top: 0.5rem; height: 3.4rem; overflow: hidden; border-radius: 0.5rem; background: rgba(0, 0, 0, 0.35); }
+.roue-bonus-preview { margin-top: 0.5rem; height: 4.4rem; overflow: hidden; border-radius: 0.5rem; background: rgba(0, 0, 0, 0.35); }
 
 /* 🔤 Voyelles (v12.1.0, #147) */
 .roue-dim { opacity: 0.45; }
@@ -17,24 +17,26 @@
 .roue-vowels-counts > div > label { display: block; font-weight: 700; font-size: 0.88rem; margin-bottom: 0.35rem; }
 @media (max-width: 760px) { .roue-vowels-counts { grid-template-columns: 1fr; } }
 
-/* 🎡 Composition de la roue par question (v12.1.0, #309) — champ lié au global, à délier */
-.roue-wheel-title { margin: 0 0 0.2rem; font-size: 0.95rem; }
-.roue-wgroups { display: grid; grid-template-columns: 1fr 1.5fr; gap: 0.8rem; margin-top: 0.6rem; }
-@media (max-width: 720px) { .roue-wgroups { grid-template-columns: 1fr; } }
-.roue-wgroup { border: 1px solid var(--gray-200); border-radius: 0.6rem; padding: 0.6rem; margin: 0; min-width: 0; }
-.roue-wgroup legend { font-weight: 800; font-size: 0.82rem; padding: 0 0.3rem; }
-.roue-wrow { display: grid; gap: 0.6rem; grid-template-columns: repeat(2, 1fr); }
-.roue-wrow-3 { grid-template-columns: repeat(3, 1fr); }
-.roue-wparam label { display: flex; justify-content: space-between; align-items: center; gap: 0.3rem; font-weight: 700; font-size: 0.8rem; margin-bottom: 0.2rem; }
-.roue-wtag { font-size: 0.64rem; font-weight: 800; border-radius: 999px; padding: 0.05rem 0.45rem; background: var(--gray-100); color: var(--gray-500); white-space: nowrap; }
-.roue-wparam.c .roue-wtag { background: #c2410c; color: #fff; }
-.roue-wlock { display: flex; gap: 0.3rem; align-items: center; }
-.roue-wlock input { flex: 1; min-width: 0; font: inherit; font-size: 0.9rem; padding: 0.4rem 0.5rem; border: 1px solid var(--gray-300); border-radius: 0.4rem; color: var(--gray-500); }
-.roue-wlock input:disabled { background: var(--gray-100); }
-.roue-wparam.c .roue-wlock input { border: 2px solid #c2410c; color: var(--gray-900); font-weight: 700; background: #fff7ed; }
-.roue-wlock button { font: inherit; font-size: 0.9rem; border: 1px solid var(--gray-300); background: #fff; border-radius: 0.4rem; padding: 0.3rem 0.45rem; cursor: pointer; }
-.roue-wparam.c .roue-wlock button { border-color: #c2410c; }
-.roue-wparam small { display: block; color: var(--gray-500); font-size: 0.7rem; margin-top: 0.15rem; }
-.roue-wstatus { margin-top: 0.6rem; font-size: 0.82rem; border-radius: 0.5rem; padding: 0.45rem 0.7rem; background: var(--gray-50); border: 1px solid var(--gray-200); }
-.roue-wstatus b { color: #c2410c; }
-.roue-wfix { background: #e0f2fe; color: #0369a1; border-radius: 0.4rem; padding: 0.35rem 0.6rem; font-size: 0.78rem; margin: 0.4rem 0; }
+/* 🎡 Composition de la roue par question (v12.1.0, #309) — champ lié au global, à délier.
+   Sélecteurs préfixés `.roue-wheel-section` : plus spécifiques que `.memory-mode-selector label` (QuestionsPage.css), quel que soit l'ordre de chargement.
+   Mise en page robuste à la largeur de la colonne de l'éditeur : groupes empilés, champs en grille auto-adaptative, libellé / badge qui passent à la ligne. */
+.roue-wheel-section .roue-wheel-title { margin: 0 0 0.2rem; font-size: 0.95rem; }
+.roue-wheel-section .roue-wgroups { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.8rem; margin-top: 0.6rem; }
+.roue-wheel-section .roue-wgroup { border: 1px solid var(--gray-200); border-radius: 0.6rem; padding: 0.6rem; margin: 0; min-width: 0; background: #fff; }
+.roue-wheel-section .roue-wgroup legend { font-weight: 800; font-size: 0.82rem; padding: 0 0.3rem; color: var(--gray-700); }
+.roue-wheel-section .roue-wrow { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); }
+.roue-wheel-section .roue-wparam { min-width: 0; }
+.roue-wheel-section .roue-wparam label { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.2rem 0.4rem; font-weight: 700; font-size: 0.82rem; color: var(--gray-700); margin-bottom: 0.25rem; }
+.roue-wheel-section .roue-wtag { font-size: 0.64rem; font-weight: 800; border-radius: 999px; padding: 0.05rem 0.5rem; background: var(--gray-100); color: var(--gray-600, #4b5563); white-space: nowrap; }
+.roue-wheel-section .roue-wparam.c .roue-wtag { background: #c2410c; color: #fff; }
+.roue-wheel-section .roue-wlock { display: flex; gap: 0.3rem; align-items: center; min-width: 0; }
+.roue-wheel-section .roue-wlock input { flex: 1 1 auto; width: 100%; min-width: 0; font: inherit; font-size: 0.95rem; padding: 0.4rem 0.5rem; border: 1px solid var(--gray-300); border-radius: 0.4rem; color: var(--gray-700); box-sizing: border-box; }
+.roue-wheel-section .roue-wlock input:disabled { background: var(--gray-100); color: var(--gray-700); opacity: 1; cursor: not-allowed; }
+.roue-wheel-section .roue-wparam.c .roue-wlock input { border: 2px solid #c2410c; color: var(--gray-900); font-weight: 700; background: #fff7ed; }
+.roue-wheel-section .roue-wlock button { flex: 0 0 auto; font: inherit; font-size: 0.95rem; line-height: 1; border: 1px solid var(--gray-300); background: #fff; border-radius: 0.4rem; padding: 0.4rem 0.5rem; cursor: pointer; }
+.roue-wheel-section .roue-wlock button:disabled { opacity: 0.5; cursor: not-allowed; }
+.roue-wheel-section .roue-wparam.c .roue-wlock button { border-color: #c2410c; }
+.roue-wheel-section .roue-wparam small { display: block; color: var(--gray-500); font-size: 0.7rem; margin-top: 0.2rem; overflow-wrap: anywhere; }
+.roue-wheel-section .roue-wstatus { margin-top: 0.6rem; font-size: 0.82rem; border-radius: 0.5rem; padding: 0.45rem 0.7rem; background: #fff; border: 1px solid var(--gray-200); color: var(--gray-700); }
+.roue-wheel-section .roue-wstatus b { color: #c2410c; }
+.roue-wheel-section .roue-wfix { background: #e0f2fe; color: #0369a1; border-radius: 0.4rem; padding: 0.35rem 0.6rem; font-size: 0.78rem; margin: 0.4rem 0; }
