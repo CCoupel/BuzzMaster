@@ -3,7 +3,32 @@
 > Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
-## État courant (2026-11-17) — v12.0.0 en PROD
+## État courant (2026-11-22) — v12.1.0 en PROD
+
+- **PROD = v12.1.0** « Roue de la Fortune — Extensions » livrée le 2026-11-22 : tag `v12.1.0`, main `fae364e2`, release https://github.com/CCoupel/BuzzMaster/releases/tag/v12.1.0. Milestone #22 clos (11 issues).
+- **Marketing** : site publié (gh-pages `d33cfefa`), notes de version dans main (`4cf87307`). Les posts sont à publier par l'utilisateur.
+- **Contenu v12.1.0** :
+  - #147 achat de voyelles : par question, moment BEFORE / AFTER / BOTH, nombre ONE / MANY, prix, gain ;
+  - #308 case BONUS : annonce puis nouveau tour ; géré hors système par l'animateur ;
+  - #309 composition de la roue par question : 5 paramètres, global par défaut, surcharge champ par champ, 🔗 / ✏️ dans l'éditeur ;
+  - correctifs QUALIF #310 à #315.
+  - 5 cycles QUALIF : 12.1.0.1 à 12.1.0.5.
+- **Travail en cours** : aucun. Prochain milestone : **v12.2.0 (#47)**, non cadré.
+  - #316 : le BONUS se pose sur une case de points, sans case en plus ; l'équipe joue ensuite la valeur de la case et ne relance plus la roue.
+  - #317 : BONUS éphémère. Réglage global plus réglage par question ; la marque disparaît une fois tirée ; le bandeau s'estompe à la sélection d'une consonne ou d'une voyelle. Valeur par défaut à décider.
+- **Décisions et leçons de la session** :
+  - #312 est passé en QA parce que les tests construisaient le GameState à la main. Garde : test sur le vrai hook, plus une fixture Go → hook couvrant tous les champs GameState (3 exceptions justifiées).
+  - Relecture M1/M2 du LOT-2 : la composition effective est validée à l'enregistrement, BONUS hérité compris. Si seul le BONUS dépasse 64 cases → `ROUE_BONUS_COUNT_INVALID` (contrat roue.md rév. 8.2).
+  - Les agents n'ont pas de navigateur. Le Chrome du cluster ne joint pas la QUALIF de l'utilisateur (localhost, 192.168.1.84 et port 9090 injoignables). Les contrôles visuels passent par une page d'aperçu statique autonome : vrai composant, vrai CSS, JS inline (un build module + assets affiche une page blanche via le launcher), servie par launcher.local/files.
+  - Badge « Nouveau » : les mineures comptées sont celles de la majeure en cours (à v12.1.0 : v12.0.0 et v12.1.0 seulement).
+- **Backlog / points de vigilance** :
+  - les paquets Go sont lents sous `-race` (cmd/server ~161 s ; internal/server et internal/game ~125 s) ;
+  - pas de `eslint.config.*` ;
+  - découpage optionnel du fichier de tests Go des voyelles ;
+  - proposition de backlog : `StartImmediate` sans la garde `participantsConform` ;
+  - proposer `govulncheck` au template.
+
+## État précédent (2026-11-17) — v12.0.0 en PROD (archivé)
 
 - **PROD = v12.0.0** « Roue de la Fortune » livrée le 2026-11-17 : tag `v12.0.0`, main `7f09de4d` (bump `8dd4bfb9`, date du CHANGELOG), release https://github.com/CCoupel/BuzzMaster/releases/tag/v12.0.0, CI verte, govulncheck et npm audit propres. Milestone #21 clos (#144, #145 fermées), branche `milestone/v12.0.0` supprimée. CHANGELOG 12.0.0 final `cb234c78`, docs à jour `98b02865`, `f8490fdf`, `3177d63a`.
 - **Marketing** : site publié (gh-pages `5c6576ac`, carte Roue avec la capture réelle de la TV) ; notes de version `docs/releases/v12.0.0/` (`15af0564`) ; posts et newsletter en brouillon, à diffuser par l'utilisateur.
