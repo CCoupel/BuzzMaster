@@ -73,7 +73,8 @@ export function roueRefusalText(text) {
     ...FALLBACK_ERRORS,
   }[m[1]]
   // Composition de la roue (#309) : le message du serveur (cases, pas, maximum) est plus précis que le texte générique.
-  if (m[1] === 'ROUE_WHEEL_INVALID' && m[2]) return m[2]
+  // Nombre de BONUS (§17.3) : le « N au plus » du serveur est la seule source du maximum (aucune règle de placement en JS, R5).
+  if ((m[1] === 'ROUE_WHEEL_INVALID' || m[1] === 'ROUE_BONUS_COUNT_INVALID') && m[2]) return m[2]
   return friendly || m[2] || text
 }
 

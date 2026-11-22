@@ -248,7 +248,9 @@ export default function WheelConfigCard({ wheel, wheelDefault, onSaved }) {
         onSaved?.(kept)
       } else {
         const text = await res.text().catch(() => '')
-        setToast({ type: 'error', message: text || `Échec de l'enregistrement (HTTP ${res.status}).` })
+        // Corps texte « ROUE_BONUS_COUNT_INVALID: Trop de BONUS : N au plus… » : sans le préfixe technique (§17.3).
+        const msg = text.replace(/^ROUE_[A-Z_]+:\s*/, '').trim()
+        setToast({ type: 'error', message: msg || `Échec de l'enregistrement (HTTP ${res.status}).` })
       }
     } catch (e) {
       setToast({ type: 'error', message: e.message })

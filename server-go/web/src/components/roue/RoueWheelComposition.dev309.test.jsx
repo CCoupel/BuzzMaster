@@ -96,7 +96,7 @@ describe('roueRefusalText — refus de composition à l\'enregistrement (#309)',
   it('ROUE_WHEEL_INVALID : message précis du serveur conservé', async () => {
     const { roueRefusalText } = await import('./RoueEditor')
     expect(roueRefusalText('ROUE_WHEEL_INVALID: la roue aurait 70 cases, la limite est de 64')).toBe('la roue aurait 70 cases, la limite est de 64')
-    expect(roueRefusalText('ROUE_BONUS_COUNT_INVALID: x')).toMatch(/BONUS/)
+    expect(roueRefusalText('ROUE_BONUS_COUNT_INVALID:')).toMatch(/BONUS/)
   })
 })
 
