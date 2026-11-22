@@ -17,26 +17,32 @@
 .roue-vowels-counts > div > label { display: block; font-weight: 700; font-size: 0.88rem; margin-bottom: 0.35rem; }
 @media (max-width: 760px) { .roue-vowels-counts { grid-template-columns: 1fr; } }
 
-/* 🎡 Composition de la roue par question (v12.1.0, #309) — champ lié au global, à délier.
-   Sélecteurs préfixés `.roue-wheel-section` : plus spécifiques que `.memory-mode-selector label` (QuestionsPage.css), quel que soit l'ordre de chargement.
-   Mise en page robuste à la largeur de la colonne de l'éditeur : groupes empilés, champs en grille auto-adaptative, libellé / badge qui passent à la ligne. */
+/* 🎡 Composition de la roue par question (v12.1.0, #309) — champ lié au global, à délier (maquette B).
+   Grille régulière : UN paramètre = UNE ligne « libellé | valeur | 🔗/✏️ | badge », la même grille pour les 5 paramètres (colonnes alignées,
+   jamais de chevauchement) ; la note sous la ligne. Sous 460 px de colonne : libellé sur sa ligne, puis valeur | bouton | badge.
+   Sélecteurs préfixés `.roue-wheel-section` : plus spécifiques que `.memory-mode-selector label` (QuestionsPage.css). */
+.roue-wheel-section { container-type: inline-size; }
 .roue-wheel-section .roue-wheel-title { margin: 0 0 0.2rem; font-size: 0.95rem; }
 .roue-wheel-section .roue-wgroups { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.8rem; margin-top: 0.6rem; }
-.roue-wheel-section .roue-wgroup { border: 1px solid var(--gray-200); border-radius: 0.6rem; padding: 0.6rem; margin: 0; min-width: 0; background: #fff; }
+.roue-wheel-section .roue-wgroup { border: 1px solid var(--gray-200); border-radius: 0.6rem; padding: 0.6rem 0.7rem; margin: 0; min-width: 0; background: #fff; }
 .roue-wheel-section .roue-wgroup legend { font-weight: 800; font-size: 0.82rem; padding: 0 0.3rem; color: var(--gray-700); }
-.roue-wheel-section .roue-wrow { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); }
-.roue-wheel-section .roue-wparam { min-width: 0; }
-.roue-wheel-section .roue-wparam label { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.2rem 0.4rem; font-weight: 700; font-size: 0.82rem; color: var(--gray-700); margin-bottom: 0.25rem; }
-.roue-wheel-section .roue-wtag { font-size: 0.64rem; font-weight: 800; border-radius: 999px; padding: 0.05rem 0.5rem; background: var(--gray-100); color: var(--gray-600, #4b5563); white-space: nowrap; }
-.roue-wheel-section .roue-wparam.c .roue-wtag { background: #c2410c; color: #fff; }
-.roue-wheel-section .roue-wlock { display: flex; gap: 0.3rem; align-items: center; min-width: 0; }
-.roue-wheel-section .roue-wlock input { flex: 1 1 auto; width: 100%; min-width: 0; font: inherit; font-size: 0.95rem; padding: 0.4rem 0.5rem; border: 1px solid var(--gray-300); border-radius: 0.4rem; color: var(--gray-700); box-sizing: border-box; }
+.roue-wheel-section .roue-wrow { display: flex; flex-direction: column; gap: 0.1rem; }
+.roue-wheel-section .roue-wparam { display: grid; grid-template-columns: minmax(7rem, 10rem) minmax(4.5rem, 1fr) auto; grid-template-areas: "lab val tag" ". note note"; align-items: center; column-gap: 0.6rem; row-gap: 0; min-width: 0; padding: 0.35rem 0; border-bottom: 1px solid var(--gray-100); }
+.roue-wheel-section .roue-wparam:last-child { border-bottom: 0; }
+.roue-wheel-section .roue-wparam label { grid-area: lab; display: block; margin: 0; font-weight: 700; font-size: 0.85rem; color: var(--gray-700); overflow-wrap: anywhere; }
+.roue-wheel-section .roue-wlock { grid-area: val; display: flex; gap: 0.3rem; align-items: center; min-width: 0; }
+.roue-wheel-section .roue-wlock input { flex: 1 1 auto; width: 100%; min-width: 0; max-width: 9rem; font: inherit; font-size: 0.95rem; padding: 0.4rem 0.5rem; border: 1px solid var(--gray-300); border-radius: 0.4rem; color: var(--gray-700); box-sizing: border-box; }
 .roue-wheel-section .roue-wlock input:disabled { background: var(--gray-100); color: var(--gray-700); opacity: 1; cursor: not-allowed; }
 .roue-wheel-section .roue-wparam.c .roue-wlock input { border: 2px solid #c2410c; color: var(--gray-900); font-weight: 700; background: #fff7ed; }
 .roue-wheel-section .roue-wlock button { flex: 0 0 auto; font: inherit; font-size: 0.95rem; line-height: 1; border: 1px solid var(--gray-300); background: #fff; border-radius: 0.4rem; padding: 0.4rem 0.5rem; cursor: pointer; }
 .roue-wheel-section .roue-wlock button:disabled { opacity: 0.5; cursor: not-allowed; }
 .roue-wheel-section .roue-wparam.c .roue-wlock button { border-color: #c2410c; }
-.roue-wheel-section .roue-wparam small { display: block; color: var(--gray-500); font-size: 0.7rem; margin-top: 0.2rem; overflow-wrap: anywhere; }
-.roue-wheel-section .roue-wstatus { margin-top: 0.6rem; font-size: 0.82rem; border-radius: 0.5rem; padding: 0.45rem 0.7rem; background: #fff; border: 1px solid var(--gray-200); color: var(--gray-700); }
+.roue-wheel-section .roue-wtag { grid-area: tag; justify-self: start; min-width: 6.2rem; text-align: center; font-size: 0.68rem; font-weight: 800; border-radius: 999px; padding: 0.1rem 0.5rem; background: var(--gray-100); color: var(--gray-600, #4b5563); white-space: nowrap; box-sizing: border-box; }
+.roue-wheel-section .roue-wparam.c .roue-wtag { background: #c2410c; color: #fff; }
+.roue-wheel-section .roue-wparam small { grid-area: note; display: block; color: var(--gray-500); font-size: 0.7rem; margin: 0.1rem 0 0; overflow-wrap: anywhere; }
+@container (max-width: 460px) {
+  .roue-wheel-section .roue-wparam { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "lab lab" "val tag" "note note"; row-gap: 0.2rem; }
+}
+.roue-wheel-section .roue-wstatus { margin-top: 0.6rem; font-size: 0.82rem; border-radius: 0.5rem; padding: 0.45rem 0.7rem; background: #fff; border: 1px solid var(--gray-200); color: var(--gray-700); overflow-wrap: anywhere; }
 .roue-wheel-section .roue-wstatus b { color: #c2410c; }
 .roue-wheel-section .roue-wfix { background: #e0f2fe; color: #0369a1; border-radius: 0.4rem; padding: 0.35rem 0.6rem; font-size: 0.78rem; margin: 0.4rem 0; }

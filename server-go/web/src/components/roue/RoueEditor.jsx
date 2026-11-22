@@ -235,13 +235,14 @@ function WheelCompositionSection({ values, onChange, onValidityChange }) {
     const g = globalOf(globalWheel, p)
     return (
       <div key={p.id} className={`roue-wparam${c ? ' c' : ''}`} data-testid={`roue-wparam-${p.id}`}>
-        <label htmlFor={`roue-w-${p.id}`}>{p.label} <span className="roue-wtag">{c ? 'personnalisé' : '🔗 global'}</span></label>
+        <label htmlFor={`roue-w-${p.id}`}>{p.label}</label>
         <div className="roue-wlock">
           <input id={`roue-w-${p.id}`} type="number" min={p.min} max={p.max} step="1" disabled={!c || !globalWheel}
             value={c ? values[p.field] : (g ?? '')} onChange={(e) => edit(p, e.target.value)} />
           <button type="button" disabled={!globalWheel} aria-label={c ? `Revenir au global : ${p.label}` : `Personnaliser : ${p.label}`}
             title={c ? 'Revenir au global' : 'Personnaliser'} onClick={() => toggle(p)}>{c ? '🔗' : '✏️'}</button>
         </div>
+        <span className="roue-wtag">{c ? 'personnalisé' : '🔗 global'}</span>
         <small>{c ? `global : ${g ?? '…'} — 🔗 pour y revenir` : p.hint}</small>
       </div>
     )
