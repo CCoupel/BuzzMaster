@@ -405,7 +405,7 @@ l'animateur.
 **Mode du BONUS** (`ROUE_BONUS_MODE`, copié au `START`) : `EPHEMERAL` (défaut) ou `PERMANENT`. En éphémère, à la première
 action acceptée qui quitte `LETTER` (`ROUE_LETTER`, `ROUE_BUY_VOWEL`), le serveur passe la marque de la case à `false`
 pour le reste de la manche ; la manche suivante tire une nouvelle roue. En permanent, la marque reste et chaque arrêt
-rejoue le cas ci-dessus. Une action refusée ne consomme rien. Après l'arrêt sur une case marquée, `ROUE_PASS` est refusé (sous-phase `LETTER`).
+rejoue le cas ci-dessus. Une action refusée ne consomme rien. Après l'arrêt sur une case marquée, l'équipe ne peut pas passer la main : `ROUE_PASS` est refusé `WRONG_SUBPHASE` (sous-phase `LETTER`). « Passer la main » n'est proposé qu'au `TURN` (étape 1) : côté écran, `canPass` (`roueState.js`) exige `TURN`.
 
 **Événements `ROUE_LAST_EVENT` ajoutés** : `VOWEL_HIT` (achat présent, débit), `VOWEL_MISS` (achat absent, fin de tour),
 `BONUS` (arrêt sur une case marquée BONUS, v12.2.0). `FLIP` est émis aussi pour une voyelle retournée.

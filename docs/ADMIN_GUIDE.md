@@ -1310,6 +1310,7 @@ posée sur une case à points**. La roue ne grossit pas : les BONUS ne comptent 
 - **Arrêt sur une case marquée** : l'équipe joue la case comme une case à points, au montant de la case (consonne, ou
   voyelle après l'arrêt si le réglage le permet). Elle ne relance pas la roue. Le bandeau « 🎁 BONUS ! case … » reste à
   l'écran jusqu'au choix de la lettre. Le cadeau reste géré par l'animateur ; aucun point n'est attribué au BONUS.
+- **Pas de « Passer la main » après un arrêt sur BONUS** : le tour est déjà à l'étape lettre ; le bouton « ⏭ Passer la main » n'est proposé qu'au début du tour (étape 1), et `ROUE_PASS` est refusé `WRONG_SUBPHASE` ensuite.
 - **Placement** : les marques sont tirées au hasard à chaque lancement de manche, réparties entre les cases spéciales
   (Banqueroute, Tour perdu) et jamais voisines d'elles ou d'une autre marque. Banqueroute et Tour perdu ne bougent pas.
 - **Mode éphémère (défaut)** : après le choix de la lettre ou de la voyelle, la marque disparaît et la case redevient une
