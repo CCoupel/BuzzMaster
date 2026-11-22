@@ -37,7 +37,7 @@ roue sur cette case joue la valeur de la case, sans relance. Le BONUS peut être
   reçoivent pas `ROUE_WHEEL`.
 - Aucune donnée enregistrée n'est réécrite. Une question v12.1.0 avec des BONUS les garde, désormais posés sur des cases à
   points : sa roue perd autant de cases qu'elle comptait de BONUS. Sans réglage explicite, elle suit le réglage global
-  (éphémère).
+  (éphémère par défaut).
 - Les questions v12.1.0 sans BONUS ne changent pas. Un fichier `game-config.json` sans réglage de mode est lu sans erreur
   et reste éphémère.
 

@@ -822,7 +822,7 @@ l'annonce (le champ `VALUE` est diffusé comme pour toute case).
 **Confidentialité** : la phrase reste absente de tous les messages `/ws/tv` et tablettes ; les voyelles proposées
 sont dans `ROUE_LETTERS` ; `ROUE_BOARD` ne montre que les voyelles présentes révélées (`*` en `VOWEL_LIT`).
 
-**Aperçu** : `POST /api/roue/wheel-preview` accepte un champ facultatif `bonus_count` (0 à 4, absent = 0).
+**Aperçu** : `POST /api/roue/wheel-preview` accepte un champ facultatif `bonus_count` (0 à 4, absent = 0) ; hors 0 à 4, ou au-delà du maximum de la roue, il refuse en `400 ROUE_BONUS_COUNT_INVALID` (v12.2.0, §17.3).
 
 ## Architecture serveur
 

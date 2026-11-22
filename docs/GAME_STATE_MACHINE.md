@@ -364,7 +364,7 @@ STARTED / PAUSED / REVEALED). C'est un `QuestionType` (`ROUE`) dont le déroulem
 ### Achat de voyelles et case BONUS (v12.1.0, #147, #308)
 
 Contrat : `contracts/roue.md` §15. Les réglages de voyelles sont par question ; sans réglage, la manche se joue comme
-en v12.0, **sauf l'achat de voyelles, activé par défaut** (moment « avant de tourner »). Le nombre de cases BONUS suit le
+en v12.0, **sauf l'achat de voyelles, activé par défaut** (moment « avant de tourner »). Le nombre de marques BONUS suit le
 réglage global `wheel.bonus_count` (0 par défaut) tant qu'une question ne le personnalise pas (§16).
 
 **Achat avant de tourner** (`ROUE_VOWEL_TIMING` = `BEFORE` ou `BOTH`, étape 1) — la voyelle est payée, puis :
@@ -405,10 +405,10 @@ l'animateur.
 **Mode du BONUS** (`ROUE_BONUS_MODE`, copié au `START`) : `EPHEMERAL` (défaut) ou `PERMANENT`. En éphémère, à la première
 action acceptée qui quitte `LETTER` (`ROUE_LETTER`, `ROUE_BUY_VOWEL`), le serveur passe la marque de la case à `false`
 pour le reste de la manche ; la manche suivante tire une nouvelle roue. En permanent, la marque reste et chaque arrêt
-rejoue le cas ci-dessus. Une action refusée ne consomme rien.
+rejoue le cas ci-dessus. Une action refusée ne consomme rien. Après l'arrêt sur une case marquée, `ROUE_PASS` est refusé (sous-phase `LETTER`).
 
 **Événements `ROUE_LAST_EVENT` ajoutés** : `VOWEL_HIT` (achat présent, débit), `VOWEL_MISS` (achat absent, fin de tour),
-`BONUS` (arrêt sur une case BONUS). `FLIP` est émis aussi pour une voyelle retournée.
+`BONUS` (arrêt sur une case marquée BONUS, v12.2.0). `FLIP` est émis aussi pour une voyelle retournée.
 
 ### Les 7 étapes et le bandeau
 

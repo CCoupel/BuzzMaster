@@ -1247,7 +1247,7 @@ Le champ SSID2/Mot de passe 2 permet de configurer un reseau WiFi de secours :
 
 Une question **Roue** fait jouer une phrase à deviner. Les équipes tournent la roue, proposent une consonne, puis
 proposent la réponse. Une phrase = une manche. Depuis la v12.1.0, elles peuvent aussi acheter des voyelles et tomber
-sur des cases BONUS (voir « Voyelles achetables et case BONUS » ci-dessous).
+sur des marques BONUS (voir « Voyelles achetables et case BONUS » ci-dessous).
 
 ### Créer une question Roue
 
@@ -1266,7 +1266,7 @@ Une voyelle ne se propose pas comme une consonne : elle s'**achète** quand l'ac
 
 ### Voyelles achetables et case BONUS (v12.1.0)
 
-Réglages par question, dans l'éditeur de question Roue : la section « Voyelles » et la section « 🎡 Roue — composition » (dont le nombre de cases BONUS).
+Réglages par question, dans l'éditeur de question Roue : la section « Voyelles » et la section « 🎡 Roue — composition » (dont le nombre de marques BONUS).
 
 **Voyelles** (activées par défaut, y compris pour les questions déjà créées) :
 
@@ -1298,8 +1298,9 @@ s'ajoutent pas à la roue).
   ne relance pas la roue : elle joue la case comme une case à points (v12.2.0, voir ci-dessous).
 - Le cadeau est **géré hors système** par l'animateur. Si l'équipe doit recevoir des points, utiliser l'attribution
   manuelle des scores.
-- Une roue de plus de 64 cases est refusée à l'enregistrement. Si les paramètres de la roue changent après
-  l'enregistrement, le nombre de cases BONUS est réduit au lancement pour tenir dans 64 cases (un message le signale dans le journal).
+- Une roue de plus de 64 cases (valeurs, Banqueroute et Perdu) est refusée à l'enregistrement. Si les paramètres
+  changent après l'enregistrement, le nombre de BONUS est réduit au lancement au maximum que la roue peut accueillir
+  (un message le signale dans le journal).
 
 ### BONUS sur case à points et mode éphémère (v12.2.0)
 
@@ -1307,7 +1308,7 @@ Contrat : `contracts/roue.md` §17. Les cases BONUS ne sont plus des cases de la
 posée sur une case à points**. La roue ne grossit pas : les BONUS ne comptent pas dans les 64 cases.
 
 - **Arrêt sur une case marquée** : l'équipe joue la case comme une case à points, au montant de la case (consonne, ou
-  voyelle après l'arrêt si le réglage le permet). Elle ne relance pas la roue. Le bandeau « 🎁 BONUS ! — case … » reste à
+  voyelle après l'arrêt si le réglage le permet). Elle ne relance pas la roue. Le bandeau « 🎁 BONUS ! case … » reste à
   l'écran jusqu'au choix de la lettre. Le cadeau reste géré par l'animateur ; aucun point n'est attribué au BONUS.
 - **Placement** : les marques sont tirées au hasard à chaque lancement de manche, réparties entre les cases spéciales
   (Banqueroute, Tour perdu) et jamais voisines d'elles ou d'une autre marque. Banqueroute et Tour perdu ne bougent pas.
@@ -1330,14 +1331,15 @@ Points maximum, Pas, 💸 Banqueroute, ⏭ Perdu et 🎁 BONUS.
   au global. Une valeur personnalisée égale au global reste personnalisée.
 - Les durées de la roue restent globales.
 - Le pas est corrigé au diviseur le plus proche du maximum à l'enregistrement, comme dans les réglages globaux.
-- Le mode du BONUS (v12.2.0) se règle sous 🎁 BONUS, à droite du nombre : « une seule fois par manche » (activé =
-  éphémère, défaut). Il est grisé tant que la question n'a pas de BONUS, et suit le global tant qu'il n'est pas personnalisé.
+- Le mode du BONUS (v12.2.0) se règle sous le nombre de BONUS : l'interrupteur « une seule fois par manche » (activé =
+  éphémère, défaut). Il est grisé tant que le nombre de BONUS effectif vaut 0 et tant que le mode n'est pas personnalisé ;
+  le bouton ✏️ le personnalise, 🔗 le remet au global.
 - L'aperçu de la roue affiche la composition effective.
 - Une composition refusée (par exemple plus de 64 cases) n'est pas enregistrée : « Roue refusée » s'affiche avec le
   motif, et la question n'est pas enregistrée.
 - Si un réglage global change après l'enregistrement et rend la composition invalide, l'éditeur le signale à la
-  réouverture de la question. Au lancement, le nombre de BONUS est réduit pour tenir dans 64 cases ; si la composition
-  reste invalide, la roue globale entière est utilisée, avec un message dans le journal. **Le départ n'est jamais refusé.**
+  réouverture de la question. Au lancement, le nombre de BONUS est réduit au maximum que la roue peut accueillir ; si la composition
+  (sans BONUS) reste invalide, la roue globale entière est utilisée, avec un message dans le journal. **Le départ n'est jamais refusé.**
 
 ### Régler la roue
 
