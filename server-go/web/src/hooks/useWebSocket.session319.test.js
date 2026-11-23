@@ -76,6 +76,24 @@ describe('useWebSocket — jeton de session (#319)', () => {
     expect(ls.getItem('vplayer_token')).not.toBe('undefined')
   })
 
+  it('PLAYER_CONNECTED sans ID : rien n\'est écrit (ni ID, ni jeton) — jamais un jeton orphelin (revue M1)', async () => {
+    open()
+    await recv('PLAYER_CONNECTED', { NAME: 'Alice', TEAM: '' })
+    expect(ls.getItem('vplayer_id')).toBeNull()
+    expect(ls.getItem('vplayer_token')).toBeNull()
+  })
+
+  it('TOKEN sans ID : le jeton n\'est pas écrit, même avec un ID déjà stocké (jamais {ID ancien, jeton neuf})', async () => {
+    open()
+    await recv('PLAYER_CONNECTED', { NAME: 'Alice', TOKEN })
+    expect(ls.getItem('vplayer_token')).toBeNull()
+    ls.setItem('vplayer_id', 'b-ancien')
+    ls.setItem('vplayer_token', 'jeton-ancien')
+    await recv('PLAYER_CONNECTED', { NAME: 'Alice', TOKEN })
+    expect(ls.getItem('vplayer_id')).toBe('b-ancien')
+    expect(ls.getItem('vplayer_token')).toBe('jeton-ancien')
+  })
+
   it('Critical — le jeton n\'est jamais écrit dans la console (réception ni envoi)', async () => {
     const { result } = open()
     await recv('PLAYER_CONNECTED', { ID: 'b1', NAME: 'Alice', TOKEN })
