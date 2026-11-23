@@ -56,6 +56,8 @@ type App struct {
 	dnsServer   *server.DNSServer
 	logger      *server.BroadcastLogger
 	ackManager  *server.AckManager // ACK tracking for priority buzzer messages (v3.8.0)
+	// sessionsLoadErr is the result of loading vplayer_sessions.json at startup (nil = loaded), journalled once the players are loaded.
+	sessionsLoadErr error
 	// pictoCanvas is the PICTO sheet journal (v13.0.0, #193): outside the engine, behind its own lock.
 	pictoCanvas *server.PictoCanvas
 	// soundEngine is the sound-bruitage engine (#227, contracts/sound.md),
@@ -237,6 +239,7 @@ func main() {
 	// Try to load saved teams and bumpers from disk
 	teamsLoaded := app.engine.LoadTeams() == nil && len(app.engine.GetTeamsAndBumpers().Teams) > 0
 	bumpersLoaded := app.engine.LoadBumpers() == nil && len(app.engine.GetTeamsAndBumpers().Bumpers) > 0
+	app.warnSeatsWithoutFingerprint("démarrage", app.sessionsLoadErr) // vplayer-session.md §6
 
 	// Only initialize test data if no saved data exists
 	if !teamsLoaded && !bumpersLoaded {
@@ -386,9 +389,7 @@ func (a *App) init() {
 	a.engine.SetHistoryPath(filepath.Join(configDir, "history.json"))
 	a.engine.SetTeamsPath(filepath.Join(configDir, "teams.json"))
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
-	if err := a.engine.SetVPlayerSessionsPath(filepath.Join(configDir, "vplayer_sessions.json")); err != nil { // v13.0.0 session tokens (fingerprints only)
-		server.LogWarn(game.LogComponentApp, "vplayer_sessions.json absent ou illisible (%v): les places des tablettes repassent en « premier arrivé » (cas 1c)", err)
-	}
+	a.sessionsLoadErr = a.engine.SetVPlayerSessionsPath(filepath.Join(configDir, "vplayer_sessions.json")) // v13.0.0 session tokens (fingerprints only); WARN written after the players are loaded
 	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
 	a.engine.SetStatePath(filepath.Join(configDir, "game_state.json")) // #141
 

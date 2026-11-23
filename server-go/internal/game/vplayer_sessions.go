@@ -152,6 +152,25 @@ func (e *Engine) SaveVPlayerSessions() error {
 	return nil
 }
 
+// VPlayerSeatsWithoutFingerprint counts the VJoueur seats that hold no token fingerprint: the seats of the
+// "first to arrive" window (matrix case 1c). Used for the WARN journal of contracts/vplayer-session.md §6.
+func (e *Engine) VPlayerSeatsWithoutFingerprint() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	n := 0
+	for id, b := range e.data.Bumpers {
+		if b == nil || !b.IsVirtual {
+			continue
+		}
+		if e.sessions == nil {
+			n++
+		} else if _, ok := e.sessions.tokens[id]; !ok {
+			n++
+		}
+	}
+	return n
+}
+
 // sessionIssueUnsafe generates a token for the seat, stores its fingerprint (replacing any previous one) and
 // returns the plaintext, to be handed to the bound tablet only. "" when the feature is off.
 func (e *Engine) sessionIssueUnsafe(id string) string {
