@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -17,7 +18,7 @@ func TestVPlayerSessionWarnDev_CountOnlyNeverTheID(t *testing.T) {
 	app.engine.SetPhase(game.PhaseEnroll)
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA"}})
 	id := setupVirtualPlayer(t, app, "Alice", "TeamA") // sans empreinte (entrée historique)
-	app.warnSeatsWithoutFingerprint("démarrage", errors.New("fichier absent"))
+	app.warnSeatsWithoutFingerprint("démarrage", errors.New("fichier corrompu"))
 
 	var line string
 	for _, en := range app.logger.GetHistory() {
@@ -45,5 +46,39 @@ func TestVPlayerSessionWarnDev_SilentWhenNothingToReport(t *testing.T) {
 		if strings.Contains(en.Message, "VPLAYER_SESSIONS") {
 			t.Errorf("aucun WARN attendu : %s", en.Message)
 		}
+	}
+}
+
+// Revue C2 : fichier absent ET aucune place sans empreinte (installation neuve) : pas de WARN à chaque lancement.
+// Un fichier illisible avertit même à 0 place ; une place sans empreinte avertit même fichier absent.
+func TestVPlayerSessionWarnDev_AbsentFileAndNoSeat_Silent_Otherwise_Warns(t *testing.T) {
+	count := func(app *App) int {
+		n := 0
+		for _, en := range app.logger.GetHistory() {
+			if strings.Contains(en.Message, "VPLAYER_SESSIONS") {
+				n++
+			}
+		}
+		return n
+	}
+	absent := &fs.PathError{Op: "open", Path: "vplayer_sessions.json", Err: fs.ErrNotExist}
+
+	app := newBroadcast127TestApp(t)
+	server.SetGlobalLogger(app.logger)
+	t.Cleanup(func() { server.SetGlobalLogger(nil) })
+	app.warnSeatsWithoutFingerprint("démarrage", absent)
+	if count(app) != 0 {
+		t.Error("fichier absent et 0 place : aucun WARN attendu")
+	}
+	app.warnSeatsWithoutFingerprint("démarrage", errors.New("json: unexpected end"))
+	if count(app) != 1 {
+		t.Error("fichier illisible : WARN attendu même à 0 place")
+	}
+	app.engine.SetPhase(game.PhaseEnroll)
+	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA"}})
+	setupVirtualPlayer(t, app, "Alice", "TeamA")
+	app.warnSeatsWithoutFingerprint("démarrage", absent)
+	if count(app) != 2 {
+		t.Error("une place sans empreinte : WARN attendu même fichier absent")
 	}
 }

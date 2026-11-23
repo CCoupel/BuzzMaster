@@ -1,6 +1,9 @@
 package main
 
 import (
+	"errors"
+	"io/fs"
+
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/server"
 )
@@ -12,11 +15,15 @@ import (
 // fingerprint.
 func (a *App) warnSeatsWithoutFingerprint(when string, loadErr error) {
 	n := a.engine.VPlayerSeatsWithoutFingerprint()
-	if n == 0 && loadErr == nil {
+	// Nothing to warn about: no seat is exposed, and the file is either loaded or simply absent (a fresh
+	// install, before any tablet enrolled). An unreadable or corrupt file warns even at 0 seat.
+	if n == 0 && (loadErr == nil || errors.Is(loadErr, fs.ErrNotExist)) {
 		return
 	}
 	cause := "empreintes chargées"
-	if loadErr != nil {
+	if errors.Is(loadErr, fs.ErrNotExist) {
+		cause = "vplayer_sessions.json absent"
+	} else if loadErr != nil {
 		cause = "vplayer_sessions.json absent, illisible ou corrompu"
 	}
 	server.LogWarn(game.LogComponentApp, "VPLAYER_SESSIONS (%s) : %s — %d place(s) VJoueur sans empreinte, en « premier arrivé » (cas 1c) jusqu'à leur première reconnexion", when, cause, n)

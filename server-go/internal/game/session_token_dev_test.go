@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -213,8 +214,8 @@ func TestSessionToken_PersistsAcrossRestartAndRestore(t *testing.T) {
 func TestSessionToken_LoadReportsMissingOrUnreadableFile(t *testing.T) {
 	dir := t.TempDir()
 	e := NewEngine()
-	if err := e.SetVPlayerSessionsPath(filepath.Join(dir, "absent.json")); err == nil {
-		t.Error("fichier absent : une erreur est attendue")
+	if err := e.SetVPlayerSessionsPath(filepath.Join(dir, "absent.json")); err == nil || !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("fichier absent : os.ErrNotExist attendu (distingué d'un fichier corrompu), got %v", err)
 	}
 	bad := filepath.Join(dir, "bad.json")
 	if err := os.WriteFile(bad, []byte(`{"TOKENS": {"x": "secret-fingerprint"`), 0600); err != nil {
