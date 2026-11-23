@@ -87,6 +87,7 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionPictoSetTeam:    {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionPictoSetDrawer:  {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionPictoDrawDrawer: {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionPictoFound:      {ClientTypeAdmin, ClientTypeAnim}, // v13.0.0 #194: « Trouvé ! » is "conduite en direct"
 	protocol.ActionPictoStrokes:    {ClientTypeVPlayer},
 	protocol.ActionPictoCanvasSync: {ClientTypeAdmin, ClientTypeTV, ClientTypeAnim, ClientTypeVPlayer},
 	// QUESTION_SOUND (v11.1, #219, contract sound.md §10.2): the three

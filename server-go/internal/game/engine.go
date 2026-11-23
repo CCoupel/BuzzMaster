@@ -2434,6 +2434,7 @@ func (e *Engine) actualStart() {
 	if e.state.Question == nil || (e.state.Question.Type != QuestionTypeMemotion && e.state.Question.Type != QuestionTypeEntracte && e.state.Question.Type != QuestionTypeRoue) {
 		e.maybeStartDeferredTimerUnsafe() // v11.1/#219, contract §10.7 — see its own doc comment
 	}
+	startPhase := e.pictoNoWordStopUnsafe(pictoStart) // PICTO (#194, §6.2): no word at START → NO_WORD, stopped at once
 
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
@@ -2442,7 +2443,7 @@ func (e *Engine) actualStart() {
 	e.finishPictoRoundStart(pictoStart) // PICTO (#192): sheet reset then PICTO_WORD, before the UPDATE
 
 	if callback != nil {
-		callback(PhaseStarted)
+		callback(startPhase)
 	}
 
 	// Start MEMORIZE timer after broadcast — must be called after unlock to avoid deadlock
@@ -2521,6 +2522,7 @@ func (e *Engine) StartImmediate(delay int) {
 	if e.state.Question == nil || (e.state.Question.Type != QuestionTypeEntracte && e.state.Question.Type != QuestionTypeRoue) {
 		e.maybeStartDeferredTimerUnsafe()
 	}
+	startPhase := e.pictoNoWordStopUnsafe(pictoStart) // PICTO (#194, §6.2) — mirrors actualStart()
 
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
@@ -2529,7 +2531,7 @@ func (e *Engine) StartImmediate(delay int) {
 	e.finishPictoRoundStart(pictoStart) // PICTO (#192): sheet reset then PICTO_WORD, before the UPDATE
 
 	if callback != nil {
-		callback(PhaseStarted)
+		callback(startPhase)
 	}
 
 	e.finishRafaleRoundStart(rafaleStart)
@@ -2661,6 +2663,11 @@ func (e *Engine) stopIfCurrent(ticker *time.Ticker) {
 	if e.timer != ticker || e.state.Phase != PhaseStarted {
 		e.mu.Unlock()
 		return
+	}
+	// PICTO (#194, contracts/picto.md §6.4): the global chrono's end is TIMEOUT, posed BEFORE the stop, at the
+	// only point that still knows this stop is a timeout (like OnTimeUp). "Trouvé" may still follow.
+	if e.isPictoQuestionUnsafe() && e.state.PictoOutcome == "" {
+		e.state.PictoOutcome = PictoOutcomeTimeout
 	}
 	released := e.stopUnsafe()
 	callback := e.OnStateChange
@@ -2896,6 +2903,7 @@ func (e *Engine) Stop() {
 // rafaleUsed via safeGo("SaveRafaleUsed", ...) AFTER its own e.mu.Unlock()
 // when this is true.
 func (e *Engine) stopUnsafe() bool {
+	prevPhase := e.state.Phase // PICTO (#194): tells an abandonment (STOP) from a round that never started
 	// Signal countdown timer goroutine to stop (if running)
 	if e.countdownStopCh != nil {
 		select {
@@ -2930,6 +2938,11 @@ func (e *Engine) stopUnsafe() bool {
 	e.state.Phase = PhaseStopped
 	e.state.CurrentTime = 0
 	e.state.CountdownTime = 0
+	// PICTO (#194, contracts/picto.md §6.4): a STOP during the round is an abandonment. An outcome already posed
+	// (TIMEOUT by the chrono, FOUND, NO_WORD) is never replaced; the word stays secret until REVEALED.
+	if e.isPictoQuestionUnsafe() && e.state.PictoOutcome == "" && (prevPhase == PhaseStarted || prevPhase == PhasePaused) {
+		e.state.PictoOutcome = PictoOutcomeStopped
+	}
 
 	// v11.1/#219, contract §10.7 — a STOP ends the question's active life
 	// before any pending deferred timer ever resolves; see
@@ -3786,10 +3799,7 @@ func (e *Engine) Reveal() string {
 	// active life before any pending deferred timer ever resolves, same
 	// reasoning as stopUnsafe()/Ready(); see resetDeferredTimerUnsafe's own
 	// doc comment.
-	e.resetDeferredTimerUnsafe()
-
-	e.state.Phase = PhaseRevealed
-	e.state.TeamsLocked = false // #249
+	e.enterRevealedUnsafe() // resets the deferred timer, sets REVEALED, PICTO §6.5 (picto.go)
 
 	var answer string
 	if e.state.Question != nil {

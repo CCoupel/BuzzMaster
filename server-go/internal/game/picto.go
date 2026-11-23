@@ -1,6 +1,7 @@
 package game
 
 import (
+	"log"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -50,6 +51,14 @@ type PictoWordInfo struct {
 	Epoch    int
 	DrawerID string
 }
+
+// PICTO_OUTCOME values (contracts/picto.md §6.4).
+const (
+	PictoOutcomeFound   = "FOUND"
+	PictoOutcomeTimeout = "TIMEOUT"
+	PictoOutcomeStopped = "STOPPED"
+	PictoOutcomeNoWord  = "NO_WORD"
+)
 
 func (e *Engine) isPictoQuestionUnsafe() bool {
 	return e.state.Question != nil && e.state.Question.Type == QuestionTypePicto
@@ -302,4 +311,70 @@ func (e *Engine) pictoPurgeTeamUnsafe(name string) {
 		e.state.PictoTeam, e.state.PictoDrawer = "", ""
 		e.pictoRefreshUnsafe()
 	}
+}
+
+// enterRevealedUnsafe is the common entry into REVEALED (REVEAL, and PICTO_FOUND which stops then reveals in one
+// action): ends a pending deferred timer, sets the phase and, for a PICTO question, applies §6.5 — the word of
+// the round enters GameState HERE and nowhere else (PICTO_REVEALED_WORD), with the category of the credit. An
+// outcome still empty at this point means the round was abandoned (REVEAL from PAUSED, or a STOP in the
+// countdown): STOPPED. The other words of the question are never revealed.
+func (e *Engine) enterRevealedUnsafe() {
+	e.resetDeferredTimerUnsafe()
+	e.state.Phase = PhaseRevealed
+	e.state.TeamsLocked = false // #249
+	if e.isPictoQuestionUnsafe() {
+		if e.state.PictoOutcome == "" {
+			e.state.PictoOutcome = PictoOutcomeStopped
+		}
+		e.state.PictoRevealedWord = e.pictoWord // "" for NO_WORD
+		e.state.PictoRevealedCategory = string(e.state.Question.Category)
+	}
+}
+
+// PictoFound — PICTO_FOUND (admin / anim): "Trouvé !". Accepted in STARTED and PAUSED, and in STOPPED only after
+// TIMEOUT (the answer came on the gong, I5); refused otherwise (WRONG_PHASE). Stops the round then reveals it in
+// the SAME action, under one lock: two simultaneous calls create a single outcome, the second finds REVEALED.
+// The credit line is the existing mechanism (TEAM_POINTS), pre-filled by the clients at the question's points.
+func (e *Engine) PictoFound() error {
+	e.mu.Lock()
+	if !e.isPictoQuestionUnsafe() {
+		e.mu.Unlock()
+		return pictoErr(PictoErrWrongPhase, "la question courante n'est pas une question Picto")
+	}
+	ph := e.state.Phase
+	afterTimeout := ph == PhaseStopped && e.state.PictoOutcome == PictoOutcomeTimeout
+	if ph != PhaseStarted && ph != PhasePaused && !afterTimeout {
+		e.mu.Unlock()
+		return pictoErr(PictoErrWrongPhase, "« Trouvé » n'est possible que manche en cours, ou après le temps écoulé")
+	}
+	e.state.PictoOutcome = PictoOutcomeFound // the only replacement allowed: TIMEOUT → FOUND (§6.4)
+	released := false
+	if ph != PhaseStopped {
+		released = e.stopUnsafe() // timers cancelled; the outcome is already posed, stopUnsafe keeps it
+	}
+	e.enterRevealedUnsafe()
+	e.setQuestionStatus(StatusRevealed)
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if released {
+		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
+	if callback != nil {
+		callback(PhaseRevealed)
+	}
+	return nil
+}
+
+// pictoNoWordStopUnsafe is the safety net of §6.2: a question edited by hand between READY and START may have
+// no word left. The round gets the outcome NO_WORD and stops at once (REVEAL then leads to REVEALED with an empty
+// revealed word); nothing is sent to the drawer. Returns the phase to announce: STOPPED then, STARTED otherwise.
+func (e *Engine) pictoNoWordStopUnsafe(info *PictoWordInfo) GamePhase {
+	if info == nil || info.Word != "" {
+		return PhaseStarted
+	}
+	e.state.PictoOutcome = PictoOutcomeNoWord
+	e.stopUnsafe() // cancels the timer just started; the posed outcome is kept
+	log.Printf("[Engine] PICTO: no word at START, round stopped (NO_WORD)")
+	return PhaseStopped
 }

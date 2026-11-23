@@ -1729,6 +1729,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionPictoSetTeam, protocol.ActionPictoSetDrawer, protocol.ActionPictoDrawDrawer:
 		a.handlePictoPrepAction(incoming.ClientID, msg)
 
+	case protocol.ActionPictoFound:
+		a.handlePictoFound(incoming.ClientID)
+
 	case protocol.ActionPictoStrokes:
 		a.handlePictoStrokes(incoming)
 
@@ -4587,6 +4590,7 @@ var suspendedDuringLaunch = map[string]bool{
 	protocol.ActionRoueLetter: true, protocol.ActionRoueBuyVowel: true, protocol.ActionRoueFlip: true, protocol.ActionRoueAnswer: true,
 	protocol.ActionRoueNext: true, protocol.ActionRouePass: true, protocol.ActionRoueReveal: true,
 	protocol.ActionPictoSetTeam: true, protocol.ActionPictoSetDrawer: true, protocol.ActionPictoDrawDrawer: true,
+	protocol.ActionPictoFound: true,
 	// points
 	protocol.ActionTeamPoints: true, protocol.ActionBumperPoints: true, protocol.ActionTeamPointsBatch: true,
 	protocol.ActionBumperPointsBatch: true, protocol.ActionSetCreditPoints: true,
@@ -5651,6 +5655,10 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 		a.wsHub.SendRawToClient(clientID, updateData)
 	}
 
+	// PICTO (v13.0.0, #193, contracts/picto.md §6.7): sheet (and word for admin / anim) of a round in progress,
+	// right after the state — before the admin / TV extras below, which must not be able to starve it.
+	a.sendPictoToClient(clientID, clientType)
+
 	// v11.2 (#244/#251): the admin learns the already-credited teams at HELLO
 	// (sent early: the rest of the admin block depends on more wiring).
 	if clientType == server.ClientTypeAdmin {
@@ -5781,9 +5789,6 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 	if a.regieMessage != nil && a.regieMessage.Active && (clientType == server.ClientTypeAnim || clientType == server.ClientTypeAdmin) {
 		a.wsHub.SendToClient(clientID, a.buildRegieMessage())
 	}
-
-	// PICTO (v13.0.0, #193, contracts/picto.md §6.7): sheet (and word for admin / anim) of a round in progress.
-	a.sendPictoToClient(clientID, clientType)
 }
 
 // getStorageInfo returns file storage information (in bytes, like ESP32)

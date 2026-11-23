@@ -16,7 +16,11 @@ import (
 // setupPictoCallbacks wires the engine's PICTO callbacks and creates the sheet journal.
 func (a *App) setupPictoCallbacks() {
 	a.pictoCanvas = server.NewPictoCanvas()
-	a.engine.OnPictoChange = func() { a.broadcastUpdate() }
+	a.engine.OnPictoChange = func() {
+		a.broadcastUpdate()
+		a.ledCtl().PictoTeams() // team chosen: its buzzers SOLID, the others DIM (§15)
+		a.ambiance().NotifyState()
+	}
 	a.engine.OnPictoCanvasReset = func(epoch int) { a.pictoCanvas.Reset(epoch) }
 	a.engine.OnPictoWord = a.sendPictoWord
 }
@@ -85,6 +89,28 @@ func (a *App) handlePictoPrepAction(clientID string, msg *protocol.Message) {
 	}
 	server.LogWarn(game.LogComponentEngine, "%s refused: %s (%s)", msg.Action, perr.Code, perr.Message)
 	a.sendPictoError(clientID, perr)
+}
+
+// handlePictoFound processes PICTO_FOUND (admin and anim): « Trouvé ! » stops the round and reveals it in the same
+// action (contracts/picto.md §6.4). A refusal (WRONG_PHASE) answers PICTO_ERROR to the emitter alone — when admin
+// and anim both click, the first applies and the second is refused, never two outcomes. Same side effects as
+// STOP then REVEAL: the question sound and the countdown sound end, the REVEAL broadcast (LED, ambiance, sound).
+func (a *App) handlePictoFound(clientID string) {
+	err := a.engine.PictoFound()
+	if err != nil {
+		perr, ok := err.(*game.PictoError)
+		if !ok {
+			perr = &game.PictoError{Code: game.PictoErrWrongPhase, Message: err.Error()}
+		}
+		server.LogWarn(game.LogComponentEngine, "PICTO_FOUND refused: %s (%s)", perr.Code, perr.Message)
+		a.sendPictoError(clientID, perr)
+		return
+	}
+	server.LogInfo(game.LogComponentEngine, "PICTO_FOUND")
+	a.questionSound().Stop()
+	a.countdownSound().Stop()
+	a.broadcastReveal("") // the revealed word rides GameState (PICTO_REVEALED_WORD), not this message
+	a.broadcastNextQuestion()
 }
 
 // pictoStartRefused is the START guard of a PICTO round (contracts/picto.md §6.1): without a designated and

@@ -100,6 +100,7 @@ var entracteExpectedAllowed = map[string]bool{
 	protocol.ActionPictoSetTeam:    false,
 	protocol.ActionPictoSetDrawer:  false,
 	protocol.ActionPictoDrawDrawer: false,
+	protocol.ActionPictoFound:      false,
 	protocol.ActionPictoStrokes:    false,
 	protocol.ActionPictoCanvasSync: true,
 	// QUESTION_SOUND (v11.1, #219, contracts/sound.md §10.2) — same

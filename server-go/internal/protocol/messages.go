@@ -179,6 +179,7 @@ const (
 	ActionPictoSetTeam    = "PICTO_SET_TEAM"    // Admin/Anim → Server: {TEAM}
 	ActionPictoSetDrawer  = "PICTO_SET_DRAWER"  // Admin/Anim → Server: {PLAYER}
 	ActionPictoDrawDrawer = "PICTO_DRAW_DRAWER" // Admin/Anim → Server: draw the drawer at random
+	ActionPictoFound      = "PICTO_FOUND"       // Admin/Anim → Server: « Trouvé ! » (STARTED, PAUSED, or STOPPED after TIMEOUT)
 	ActionPictoStrokes    = "PICTO_STROKES"     // VPlayer drawer → Server; Server → TV/admin/anim
 	ActionPictoCanvasSync = "PICTO_CANVAS_SYNC" // TV/Admin/Anim/VPlayer → Server: whole sheet please
 	ActionPictoCanvas     = "PICTO_CANVAS"      // Server → requester: whole sheet of the epoch
