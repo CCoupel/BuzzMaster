@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import PictoPrepare from './PictoPrepare'
-import { errorText, isDrawing, isPreparing, pictoShownWord, teamCss } from './pictoState'
+import { canPictoFound, errorText, isDrawing, isPreparing, outcomeLabel, pictoShownWord, teamCss } from './pictoState'
 import { categoryMeta } from '../../utils/categoryUtils'
 import './PictoPanel.css'
 
@@ -54,10 +54,24 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
             <span className="picto-lbl">{gs.phase === 'REVEALED' ? 'Mot révélé' : 'Mot · secret (admin, animateur, dessinateur)'}</span>
             <div className="picto-word" data-testid="picto-word">{word || '—'}</div>
           </div>
-          <div className="picto-muted" style={team ? { '--c': teamCss(team.color) } : undefined}>
-            ✏️ {gs.PICTO_DRAWER_NAME || '—'} · {gs.PICTO_TEAM || '—'}
+          <div className="picto-side">
+            <div className="picto-muted" style={team ? { '--c': teamCss(team.color) } : undefined}>
+              ✏️ {gs.PICTO_DRAWER_NAME || '—'} · {gs.PICTO_TEAM || '—'}
+            </div>
+            {canPictoFound(gs) && (
+              <button type="button" className="picto-btn ok" data-testid="picto-found" onClick={actions.found}>
+                ✅ {gs.phase === 'STOPPED' ? 'Trouvé (sur le gong)' : 'Trouvé !'}
+              </button>
+            )}
           </div>
         </div>
+      )}
+      {(gs.phase === 'STOPPED' || gs.phase === 'REVEALED') && gs.PICTO_OUTCOME && (
+        <p className="picto-outcome" data-testid="picto-outcome">
+          {outcomeLabel(gs)}
+          {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME === 'TIMEOUT' ? ' — le mot n\'est pas encore affiché : « Trouvé » crédite encore l\'équipe, « Reveal » montre le mot à tous, sans points.' : ''}
+          {gs.phase === 'REVEALED' ? ' — crédit par la colonne Équipes (champ Points pré-rempli aux points de la question).' : ''}
+        </p>
       )}
       <PictoDisconnectAlert gs={gs} />
       <PictoErrorLine error={error} />

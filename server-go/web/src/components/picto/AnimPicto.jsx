@@ -8,7 +8,7 @@
 import PictoCanvasView from './PictoCanvasView'
 import PictoPrepare from './PictoPrepare'
 import { PictoDisconnectAlert, PictoErrorLine } from './PictoPanel'
-import { isDrawing, isPreparing, makePictoActions, pictoShownWord } from './pictoState'
+import { canPictoFound, isDrawing, isPreparing, makePictoActions, outcomeLabel, pictoShownWord } from './pictoState'
 import { categoryMeta } from '../../utils/categoryUtils'
 import { useGame } from '../../hooks/GameContext'
 import { useCategories } from '../../hooks/useCategories'
@@ -16,7 +16,7 @@ import './PictoCanvas.css'
 import './PictoPanel.css'
 
 /** Vue pure (testable) ; `AnimPicto` (défaut) la branche sur le contexte de jeu. */
-export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions, error, pictoWord = null, store = null, customCategories = [] }) {
+export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions, error, pictoWord = null, store = null, customCategories = [], onReveal = null }) {
   const q = gs.question || {}
   const cat = categoryMeta(q.CATEGORY, customCategories)
   const words = gs.PICTO_WORDS_COUNT || (q.PICTO_WORDS || []).length || 0
@@ -51,6 +51,23 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
                 {cat && <p className="picto-muted">{cat.label} · tiré parmi les {words} mot{words > 1 ? 's' : ''} de la question</p>}
               </div>
               {points ? <div className="picto-chips"><span className="picto-chip">Gain <b>+{points} pts</b></span></div> : null}
+              {gs.PICTO_OUTCOME && (gs.phase === 'STOPPED' || gs.phase === 'REVEALED') && (
+                <div className="anim-picto-outcome" data-testid="anim-picto-outcome">
+                  <b>{outcomeLabel(gs)}</b>
+                  {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME === 'TIMEOUT' && <p className="picto-muted">Réponse donnée sur le gong ? « Trouvé » crédite encore l'équipe. Sinon, « Révéler » montre le mot à tous, sans points.</p>}
+                  {gs.phase === 'REVEALED' && <p className="picto-muted">Crédit : ligne de chaque équipe ci-dessous (montant pré-rempli aux points de la question pour l'équipe qui a trouvé).</p>}
+                </div>
+              )}
+              <div className="anim-picto-actions">
+                {canPictoFound(gs) && (
+                  <button type="button" className="picto-btn ok" data-testid="anim-picto-found" onClick={actions.found}>
+                    ✅ {gs.phase === 'STOPPED' ? 'Trouvé (sur le gong)' : 'Trouvé !'}
+                  </button>
+                )}
+                {gs.phase === 'STOPPED' && onReveal && (
+                  <button type="button" className="picto-btn" data-testid="anim-picto-reveal" onClick={onReveal}>👁 Révéler le mot</button>
+                )}
+              </div>
             </div>
           </div>
         </>
@@ -62,7 +79,7 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
 
 
 export default function AnimPicto() {
-  const { gameState, teams, bumpers, sendMessage, pictoError, pictoWord, pictoCanvasStore } = useGame()
+  const { gameState, teams, bumpers, sendMessage, revealAnswer, pictoError, pictoWord, pictoCanvasStore } = useGame()
   const { categories } = useCategories()
   return (
     <AnimPictoView
@@ -74,6 +91,7 @@ export default function AnimPicto() {
       pictoWord={pictoWord}
       store={pictoCanvasStore}
       customCategories={categories}
+      onReveal={() => revealAnswer()}
     />
   )
 }

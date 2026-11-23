@@ -751,7 +751,7 @@ export default function QuestionsPage() {
       // Auto-set pointsTarget when type changes
       if (field === 'type') {
         // QCM, MEMORY, MEMOTION, ARDOISE and RAFALE default to TEAM, SPEEDY defaults to PLAYER
-        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE' || value === 'RAFALE') ? 'TEAM' : 'PLAYER'
+        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE' || value === 'RAFALE' || value === 'PICTO') ? 'TEAM' : 'PLAYER'
         // RAFALE (v8.0.0, #16, contrat rafale.md §3.3) — défauts distincts
         // du reste des types : durée de MANCHE (120s, pas 30s) et barème
         // de 2pts/bonne réponse (maquette rafale-v8.html §2). Uniquement

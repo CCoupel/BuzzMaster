@@ -11,6 +11,8 @@ export function makePictoActions(sendMessage) {
     setTeam: (team) => sendMessage('PICTO_SET_TEAM', { TEAM: team || '' }),
     setDrawer: (player) => sendMessage('PICTO_SET_DRAWER', { PLAYER: player || '' }),
     drawDrawer: () => sendMessage('PICTO_DRAW_DRAWER', {}),
+    // « Trouvé ! » (§6.3/§6.4) : STARTED, PAUSED, ou STOPPED après TIMEOUT (réponse donnée sur le gong)
+    found: () => sendMessage('PICTO_FOUND', {}),
   }
 }
 
@@ -41,6 +43,23 @@ export function pictoShownWord(gs, pictoWord) {
   if (!isDrawing(gs.phase)) return ''
   if (pictoWord && pictoWord.EPOCH === gs.PICTO_CANVAS_EPOCH) return pictoWord.WORD || ''
   return ''
+}
+
+/** Équipe qui a trouvé (issue FOUND), sinon ''. */
+export const pictoFoundBy = (gs) => (gs?.PICTO_OUTCOME === 'FOUND' ? (gs.PICTO_TEAM || '') : '')
+
+/** « Trouvé ! » proposé : manche en cours, ou temps écoulé tant que le mot n'est pas révélé (I5, §6.4). */
+export const canPictoFound = (gs) => gs?.phase === 'STARTED' || gs?.phase === 'PAUSED' || (gs?.phase === 'STOPPED' && gs?.PICTO_OUTCOME === 'TIMEOUT')
+
+/** Libellé court de l'issue (admin / anim). */
+export function outcomeLabel(gs) {
+  switch (gs?.PICTO_OUTCOME) {
+    case 'FOUND': return `✅ Trouvé par ${gs.PICTO_TEAM || "l'équipe"}`
+    case 'TIMEOUT': return '⏰ Temps écoulé'
+    case 'STOPPED': return '⏹ Manche arrêtée'
+    case 'NO_WORD': return 'Aucun mot dans la question'
+    default: return ''
+  }
 }
 
 export const ERROR_TEXT = {

@@ -176,7 +176,7 @@ export function resolvePointsTarget(question) {
  * groupée, le clic unitaire et l'anim s'y réfèrent.
  *   SPEEDY            : POINTS_TARGET, défaut PLAYER
  *   QCM, ARDOISE      : POINTS_TARGET, défaut TEAM
- *   MEMORY, MEMOTION, RAFALE : toujours TEAM (le réglage d'un ancien fichier est ignoré)
+ *   MEMORY, MEMOTION, RAFALE, PICTO : toujours TEAM (le réglage d'un ancien fichier est ignoré)
  *   autre type / absent : POINTS_TARGET, défaut PLAYER (jamais servi : le serveur normalise le type)
  *
  * @param {object|null} question
@@ -184,7 +184,8 @@ export function resolvePointsTarget(question) {
  */
 export function resolveAwardLevel(question) {
   const type = question?.TYPE
-  if (type === 'MEMORY' || type === 'MEMOTION' || type === 'RAFALE') return 'TEAM'
+  // PICTO (v13.0.0, contrat picto.md §7) : équipe seule, pas de score individuel pour le dessinateur
+  if (type === 'MEMORY' || type === 'MEMOTION' || type === 'RAFALE' || type === 'PICTO') return 'TEAM'
   const target = question?.POINTS_TARGET
   if (target === 'TEAM' || target === 'PLAYER') return target
   // QCM, ARDOISE : TEAM ; SPEEDY (et tout type inconnu / absent, jamais servi par le serveur) : PLAYER
