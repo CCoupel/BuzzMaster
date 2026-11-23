@@ -1546,8 +1546,10 @@ sérialisée vers tous les clients, un fichier séparé ne peut donc pas fuiter 
 - Le fichier persiste au redémarrage. Il voyage avec `bumpers.json` dans les sauvegardes « Joueurs » et est retiré avec
   les joueurs (`NEW_GAME` purge, suppression d'un bumper, re-clé #122/#134).
 - Un fichier **absent** ou **illisible** est traité comme vide : toutes les places repassent en « premier arrivé »
-  (cas 1c). Au démarrage, un WARN est journalisé (« vplayer_sessions.json absent ou illisible… »), y compris au tout
-  premier démarrage, où l'absence du fichier est normale. Une restauration sans ce fichier journalise aussi un WARN.
+  (cas 1c). Au démarrage, après le chargement des joueurs, et à la restauration d'une sauvegarde, un WARN est
+  journalisé s'il y a une erreur de chargement **ou** au moins une place VJoueur sans empreinte. Il donne le **nombre** de
+  places concernées et la cause (fichier absent, illisible ou corrompu, ou empreintes chargées). Il ne contient jamais
+  d'ID, de jeton ni d'empreinte. Au tout premier démarrage, l'absence du fichier produit donc un WARN, normal.
 
 ## Bumper enrichi (v3.1.0+)
 

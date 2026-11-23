@@ -545,8 +545,9 @@ que lorsque son propriétaire est prêt à se reconnecter.
 (`vplayer_sessions.json`), remet toutes les places en « premier arrivé ». Le journal affiche alors un avertissement. Après
 une restauration, laisser les tablettes se reconnecter rapidement.
 
-Le même avertissement apparaît au démarrage du serveur si le fichier est absent ou illisible. Au tout premier démarrage,
-l'absence du fichier est normale.
+Le même avertissement apparaît au démarrage du serveur si le fichier est absent ou illisible, ou si des places n'ont pas
+d'empreinte. Il indique le **nombre** de places concernées, sans jamais afficher d'ID ni de jeton. Au tout premier démarrage,
+l'absence du fichier produit cet avertissement : c'est normal.
 
 #### Suppression d'un joueur
 
