@@ -28,6 +28,14 @@ et le jeton de session des tablettes suivent dans les lots suivants.
 
 - **Page Jeu (#192)** — le temps et les points affichés en préparation sont repris de la question, pour tous les types.
 
+### Security
+
+- **Jeton de session des tablettes joueurs (#319)** — une tablette ne peut plus reprendre une place avec son seul ID.
+  Un jeton aléatoire est remis à l'enrôlement et à chaque reconnexion ; le serveur ne garde que son empreinte. Une
+  reconnexion sans le bon jeton est refusée (`INVALID_SESSION`), sans éviction du joueur légitime. Les places créées
+  avant v13.0.0 n'ont pas de jeton : la première tablette qui s'y connecte la prend (voir ADMIN_GUIDE, « Tablette qui a
+  perdu son jeton »). Les buzzers physiques ne sont pas concernés.
+
 ### Notes
 
 - Une manche Picto n'est pas encore révélée : la fin de manche (« Trouvé », temps écoulé, abandon, révélation du mot)

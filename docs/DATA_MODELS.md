@@ -1532,6 +1532,23 @@ Une seule carte MEMOTION est jouable à la fois. Son état vivant (réponses inv
 
 **Note** : `MEMOTION_SUBPHASE` décrit l'état de la session (GRID/SELECTED/QUESTION/REVEAL) — toujours sérialisé sans `omitempty`. `MEMOTION_CARD_STATES` décrit l'état d'exécution de chaque carte.
 
+## Empreintes de session VPlayer — `vplayer_sessions.json` (v13.0.0, #319)
+
+Référence : `contracts/vplayer-session.md` §3 et §7. Fichier dédié, **distinct de `Bumper`** : la structure `Bumper` est
+sérialisée vers tous les clients, un fichier séparé ne peut donc pas fuiter par un sérialiseur oublié.
+
+```json
+{ "TOKENS": { "<bumperID>": "<sha256 hex du jeton>" } }
+```
+
+- **Seule l'empreinte SHA-256 est stockée**, jamais le jeton en clair. Le jeton fait 32 octets (`crypto/rand`), en base64url.
+- Écriture atomique ; comparaison en temps constant (`crypto/subtle`).
+- Le fichier persiste au redémarrage. Il voyage avec `bumpers.json` dans les sauvegardes « Joueurs » et est retiré avec
+  les joueurs (`NEW_GAME` purge, suppression d'un bumper, re-clé #122/#134).
+- Un fichier **absent** ou **illisible** est traité comme vide : toutes les places repassent en « premier arrivé »
+  (cas 1c). Un fichier illisible journalise une ligne (`vplayer sessions: unreadable file ignored`) ; un fichier absent
+  n'en journalise pas à ce stade.
+
 ## Bumper enrichi (v3.1.0+)
 
 ```json

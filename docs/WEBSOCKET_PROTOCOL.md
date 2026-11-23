@@ -348,6 +348,28 @@ Rejet (nom pris) :
 
 ---
 
+### Jeton de session VPlayer — `TOKEN` (v13.0.0, #319)
+
+Référence : `contracts/vplayer-session.md` §4. Le jeton prouve la possession d'une place : connaître son ID ne suffit plus.
+
+- **`PLAYER_CONNECT`** : le champ `TOKEN` (chaîne, optionnel) est envoyé **avec** `ID` à chaque reconnexion. Absent au
+  premier enrôlement (`{ NAME }`).
+- **`PLAYER_CONNECTED`** : le serveur renvoie `TOKEN` (43 caractères, base64url) à **chaque** liaison (enrôlement,
+  reconnexion, reprise). Seul le client lié le reçoit, jamais un autre client, jamais un `UPDATE`.
+- **Matrice pour un `PLAYER_CONNECT` avec `ID`** :
+
+| Situation | Résultat |
+|---|---|
+| L'ID a un jeton enregistré et `TOKEN` est correct | Reconnexion normale |
+| L'ID a un jeton enregistré, `TOKEN` absent ou faux | `PLAYER_REJECTED { REASON: "INVALID_SESSION" }` au seul émetteur. Aucune liaison, aucune éviction, aucun `UPDATE` |
+| L'ID n'a pas de jeton (place créée avant v13.0.0) | Reconnexion acceptée, puis un jeton est émis (premier arrivé) |
+
+- **`INVALID_SESSION`** : motif de redirection côté tablette. Le front purge sa session locale et revient à l'inscription,
+  avec le message « Cette place est déjà liée à un autre appareil. Demandez à l'animateur de libérer la place, puis
+  reconnectez-vous avec votre nom. »
+- Les journaux ne contiennent que l'ID et l'issue (`VPLAYER_TOKEN_OK`, `VPLAYER_TOKEN_INVALID`, `VPLAYER_TOKEN_ISSUED`), jamais le jeton.
+- Les buzzers physiques (`/ws/buzzer`, identifiés par MAC) ne sont pas concernés.
+
 ### ARDOISE_INPUT (Saisie ARDOISE) — v5.6.0
 
 Envoye par un joueur virtuel (VPlayer) saisissant une réponse libre en ARDOISE.

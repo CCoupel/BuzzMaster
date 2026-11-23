@@ -523,6 +523,28 @@ Les joueurs virtuels apparaissent dans la colonne "Joueurs non assignés" :
 - Utiliser le drag & drop pour assigner à une équipe
 - Les joueurs assignés peuvent buzzer normalement
 
+#### Tablette qui a perdu son jeton (v13.0.0, #319)
+
+Chaque tablette reçoit un jeton de session à son enrôlement. Elle doit le présenter pour reprendre sa place. Une tablette
+qui a perdu son jeton (stockage du navigateur effacé, autre appareil) est refusée avec le message « Cette place est déjà
+liée à un autre appareil ».
+
+Pour la débloquer :
+1. L'animateur libère la place (#134).
+2. Le joueur se reconnecte avec son **nom** : sa place et son score sont conservés.
+
+**Première connexion après la mise à jour** : les places créées avant v13.0.0 n'ont pas de jeton. Elles sont reprises par
+la **première tablette qui se connecte** avec leur ID. Le serveur redémarre à la mise à jour : relancer les tablettes
+rapidement pour que chaque joueur retrouve sa place avant un inconnu.
+
+**Reprise par le nom pendant l'autorisation** : après une libération ou une demande de reprise, la reprise par le nom reste
+possible pendant 5 minutes. Quiconque connaît le nom affiché sur la TV peut alors prendre la place. Ne libérer une place
+que lorsque son propriétaire est prêt à se reconnecter.
+
+**Restauration d'une sauvegarde** : une sauvegarde faite avant v13.0.0, ou une sauvegarde sans le fichier des empreintes
+(`vplayer_sessions.json`), remet toutes les places en « premier arrivé ». Après une restauration, relancer les tablettes
+tout de suite.
+
 #### Suppression d'un joueur
 
 Pour supprimer un joueur virtuel :
