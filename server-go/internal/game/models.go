@@ -1363,11 +1363,11 @@ func ParseQCMWrongPenaltyRaw(raw []byte) int {
 }
 
 // DefaultPointsTarget returns the default POINTS_TARGET for a question type when
-// the stored question has none (#254): TEAM for QCM, ARDOISE, MEMORY, MEMOTION and
-// RAFALE, PLAYER for SPEEDY (and legacy NORMAL / unknown).
+// the stored question has none (#254): TEAM for QCM, ARDOISE, MEMORY, MEMOTION, RAFALE and
+// PICTO, PLAYER for SPEEDY (and legacy NORMAL / unknown).
 func DefaultPointsTarget(t string) PointsTarget {
 	switch t {
-	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE":
+	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE", "PICTO": // PICTO (v13.0.0, contracts/picto.md §7): team only
 		return PointsTargetTeam
 	}
 	return PointsTargetPlayer

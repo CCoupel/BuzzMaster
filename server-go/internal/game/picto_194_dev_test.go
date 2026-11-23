@@ -187,3 +187,13 @@ func TestPicto194_Relaunch_ClearsOutcomeKeepsPreparation_NewEpoch(t *testing.T) 
 		t.Error("le mot secret est vidé à la relance")
 	}
 }
+
+// Contrat §7 : le crédit de PICTO va à l'équipe seule — la cible par défaut d'une question sans POINTS_TARGET est TEAM.
+func TestPicto194_DefaultPointsTargetIsTeam(t *testing.T) {
+	if got := DefaultPointsTarget("PICTO"); got != PointsTargetTeam {
+		t.Errorf("DefaultPointsTarget(PICTO) = %q, attendu TEAM", got)
+	}
+	if got := DefaultPointsTarget("SPEEDY"); got != PointsTargetPlayer { // non-régression
+		t.Errorf("DefaultPointsTarget(SPEEDY) = %q, attendu PLAYER", got)
+	}
+}
