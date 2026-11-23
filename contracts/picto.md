@@ -3,7 +3,7 @@
 **Issues** : #191 (type de question PICTO et éditeur), #192 (équipe et dessinateur, remise secrète du mot), #193 (canal
 de dessin temps réel), #194 (manche jouable de bout en bout). Découpage : plan `_work/reports/plan-20261123-picto.md`.
 
-**Statut** : contrat de référence, écrit avant implémentation (contract-first) — **révision 6, GATE 2** (2026-11-23).
+**Statut** : contrat de référence, écrit avant implémentation (contract-first) — **révision 7** (2026-11-23, issue entrante : audit `security` du LOT-2.1).
 
 **Arbitrages** :
 - cadrage : `_work/reports/plan-pictionary-cadrage-20261123-135359.md` ;
@@ -12,7 +12,9 @@ de dessin temps réel), #194 (manche jouable de bout en bout). Découpage : plan
 - GATE 2 : `planner-20261123-gate2-corrections.md` (I1–I7, maquettes) ;
 - allègement : `planner-20261123-scope-reduction.md` (réservoir et IA reportés) ;
 - révision 5 (GATE 2) : **tirage libre** parmi les mots saisis, chronomètre TV commun à tous les types ;
-- révision 6 (GATE 2) : dessinateur **choisi en `READY` ou tiré au hasard** parmi les joueurs connectés de l'équipe.
+- révision 6 (GATE 2) : dessinateur **choisi en `READY` ou tiré au hasard** parmi les joueurs connectés de l'équipe ;
+- révision 7 (issue entrante, audit `security` du LOT-2.1) : liaison des tablettes par jeton de session
+  (`contracts/vplayer-session.md`, M1), purge de l'état de débit (m1), `PICTO_CANVAS_SYNC` borné (m2).
 
 Les choix techniques du planner sont marqués **[planner]**.
 
@@ -321,7 +323,9 @@ VJoueur dessinateur ──PICTO_STROKES──► serveur : garde (§8.6) ─► 
 ### 8.6 Garde d'autorisation de `PICTO_STROKES` — règle de sécurité
 
 - L'identité de l'émetteur vient **de sa connexion** (`client.PlayerID`, lié par `BindClientPlayerID` #246),
-  **jamais du payload**. Le payload ne contient aucun identifiant de joueur.
+  **jamais du payload**. Le payload ne contient aucun identifiant de joueur. Depuis la révision 7, la liaison exige
+  le **jeton de session** de la place (`contracts/vplayer-session.md`, faille M1 de l'audit du LOT-2.1) : connaître
+  l'ID du dessinateur ne suffit plus pour se faire passer pour lui.
 - La trame est acceptée seulement si le client est de type `vplayer`, si `PlayerID == PICTO_DRAWER`, si la question
   courante est de type `PICTO`, si la phase est `STARTED`, si `EPOCH` est l'époque courante (sinon ignorée, §8.4) et
   si la forme est valable (§9.1).
@@ -329,6 +333,8 @@ VJoueur dessinateur ──PICTO_STROKES──► serveur : garde (§8.6) ─► 
   `INVALID_STROKES`, `CANVAS_FULL`, `RATE_LIMITED`. Une trame refusée n'a jamais d'effet et n'est jamais relayée.
 - **Débit** : au plus 40 trames/s par connexion. Au-delà, la trame est refusée (`RATE_LIMITED`, une erreur au plus
   par seconde).
+  L'état de débit d'une connexion est **purgé à sa fermeture** (`ForgetClient` appelé par `onClientClosed`, révision 7,
+  mineure m1), comme l'état de débit de `PICTO_CANVAS_SYNC`.
 - **À ne pas** prendre pour modèle : `FLIP_MEMORY_CARD`, qui ne reçoit aucune identité et ne vérifie aucune équipe.
 - **Liste blanche entrante** (`inbound_allowlist.go`) : `PICTO_STROKES` et `PICTO_CANVAS_SYNC` sont ouverts au type
   `vplayer`. Ce sont les **seuls élargissements** de la liste pour ce type. `PICTO_CANVAS_SYNC` est aussi ouvert à
@@ -345,7 +351,7 @@ VJoueur dessinateur ──PICTO_STROKES──► serveur : garde (§8.6) ─► 
 | `PICTO_DRAW_DRAWER` | `{}` | admin, anim | `PREPARE`, `READY` |
 | `PICTO_FOUND` | `{}` | admin, anim | `STARTED`, `PAUSED`, et `STOPPED` après `TIMEOUT` |
 | `PICTO_STROKES` | `{ "EPOCH": int, "STROKES": [ { "ID": int, "PTS": [[x, y], ...], "END": bool } ] }` | vplayer (dessinateur) | `STARTED` |
-| `PICTO_CANVAS_SYNC` | `{}` | tv, admin, anim, vplayer (dessinateur) | toutes (réponse vide hors manche) |
+| `PICTO_CANVAS_SYNC` | `{}` | tv, admin, anim ; vplayer **seulement si `PlayerID == PICTO_DRAWER`**, sinon `PICTO_ERROR NOT_DRAWER` (révision 7, mineure m2) | toutes (réponse vide hors manche). **Débit** : au plus 2 demandes/s par connexion, quel que soit l'émetteur ; au-delà, `RATE_LIMITED` et pas de copie de la feuille |
 
 Détail de `PICTO_STROKES` :
 - `ID` : numéro de trait, attribué par le VJoueur et croissant dans l'époque. Une trame peut poursuivre un trait

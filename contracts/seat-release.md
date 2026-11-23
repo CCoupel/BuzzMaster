@@ -110,6 +110,10 @@ Le joueur arrive naturellement sans `ID` : le traitement de `PLAYER_EVICTED` cô
 **N'importe quel joueur** peut reprendre le siège, pas seulement l'occupant précédent : c'est
 volontaire (spec #134) — le siège porte le score, pas la personne.
 
+> **v13.0.0** (`contracts/vplayer-session.md` §7) : la reprise re-clé la place et **émet un nouveau jeton de session**
+> (`PLAYER_CONNECTED.TOKEN`) ; l'empreinte de l'ancien ID est supprimée. C'est aussi le recours d'un joueur qui reçoit
+> `INVALID_SESSION` (jeton perdu).
+
 ---
 
 ## 6. Compatibilité

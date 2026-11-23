@@ -1,6 +1,29 @@
 # Changelog des Contrats API
 
 ---
+## [20261123-b] — v13.0.0 — Jeton de session des tablettes (audit `security` LOT-2.1, M1) et durcissements PICTO (m1, m2)
+
+`vplayer-session.md` révision 1 (nouveau) ; `websocket-actions.md` (`PLAYER_CONNECT`, `PLAYER_CONNECTED`, `PLAYER_REJECTED`) ;
+`seat-release.md` §5 ; `picto.md` révision 7 (§8.6, §9.1). Décision de l'utilisateur du 2026-11-23
+(`_work/tasks/planner-20261123-security-m1.md`).
+
+- **[BREAKING — interne]** `PLAYER_CONNECT` avec un `ID` dont la place a un jeton **exige** `TOKEN`. Sinon, le serveur
+  répond `PLAYER_REJECTED { INVALID_SESSION }`, sans liaison ni éviction.
+  - Seul client concerné : le front VJoueur embarqué, mis à jour dans le même binaire.
+  - Buzzers physiques (`/ws/buzzer`) non concernés.
+  - Les places existantes reçoivent leur jeton à leur première reconnexion (migration en premier arrivé,
+    `vplayer-session.md` §6).
+- **[NEW]** `PLAYER_CONNECT.TOKEN` et `PLAYER_CONNECTED.TOKEN` (jeton de 32 octets aléatoires en base64url) ; motif
+  `PLAYER_REJECTED.REASON = INVALID_SESSION` (redirection vers l'inscription).
+- **[NEW]** Fichier `data/config/vplayer_sessions.json` (empreintes SHA-256 seulement). Il voyage avec les joueurs
+  dans la sauvegarde et la réinitialisation sélectives.
+- **[CHANGED]** Reprise de place #122 / libération #134 : la re-clé émet un nouveau jeton.
+- **[CHANGED]** `PICTO_CANVAS_SYNC` : refusé à une tablette autre que celle du dessinateur (`NOT_DRAWER`) ; au plus
+  2 demandes/s par connexion (`RATE_LIMITED`). L'état de débit de `PICTO_STROKES` et de `PICTO_CANVAS_SYNC` est purgé
+  à la fermeture de la connexion. Aucun client légitime n'est touché : la TV, l'admin, l'anim et le dessinateur
+  restent servis.
+
+---
 ## [20261123] — v13.0.0 — Type de jeu PICTO (#191 à #194)
 
 `picto.md` révision 6 (nouveau). Décisions utilisateur du 2026-11-23 :

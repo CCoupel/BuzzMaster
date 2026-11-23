@@ -1296,6 +1296,7 @@ Demande d'inscription ou de reconnexion VPlayer.
 |-------|------|-------------|-------------|
 | NAME | string | ✅ | Pseudo du joueur |
 | ID | string | ❌ | ID de bumper reçu dans un `PLAYER_CONNECTED` précédent (fix R1, #109, v5.7.16). Absent au tout premier enrôlement. Champ `omitempty` — les anciens clients qui ne l'envoient jamais continuent de fonctionner comme un enrôlement par nom. |
+| TOKEN | string | ❌ | **v13.0.0 `[NEW]`** — jeton de session reçu dans `PLAYER_CONNECTED.TOKEN`, envoyé avec `ID`. **Exigé** pour toute reconnexion par `ID` d'une place qui a un jeton (sinon `PLAYER_REJECTED { INVALID_SESSION }`). Voir **`contracts/vplayer-session.md`**, qui remplace le cas 1 de la matrice ci-dessous par les cas 1a / 1b / 1c. |
 
 #### Comportement serveur (matrice de décision — `engine.ReconnectOrCreateVirtualPlayer`)
 
@@ -1355,6 +1356,7 @@ Confirmation d'inscription ou de reconnexion.
 |-------|------|-------------|
 | ID | string | ID du bumper — **le client DOIT le conserver** (ex. `localStorage`) et le renvoyer dans `PLAYER_CONNECT.ID` pour toute reconnexion future (fix R1, #109) |
 | NAME | string | Pseudo confirmé |
+| TOKEN | string | **v13.0.0 `[NEW]`** — jeton de session de la place, envoyé au seul client lié, à chaque `PLAYER_CONNECTED`. Le client **DOIT** le conserver (`localStorage` `vplayer_token`) et le renvoyer dans `PLAYER_CONNECT.TOKEN` (`contracts/vplayer-session.md`) |
 
 ---
 
@@ -1370,7 +1372,7 @@ Refus d'inscription ou de reconnexion.
 
 | Champ | Type | Description |
 |-------|------|-------------|
-| REASON | string | `ENROLLMENT_CLOSED`, `LIMIT_REACHED`, `INVALID_NAME`, ou `NAME_TAKEN` (fix R1, #109, v5.7.16 — nom déjà pris par un autre VJoueur, sans ID résolvable pour prouver la propriété) |
+| REASON | string | `ENROLLMENT_CLOSED`, `LIMIT_REACHED`, `INVALID_NAME`, ou `NAME_TAKEN` (fix R1, #109, v5.7.16 — nom déjà pris par un autre VJoueur, sans ID résolvable pour prouver la propriété). **v13.0.0 `[NEW]`** : `INVALID_SESSION` — ID d'une place existante présenté sans son jeton (`contracts/vplayer-session.md` §4.4), motif de redirection vers l'inscription |
 
 ---
 
