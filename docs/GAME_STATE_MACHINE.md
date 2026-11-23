@@ -564,7 +564,7 @@ Référence : `contracts/picto.md` §5, §6.1 à §6.3, §8, §9. Le type réuti
 
 Au passage en `STARTED`, sous le verrou du moteur :
 1. `PICTO_CANVAS_EPOCH` +1, et le journal de feuille est vidé.
-2. Tirage libre du mot parmi les mots de la question (aucune mémoire entre manches). Sans mot : `PICTO_OUTCOME = NO_WORD`, la manche s'arrête.
+2. Tirage libre du mot parmi les mots de la question (aucune mémoire entre manches). Sans mot (question modifiée à la main entre `READY` et `START`) : aucun mot n'est remis ; l'issue `NO_WORD` arrive avec la fin de manche (LOT-2.3).
 3. `PICTO_WORD` est envoyé au seul dessinateur et à l'admin / animateur. Le mot n'entre pas dans `GameState`.
 
 ### Dessin — `STARTED`

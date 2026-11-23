@@ -2116,7 +2116,7 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 
 - `PICTO_STROKES` : 1 à 20 traits par trame, 1 à 200 points au total, coordonnées entières de 0 à 10 000, `ID` ≥ 1.
   L'émetteur est identifié par sa connexion, jamais par le payload.
-- `PICTO_CANVAS_SYNC` : au plus 2 demandes par seconde et par connexion ; au-delà, la demande est ignorée.
+- `PICTO_CANVAS_SYNC` : au plus 2 demandes par seconde et par connexion ; au-delà, la demande est refusée (`RATE_LIMITED`, une erreur au plus par seconde).
 
 ### Serveur → client
 

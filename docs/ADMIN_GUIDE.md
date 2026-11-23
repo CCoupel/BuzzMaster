@@ -1244,8 +1244,8 @@ Le champ SSID2/Mot de passe 2 permet de configurer un reseau WiFi de secours :
 ## Question Picto (v13.0.0, #191)
 
 Le type **✏️ Picto** dessine un mot sur une tablette, pour que l'équipe le devine à l'oral. Cette section décrit
-l'**éditeur** de la question, livré dans le LOT-1 de v13.0.0. Le déroulé de la manche (choix de l'équipe et du
-dessinateur, tirage du mot, dessin en direct) arrive avec les lots suivants.
+l'éditeur de la question, puis la préparation et le dessin d'une manche. La fin de manche et la révélation arrivent
+avec les lots suivants.
 
 ### Créer une question Picto
 
@@ -1257,7 +1257,7 @@ dessinateur, tirage du mot, dessin en direct) arrive avec les lots suivants.
    dernier mot.
 4. **Durée** : de 30 à 300 secondes, 90 par défaut.
 5. **Points** : points proposés au crédit de l'équipe quand le mot est trouvé, ajustables (crédit manuel).
-6. **Catégorie** : une seule ; elle sera affichée en indice sur la TV à partir du LOT-2.1.
+6. **Catégorie** : une seule ; elle est affichée en indice sur la TV pendant la manche.
 7. Vérifier le résumé, puis enregistrer.
 
 > Les mots sont enregistrés avec la question et sauvegardés avec elle.
@@ -1266,12 +1266,12 @@ dessinateur, tirage du mot, dessin en direct) arrive avec les lots suivants.
 
 1. Sélectionner la question Picto. La manche passe en préparation.
 2. **Équipe** : choisir l'équipe qui dessine. Changer d'équipe efface le dessinateur s'il n'en fait pas partie.
-3. **Dessinateur** : choisir un joueur connecté de l'équipe dans la liste, ou cliquer sur **Tirer au hasard**. Le tirage peut
+3. **Dessinateur** : choisir un joueur connecté de l'équipe dans la liste, ou cliquer sur **🎲 Au hasard**. Le tirage peut
    être refait tant que la manche n'a pas démarré. Seul un joueur qui a une tablette (VJoueur) connectée peut dessiner.
-4. **Lancer** reste grisé tant que le dessinateur n'est pas désigné et connecté. Le mot est tiré au lancement, parmi les
+4. **START** (admin) / **Lancer** (animateur) reste grisé tant que le dessinateur n'est pas désigné et connecté. Le mot est tiré au lancement, parmi les
    mots de la question, et il est envoyé seulement au dessinateur, à l'admin et à l'animateur.
-5. Pendant la manche, le dessin apparaît en direct sur la TV, sur cet écran et sur l'écran de l'animateur. Une tablette
-   déconnectée revient à sa feuille à la reconnexion.
+5. Pendant la manche, le dessin apparaît en direct sur la TV, sur cet écran et sur l'écran de l'animateur. La tablette
+   du dessinateur retrouve sa feuille et son mot à la reconnexion.
 
 > Le déroulé est en cours de livraison : la manche ne se termine pas encore par une révélation du mot dans cette version.
 > La relance de la question remet la manche en préparation avec une feuille vierge.
