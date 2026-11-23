@@ -1,6 +1,18 @@
 # Changelog des Contrats API
 
 ---
+## [20261123-c] — v13.0.0 — Jeton de session : cas de la fenêtre « premier arrivé » (revue LOT-2.2 M3, audit n2 / n3)
+
+`vplayer-session.md` §6, précision sans BREAKING.
+- **[CHANGED — précision]** Trois situations rouvrent la fenêtre « premier arrivé » (cas 1c) pour les places sans
+  empreinte : la restauration d'une sauvegarde d'avant v13.0.0 (ou sans `vplayer_sessions.json`), et le fichier
+  `vplayer_sessions.json` absent, ou illisible, au démarrage. Le serveur émet alors un journal `WARN` avec le nombre de
+  places concernées. Le risque est accepté, comme pour la migration.
+- **[CHANGED — précision]** Comportement préexistant documenté : pendant une autorisation de reprise #122 / #134
+  (5 minutes), quiconque connaît le nom peut reprendre la place sans ID ; il reçoit un jeton neuf. Seule protection :
+  la décision de l'animateur. Durcissement éventuel renvoyé à #259.
+
+---
 ## [20261123-b] — v13.0.0 — Jeton de session des tablettes (audit `security` LOT-2.1, M1) et durcissements PICTO (m1, m2)
 
 `vplayer-session.md` révision 1 (nouveau) ; `websocket-actions.md` (`PLAYER_CONNECT`, `PLAYER_CONNECTED`, `PLAYER_REJECTED`) ;

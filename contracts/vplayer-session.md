@@ -121,6 +121,32 @@ après une reconnexion légitime de le retrouver. Cela ne crée aucune fuite : s
     redémarrage. Le propriétaire évincé reprend sa place par la libération #134.
   - **Option plus stricte, non retenue** : refuser les places sans empreinte. Toutes les tablettes en cours devraient
     alors se réinscrire après la mise à jour.
+- **Autres cas qui rouvrent la même fenêtre « premier arrivé »** (revue LOT-2.2 M3, audit n3). Toute place qui n'a pas
+  d'empreinte repasse en cas 1c, comme à la migration. Cela se produit dans trois situations :
+  - **restauration d'une sauvegarde d'avant v13.0.0**, ou d'une sauvegarde qui ne contient pas
+    `vplayer_sessions.json` : les places restaurées dont l'ID n'a pas d'empreinte dans le fichier courant
+    (`LoadVPlayerSessions` recharge le fichier courant, puis élague les ID inconnus) ;
+  - **`vplayer_sessions.json` absent** au démarrage (fichier supprimé, nouveau dossier de données avec d'anciens
+    `bumpers.json`) ;
+  - **`vplayer_sessions.json` illisible ou corrompu** au démarrage. Il est alors ignoré, et toutes les places
+    repassent en 1c.
+
+  Dans ces trois cas, le serveur émet un journal **`WARN`** explicite au chargement, avec le **nombre** de places
+  VJoueur sans empreinte (jamais d'ID en clair ni de jeton). Le risque est le même que celui de la migration, et il
+  est accepté pour la même raison : les tablettes se reconnectent d'elles-mêmes en quelques secondes. Consigne
+  d'exploitation (`ADMIN_GUIDE.md`) : après une restauration ou un incident sur le fichier, laisser les tablettes se
+  reconnecter rapidement, ou faire libérer la place (#134) d'un joueur évincé.
+- **Reprise par le nom pendant une autorisation #122 / #134** (audit n2, comportement **préexistant**, inchangé par
+  ce contrat) :
+  - quand l'animateur autorise une reprise ou libère une place, n'importe quel client qui connaît le nom (affiché sur
+    la TV) peut envoyer `PLAYER_CONNECT {NAME}` sans ID et prendre la place, avec un **jeton neuf**, pendant toute
+    l'autorisation (`reclaimAuthorizationTTL`, 5 minutes) ;
+  - le jeton ne change rien à ce chemin : la seule protection est la décision de l'animateur ;
+  - consigne d'exploitation (`ADMIN_GUIDE.md`) : libérer une place seulement quand son propriétaire est prêt à se
+    reconnecter.
+
+  Un durcissement éventuel (raccourcir la fenêtre, lier l'autorisation à un appareil) relève du milestone sécurité
+  (#259).
 - **Ancien onglet** encore ouvert sur l'ancien front (qui n'envoie pas `TOKEN`) : si la place a déjà reçu un jeton,
   l'onglet reçoit `INVALID_SESSION` et revient à l'inscription. Recharger la page charge le nouveau front.
 - **[BREAKING — interne]** `PLAYER_CONNECT` avec un ID dont la place a un jeton **exige** désormais `TOKEN`. Seul
