@@ -244,6 +244,8 @@ func TestPictoRound194_NoWord_StopsImmediately_RevealGivesAnEmptyWord(t *testing
 
 func TestPictoRound194_Credit_ManualThroughTeamPoints_TeamOnly(t *testing.T) {
 	w := newPictoWire(t)
+	// handleTeamPoints résout la catégorie du crédit par httpServer (absent du harnais fonctionnel).
+	w.app.httpServer = server.NewHTTPServer(0, w.app.engine, w.app.wsHub, w.app.buzzerHub, server.NewLogsWebSocketHub(10))
 	w.roundStartedWithDelay(t, 120)
 	w.send(t, w.admin, pictoActFound, struct{}{})
 	waitPhase(t, w, "REVEALED")
@@ -271,16 +273,30 @@ func TestPictoRound194_Credit_ManualThroughTeamPoints_TeamOnly(t *testing.T) {
 	if gd.Bumpers[w.aliceID].Score != 0 {
 		t.Errorf("le dessinateur ne reçoit pas de score individuel : %v", gd.Bumpers[w.aliceID].Score)
 	}
-	// Verrou d'attribution (#170) : la même équipe n'est créditée qu'une fois pour la question.
-	awarded, _ := gameField(t, w.admin, "AWARDED_TEAMS").([]interface{})
-	found := false
-	for _, a := range awarded {
-		if a == "TeamA" {
-			found = true
+	// Verrou d'attribution (#170) : AWARDED_TEAMS n'est PAS un champ du GameState mais un message séparé
+	// (admin + anim, websocket-actions.md §AWARDED_TEAMS) ; il liste les équipes déjà créditées pour la question.
+	var awarded []string
+	deadline = time.Now().Add(3 * time.Second)
+	for len(awarded) == 0 && time.Now().Before(deadline) {
+		fr := w.admin.of(protocol.ActionAwardedTeams)
+		if len(fr) > 0 {
+			var p struct {
+				Msg struct {
+					Teams []struct {
+						Team   string `json:"TEAM"`
+						Points int    `json:"POINTS"`
+					} `json:"TEAMS"`
+				} `json:"MSG"`
+			}
+			_ = json.Unmarshal([]byte(fr[len(fr)-1]), &p)
+			for _, e := range p.Msg.Teams {
+				awarded = append(awarded, e.Team)
+			}
 		}
+		time.Sleep(25 * time.Millisecond)
 	}
-	if !found {
-		t.Errorf("AWARDED_TEAMS doit contenir TeamA après le crédit : %v", awarded)
+	if !contains(awarded, "TeamA") {
+		t.Errorf("le message AWARDED_TEAMS doit contenir TeamA après le crédit : %v", awarded)
 	}
 }
 
