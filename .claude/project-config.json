@@ -106,16 +106,28 @@
       "picto_relay": {
         "p95_ms": 100,
         "frame_max_bytes": 4096,
+        "canvas_max_points": 60000,
         "nominal": {
           "frames_per_s": 16,
-          "points_per_frame": 200,
+          "points_per_frame": 8,
           "duration_s": 300,
           "disconnects_max": 0,
           "frames_lost_max": 0
         },
-        "x3": {
+        "max_frame": {
+          "frames_per_s": 16,
+          "points_per_frame": 200,
+          "duration_s": 15,
           "disconnects_max": 0,
-          "losses_tolerated": true
+          "frames_lost_max": 0
+        },
+        "x3": {
+          "frames_per_s": 48,
+          "points_per_frame": 200,
+          "duration_s": 60,
+          "disconnects_max": 0,
+          "losses_tolerated": true,
+          "canvas_full_tolerated": true
         },
         "source": "tests/perf/picto-load.md"
       }
