@@ -1549,7 +1549,7 @@ sérialisée vers tous les clients, un fichier séparé ne peut donc pas fuiter 
   (cas 1c). Au démarrage, après le chargement des joueurs, et à la restauration d'une sauvegarde, un WARN est
   journalisé s'il y a une erreur de chargement **ou** au moins une place VJoueur sans empreinte. Il donne le **nombre** de
   places concernées et la cause (fichier absent, illisible ou corrompu, ou empreintes chargées). Il ne contient jamais
-  d'ID, de jeton ni d'empreinte. Au tout premier démarrage, l'absence du fichier produit donc un WARN, normal.
+  d'ID, de jeton ni d'empreinte. Un fichier absent ne produit de WARN que s'il reste des places sans empreinte.
 
 ## Bumper enrichi (v3.1.0+)
 

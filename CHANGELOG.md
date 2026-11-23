@@ -2,10 +2,10 @@
 
 Historique des versions du projet BuzzControl.
 
-## [13.0.0] - 2026-11-23 — Picto : type de question, préparation et dessin en direct (LOT-1 et LOT-2.1, #191 à #193) — partiel
+## [13.0.0] - 2026-11-23 — Picto : type de question, préparation, dessin en direct et jeton de session (LOT-1, LOT-2.1 et LOT-2.2, #191 à #193, #319) — partiel
 
 Entrée **partielle** : le type Picto est en cours de livraison (milestone v13.0.0). La fin de manche avec révélation
-et le jeton de session des tablettes suivent dans les lots suivants.
+suit dans un lot suivant.
 
 ### Added
 

@@ -367,7 +367,7 @@ Référence : `contracts/vplayer-session.md` §4. Le jeton prouve la possession 
 - **`INVALID_SESSION`** : motif de redirection côté tablette. Le front purge sa session locale et revient à l'inscription,
   avec le message « Cette place est déjà liée à un autre appareil. Demandez à l'animateur de libérer la place, puis
   reconnectez-vous avec votre nom. »
-- Les journaux ne contiennent que l'ID et l'issue (`VPLAYER_TOKEN_OK`, `VPLAYER_TOKEN_INVALID`, `VPLAYER_TOKEN_ISSUED`), jamais le jeton.
+- Les journaux ne contiennent que l'ID et l'issue (`VPLAYER_TOKEN_INVALID`, `VPLAYER_TOKEN_ISSUED`), jamais le jeton.
 - Les buzzers physiques (`/ws/buzzer`, identifiés par MAC) ne sont pas concernés.
 
 ### ARDOISE_INPUT (Saisie ARDOISE) — v5.6.0
