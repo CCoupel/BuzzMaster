@@ -1,6 +1,14 @@
 # Changelog des Contrats API
 
 ---
+## [20261123-d] — v13.0.0 — Jeton de session : journaux alignés sur le code (revue LOT-2.2)
+
+`vplayer-session.md` §3, précision sans BREAKING.
+- **[CHANGED — précision]** Le journal `VPLAYER_TOKEN_OK`, jamais écrit, est retiré : une reconnexion réussie n'a pas
+  de journal propre. Les journaux réels sont `VPLAYER_TOKEN_INVALID` (WARN, ID assaini),
+  `VPLAYER_TOKEN_ISSUED reason=enrol|legacy|reclaim` et `VPLAYER_TOKEN_ISSUE_FAILED`. Aucun ne contient le jeton.
+
+---
 ## [20261123-c] — v13.0.0 — Jeton de session : cas de la fenêtre « premier arrivé » (revue LOT-2.2 M3, audit n2 / n3)
 
 `vplayer-session.md` §6, précision sans BREAKING.

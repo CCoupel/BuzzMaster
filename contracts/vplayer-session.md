@@ -46,8 +46,14 @@ N'importe quel client qui rejoue cet ID :
   (`crypto/subtle.ConstantTimeCompare`).
 - **Confidentialité** : le jeton en clair n'est envoyé qu'au client qui vient d'être lié (`PLAYER_CONNECTED`, par
   `SendToClient`). Il n'est jamais journalisé (ni `/ws/logs`, ni fichier), jamais dans `GameState`, jamais dans un
-  `UPDATE`. Les journaux ne mentionnent que l'ID et l'issue (`VPLAYER_TOKEN_OK`, `VPLAYER_TOKEN_INVALID`,
-  `VPLAYER_TOKEN_ISSUED`).
+  `UPDATE`. Les journaux ne mentionnent que l'ID et l'issue, jamais le jeton :
+  - `WARN VPLAYER_TOKEN_INVALID id=… client=…` : refus 1b, avec l'ID reçu assaini (`diag.LogToken`) ;
+  - `VPLAYER_TOKEN_ISSUED id=… reason=enrol|legacy|reclaim` : jeton émis à l'enrôlement, en migration (1c) ou à une
+    reprise #122 / #134 ;
+  - `VPLAYER_TOKEN_ISSUE_FAILED id=…` : échec de `crypto/rand` (aucun jeton émis).
+
+  Une reconnexion réussie (1a) **n'écrit pas de journal propre** : seul le journal de reconnexion existant est
+  écrit.
 - **Durée de vie** : celle du bumper. Le jeton est stable tant que le bumper existe et ne tourne pas à chaque
   reconnexion **[planner]**, pour ne pas casser deux onglets du même appareil (#246 F-ID).
 
