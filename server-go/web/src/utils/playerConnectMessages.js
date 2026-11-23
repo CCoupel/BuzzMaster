@@ -47,7 +47,7 @@ export const REDIRECT_MESSAGES = {
 
 export const DEFAULT_REDIRECT_MESSAGE = 'Tu as été renvoyé à l’inscription. Réinscris-toi pour continuer.'
 
-// #319 (v13.0.0, revue C1) — inscription refusée côté client : un joueur est déjà actif dans ce navigateur (ID stocké dont la
+// #319 (v13.0.0, revue C1/C4) — inscription refusée côté client : un joueur est déjà inscrit dans ce navigateur (ID stocké dont la
 // place existe). Rien n'est envoyé au serveur : s'inscrire ici ferait perdre à ce joueur son identité (l'ID et le jeton
 // stockés sont uniques par navigateur, #246 F-ID).
-export const ENROLL_BLOCKED_LIVE_PLAYER = 'Un joueur est déjà connecté sur ce navigateur. Fermez son onglet ou faites libérer sa place pour inscrire un autre joueur.'
+export const ENROLL_BLOCKED_LIVE_PLAYER = 'Un joueur est déjà inscrit sur ce navigateur. Faites libérer sa place par l’animateur pour inscrire un autre joueur.'

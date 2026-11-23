@@ -50,7 +50,7 @@ describe('EnrollPage — purge de la session périmée avant l\'enrôlement (#31
     const g = mk({ bumpers: { vivant: { IS_VIRTUAL: true } } }); useGame.mockReturnValue(g)
     render(<EnrollPage />)
     await submit('Bob')
-    expect(ENROLL_BLOCKED_LIVE_PLAYER).toBe('Un joueur est déjà connecté sur ce navigateur. Fermez son onglet ou faites libérer sa place pour inscrire un autre joueur.')
+    expect(ENROLL_BLOCKED_LIVE_PLAYER).toBe('Un joueur est déjà inscrit sur ce navigateur. Faites libérer sa place par l’animateur pour inscrire un autre joueur.')
     expect(screen.getByText(ENROLL_BLOCKED_LIVE_PLAYER)).toBeInTheDocument()
     expect(g.connectVirtualPlayer).not.toHaveBeenCalled()
     expect(localStorage.getItem('vplayer_id')).toBe('vivant')
