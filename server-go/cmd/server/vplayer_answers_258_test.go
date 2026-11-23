@@ -572,7 +572,9 @@ func TestVPlayerAnswers258_Critical_AfterPlayerConnectATargetedUpdateGivesTheTab
 	}
 
 	nBefore := tapOf253(conn).count291()
-	e.connect(t, id, "Jade", e.jadeID)
+	// #319 (contrat vplayer-session.md §6, rupture documentée) : la reconnexion par ID présente le jeton reçu au
+	// premier PLAYER_CONNECTED de cette tablette (cas 1c à l'enrôlement de newEnv258), sinon elle est refusée (1b).
+	e.send(t, id, "vplayer", protocol.ActionPlayerConnect, map[string]interface{}{"NAME": "Jade", "ID": e.jadeID, "TOKEN": tokenFromTap319(t, e.tabA2)})
 	e.waitFrameAfter258(conn, nBefore)
 	e.settle258After(conn) // #291 : barrière + marge de 250 ms (action client) au lieu de 450 ms fixes
 	after := tapOf253(conn).take()

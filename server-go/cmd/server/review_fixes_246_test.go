@@ -32,12 +32,12 @@ func TestReview246_ClientTraceCannotForgeLogLines(t *testing.T) {
 
 func TestReview246_SeqRestartsAfterRebindingOnTheSameConnection(t *testing.T) {
 	e := newEnv246(t)
-	_, cid := e.dial(t, "/ws/player")
-	e.connect(t, cid, "Paul", e.paul)
+	conn, cid := e.dial(t, "/ws/player")
+	tok := e.connectGetToken319(t, conn, cid, "Paul", e.paul) // #319 (contrat vplayer-session.md §6, rupture documentée) : la reconnexion par ID présente le jeton reçu au premier PLAYER_CONNECTED.
 	for i := 1; i <= 3; i++ {
 		e.typeAs(t, cid, e.paul, strings.Repeat("A", i), map[string]interface{}{"SEQ": i})
 	}
-	e.connect(t, cid, "Paul", e.paul) // 2e PLAYER_CONNECT : le client repart à SEQ 1
+	e.reconnectWithToken319(t, cid, "Paul", e.paul, tok) // 2e PLAYER_CONNECT : le client repart à SEQ 1
 
 	e.typeAs(t, cid, e.paul, "B", map[string]interface{}{"SEQ": 1})
 	e.typeAs(t, cid, e.paul, "BC", map[string]interface{}{"SEQ": 2})

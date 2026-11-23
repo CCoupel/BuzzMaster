@@ -691,7 +691,9 @@ func TestPictoWire193_DrawerReconnect_GetsWordAndCanvasBack(t *testing.T) {
 
 	base := startAnimAllowlistTestServer(t, w.app)
 	again := newWireClient(t, "alice-2", dialWS(t, base, "/ws/player"))
-	w.send(t, again, protocol.ActionPlayerConnect, protocol.PlayerConnectPayload{Name: "Alice", ID: w.aliceID})
+	// #319 (contrat vplayer-session.md §6, rupture documentée) : la reconnexion par ID présente le jeton reçu dans le
+	// PLAYER_CONNECTED de la première connexion ; sans lui elle serait refusée (1b).
+	w.send(t, again, protocol.ActionPlayerConnect, map[string]interface{}{"NAME": "Alice", "ID": w.aliceID, "TOKEN": tokenOfClient319(t, w.alice)})
 	again.waitAction(t, pictoActWord, 1, 5*time.Second)
 	cv := again.waitAction(t, pictoActCanvas, 1, 5*time.Second)
 	if !strings.Contains(cv[0], `"PTS"`) {

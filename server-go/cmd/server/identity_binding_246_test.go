@@ -297,10 +297,10 @@ func TestNameUniqueness246_AdminRenameToAFreeNameStillWorks(t *testing.T) {
 func TestDuplicateSession246_MostRecentConnectionWinsAndOldOneIsEvicted(t *testing.T) {
 	e := newEnv246(t)
 	oldConn, oldID := e.dial(t, "/ws/player")
-	e.connect(t, oldID, "Paul", e.paul)
+	tok := e.connectGetToken319(t, oldConn, oldID, "Paul", e.paul) // #319 (contrat vplayer-session.md §6, rupture documentée) : la reconnexion par ID présente le jeton reçu au premier PLAYER_CONNECTED.
 	newConn, newID := e.dial(t, "/ws/player")
 
-	e.connect(t, newID, "Paul", e.paul)
+	e.reconnectWithToken319(t, newID, "Paul", e.paul, tok)
 
 	raw := readActionMatchingWithin(t, oldConn, protocol.ActionPlayerEvicted, 2*time.Second)
 	var ev struct {
@@ -337,9 +337,9 @@ func TestDuplicateSession246_MostRecentConnectionWinsAndOldOneIsEvicted(t *testi
 func TestDuplicateSession246_BumperSurvivesTheEvictedConnectionClosing(t *testing.T) {
 	e := newEnv246(t)
 	oldConn, oldID := e.dial(t, "/ws/player")
-	e.connect(t, oldID, "Paul", e.paul)
+	tok := e.connectGetToken319(t, oldConn, oldID, "Paul", e.paul) // #319 (contrat vplayer-session.md §6, rupture documentée) : la reconnexion par ID présente le jeton reçu au premier PLAYER_CONNECTED.
 	_, newID := e.dial(t, "/ws/player")
-	e.connect(t, newID, "Paul", e.paul)
+	e.reconnectWithToken319(t, newID, "Paul", e.paul, tok)
 	readActionMatchingWithin(t, oldConn, protocol.ActionPlayerEvicted, 2*time.Second)
 
 	oldConn.Close()
