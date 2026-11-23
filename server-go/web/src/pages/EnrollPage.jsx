@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
 import { clearVPlayerSession } from '../utils/vplayerSession'
-import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
+import { ENROLL_BLOCKED_LIVE_PLAYER, REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
 import './EnrollPage.css'
 
 // #120 (F3) — présentation du bandeau de motif selon la catégorie du renvoi.
@@ -173,17 +173,23 @@ export default function EnrollPage() {
       return
     }
 
+    // #319 — un seul joueur par navigateur (ID et jeton stockés, règle #246 F-ID) :
+    //  - ID stocké dont la place existe = joueur vivant (autre onglet) : inscription REFUSÉE, rien n'est envoyé (revue C1) ;
+    //  - ID stocké dont la place n'existe plus = session périmée : purgée juste avant l'envoi de { NAME }, pour que
+    //    PLAYER_CONNECTED trouve un stockage vide et écrive la paire {ID, jeton}.
+    const storedId = localStorage.getItem('vplayer_id')
+    if (storedId) {
+      if (bumpers?.[storedId]?.IS_VIRTUAL) {
+        setError(ENROLL_BLOCKED_LIVE_PLAYER)
+        return
+      }
+      clearVPlayerSession()
+    }
+
     // Clear previous errors
     setError('')
     setIsConnecting(true)
     pendingNameRef.current = trimmedName
-
-    // #319 — l'enrôlement ne trouve de place à mémoriser (ID + jeton, écrits ensemble par PLAYER_CONNECTED) que si le
-    // stockage ne garde pas l'ID d'une AUTRE place. ID stocké dont le bumper n'existe plus = session périmée : purgée ici,
-    // juste avant l'envoi de { NAME }. Un ID dont le bumper existe (autre onglet vivant du même navigateur) n'est jamais
-    // touché (règle #246 F-ID : on ne purge pas la session d'un autre onglet).
-    const storedId = localStorage.getItem('vplayer_id')
-    if (storedId && !bumpers?.[storedId]?.IS_VIRTUAL) clearVPlayerSession()
 
     // Client type already set on mount, just send connection request
     connectVirtualPlayer(trimmedName)

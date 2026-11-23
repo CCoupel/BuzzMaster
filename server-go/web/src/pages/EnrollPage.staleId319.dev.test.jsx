@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import EnrollPage from './EnrollPage'
 import { useGame } from '../hooks/GameContext'
+import { ENROLL_BLOCKED_LIVE_PLAYER } from '../utils/playerConnectMessages'
 
 // #319 — enrôlement avec un ID périmé dans le stockage : la session périmée est purgée avant l'envoi de { NAME },
 // pour que PLAYER_CONNECTED écrive la nouvelle paire {ID, jeton} ; un ID vivant (autre onglet) n'est jamais purgé.
@@ -44,15 +45,18 @@ describe('EnrollPage — purge de la session périmée avant l\'enrôlement (#31
     expect(g.connectVirtualPlayer).toHaveBeenCalledWith('Alice')
     expect(atSend).toEqual([null, null])
   })
-  it('ID dont le bumper existe (autre onglet vivant) : rien n\'est purgé', async () => {
+  it('joueur vivant dans ce navigateur (ID stocké dont le bumper existe) : inscription refusée, rien n\'est envoyé ni purgé', async () => {
     localStorage.setItem('vplayer_id', 'vivant'); localStorage.setItem('vplayer_token', 'jeton-vivant')
     const g = mk({ bumpers: { vivant: { IS_VIRTUAL: true } } }); useGame.mockReturnValue(g)
     render(<EnrollPage />)
-    // bumper existant + pas de nom enregistré : le formulaire reste accessible
     await submit('Bob')
+    expect(ENROLL_BLOCKED_LIVE_PLAYER).toBe('Un joueur est déjà connecté sur ce navigateur. Fermez son onglet ou faites libérer sa place pour inscrire un autre joueur.')
+    expect(screen.getByText(ENROLL_BLOCKED_LIVE_PLAYER)).toBeInTheDocument()
+    expect(g.connectVirtualPlayer).not.toHaveBeenCalled()
     expect(localStorage.getItem('vplayer_id')).toBe('vivant')
     expect(localStorage.getItem('vplayer_token')).toBe('jeton-vivant')
-    expect(g.connectVirtualPlayer).toHaveBeenCalledWith('Bob')
+    // le bouton n'est pas resté bloqué sur « Connexion… » : un nouvel essai reste possible
+    expect(screen.getByRole('button', { name: /Rejoindre la partie/i })).not.toBeDisabled()
   })
   it('stockage vide : aucune purge, l\'enrôlement part normalement', async () => {
     const g = mk(); useGame.mockReturnValue(g)
