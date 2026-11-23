@@ -1662,6 +1662,31 @@ PictoWords []string `json:"PICTO_WORDS,omitempty"` // 1 à 20 mots, secret (reti
 - **Registre** : `OwnedFields` = `PICTO_WORDS`, `MediaSlots` = aucun, `NestableInMotionCard` = `false`, `HasPlayerInput` = `true`.
 - **Enregistrement** (`POST /questions`) : un refus renvoie HTTP 400 préfixé par son code (`PICTO_WORDS_INVALID`, `PICTO_TIME_INVALID`) ; rien n'est écrit.
 
+### GameState PICTO_* — v13.0.0, #192 (contracts/picto.md §5)
+
+Tous présents dans chaque `UPDATE`, **sans `omitempty`**, tableaux jamais `null`. **Jamais persistés** (`state_persistence.go`).
+Diffusés aux clients web (admin, anim, TV, tablettes) ; jamais aux buzzers.
+
+| Champ JSON | Type | Contenu |
+|---|---|---|
+| `PICTO_TEAM` | string | Équipe qui dessine (`""` tant qu'elle n'est pas choisie) |
+| `PICTO_TEAM_COLOR` | `[r,g,b]` | Accent de l'équipe |
+| `PICTO_DRAWER` | string | ID du bumper VJoueur dessinateur (`""` sinon) |
+| `PICTO_DRAWER_NAME` | string | Nom affiché du dessinateur |
+| `PICTO_DRAWER_CONNECTED` | bool | Le dessinateur a une connexion `/ws/player` liée |
+| `PICTO_CANDIDATES` | `{ID, NAME, CONNECTED}[]` | VJoueurs de l'équipe ; seuls les connectés sont désignables |
+| `PICTO_WORDS_COUNT` | int | Nombre de mots de la question (affiché en préparation) |
+| `PICTO_CANVAS_EPOCH` | int | Époque de la feuille : +1 à chaque `START` d'une manche PICTO ; 0 avant la première |
+| `PICTO_OUTCOME` | string | `""` \| `FOUND` \| `TIMEOUT` \| `STOPPED` \| `NO_WORD` (issues posées par la fin de manche, LOT-2.3) |
+| `PICTO_REVEALED_WORD` | string | Mot de la manche, **seulement en `REVEALED`** ; `""` sinon |
+| `PICTO_REVEALED_CATEGORY` | string | Catégorie du crédit, en `REVEALED` ; `""` sinon |
+
+- **Remise à vide** : la préparation (`PICTO_TEAM`, `PICTO_DRAWER`, `PICTO_CANDIDATES`) au changement de question, à
+  `InitGameWith` et à `NEW_GAME`. Elle est conservée entre `PREPARE` et `READY`, et à la relance de la même question.
+- `PICTO_OUTCOME`, `PICTO_REVEALED_WORD` et `PICTO_REVEALED_CATEGORY` sont remis à vide au changement de question, à la
+  relance, à `InitGameWith` et à `NEW_GAME`.
+- Le mot de la manche n'est **jamais** dans `GameState` avant `REVEALED`.
+
 ## Question (RAFALE type) - v8.0.0, #16
 
 ### Modèle RafaleQuestion — Élément du réservoir

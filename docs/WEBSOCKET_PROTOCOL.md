@@ -2100,6 +2100,63 @@ L'élargissement de la liste blanche pour permettre l'entrée **directe** des jo
 
 ---
 
+## Actions WebSocket — Type PICTO (v13.0.0, #192, #193)
+
+Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une action PICTO.
+
+### Client → serveur
+
+| Action | Payload | Émetteurs | Phases |
+|---|---|---|---|
+| `PICTO_SET_TEAM` | `{ "TEAM": string }` | admin, anim | `PREPARE`, `READY` |
+| `PICTO_SET_DRAWER` | `{ "PLAYER": string }` (ID de bumper) | admin, anim | `PREPARE`, `READY` |
+| `PICTO_DRAW_DRAWER` | `{}` (tirage au hasard parmi les VJoueurs connectés de l'équipe) | admin, anim | `PREPARE`, `READY` |
+| `PICTO_STROKES` | `{ "EPOCH": int, "STROKES": [ { "ID": int, "PTS": [[x, y], ...], "END": bool } ] }` | VJoueur dessinateur | `STARTED` |
+| `PICTO_CANVAS_SYNC` | `{}` | tv, admin, anim ; VJoueur seulement s'il est le dessinateur | toutes |
+
+- `PICTO_STROKES` : 1 à 20 traits par trame, 1 à 200 points au total, coordonnées entières de 0 à 10 000, `ID` ≥ 1.
+  L'émetteur est identifié par sa connexion, jamais par le payload.
+- `PICTO_CANVAS_SYNC` : au plus 2 demandes par seconde et par connexion ; au-delà, la demande est ignorée.
+
+### Serveur → client
+
+| Action | Destinataires | Payload |
+|---|---|---|
+| `UPDATE` (existant) | tous les clients web | `GameState` avec les champs `PICTO_*` (sans le mot) |
+| `PICTO_WORD` | dessinateur seul, admin, anim | `{ "WORD": string, "CATEGORY": string, "EPOCH": int }` |
+| `PICTO_STROKES` | tv, admin, anim (envoi non bloquant) | `{ "EPOCH": int, "SEQ": int, "STROKES": [...] }` |
+| `PICTO_CANVAS` | le demandeur seul | `{ "EPOCH": int, "SEQ": int, "STROKES": [...] }` (feuille entière de l'époque) |
+| `PICTO_ERROR` | l'émetteur seul | `{ "CODE": string, "MESSAGE": string }` |
+
+### Codes `PICTO_ERROR.CODE`
+
+| Code | Cas |
+|---|---|
+| `INVALID_TEAM` | équipe inconnue, ou pas d'équipe pour le tirage |
+| `NOT_A_CANDIDATE` | joueur absent de la liste des candidats de l'équipe |
+| `DRAWER_OFFLINE` | dessinateur choisi non connecté |
+| `NO_CONNECTED_PLAYER` | tirage impossible : aucun VJoueur connecté dans l'équipe |
+| `NO_DRAWER` | `START` sans dessinateur connecté |
+| `WRONG_PHASE` | action hors de ses phases |
+| `NOT_DRAWER` | trame ou synchronisation d'un VJoueur qui n'est pas le dessinateur |
+| `INVALID_STROKES` | forme de trame non valable |
+| `CANVAS_FULL` | journal plein (6 000 traits ou 60 000 points) : trame refusée, rien relayé |
+| `RATE_LIMITED` | débit dépassé : 40 trames/s pour `PICTO_STROKES`, 2/s pour `PICTO_CANVAS_SYNC` ; une erreur au plus par seconde |
+
+### Relais et rattrapage
+
+- Chaque trame relayée porte un `SEQ` croissant dans l'époque. Un client qui voit un trou de `SEQ`, ou qui se connecte,
+  envoie `PICTO_CANVAS_SYNC` et reçoit `PICTO_CANVAS` (la feuille entière).
+- Un client dont le tampon d'envoi est plein **perd la trame** sans être déconnecté. Seul `PICTO_STROKES` suit ce chemin.
+- Une trame d'une autre époque que `PICTO_CANVAS_EPOCH` est ignorée sans erreur.
+
+### Confidentialité
+
+- `QUESTION.PICTO_WORDS` est retiré des messages `/ws/tv` et `/ws/player` (les trois sites de sérialisation). Il reste
+  présent pour `/ws/admin` et `/ws/anim`.
+- Le mot de la manche n'est dans aucun `UPDATE` ni message à la TV ou à une tablette non dessinatrice ; il n'apparaît dans
+  `GameState` qu'en `REVEALED`, dans une livraison ultérieure.
+
 ## References
 
 - [RFC 6455 - WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)

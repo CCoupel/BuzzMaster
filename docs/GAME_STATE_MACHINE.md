@@ -548,6 +548,43 @@ existante : aucun changement de protocole BuzzClick.
 - `internal/game/roue_wheel.go` : construction de la roue (§10.1 du contrat), correction du pas.
 - `cmd/server/roue.go` : `handleRoueAction`, rappels LED, ambiance et sons (hors `main.go`).
 
+## Type de jeu PICTO — manche en préparation et dessin (v13.0.0, #192, #193)
+
+Référence : `contracts/picto.md` §5, §6.1 à §6.3, §8, §9. Le type réutilise les phases existantes ; il n'en ajoute aucune.
+
+### Préparation — `PREPARE` / `READY`
+
+- Choisir l'équipe (`PICTO_SET_TEAM`) puis le dessinateur, par choix direct ou tirage (`PICTO_SET_DRAWER`, `PICTO_DRAW_DRAWER`),
+  depuis l'admin ou l'animateur. Le dessinateur doit être un VJoueur connecté de l'équipe.
+- `PREPARE → READY` exige une équipe, une durée de 30 à 300 s et au moins un mot. Le dessinateur n'est **pas** exigé à ce stade.
+- `START` est **refusé** sans dessinateur connecté (`PICTO_ERROR NO_DRAWER`) : la phase ne change pas.
+- Le mot n'est remis à personne pendant la préparation.
+
+### Lancement — `COUNTDOWN` → `STARTED`
+
+Au passage en `STARTED`, sous le verrou du moteur :
+1. `PICTO_CANVAS_EPOCH` +1, et le journal de feuille est vidé.
+2. Tirage libre du mot parmi les mots de la question (aucune mémoire entre manches). Sans mot : `PICTO_OUTCOME = NO_WORD`, la manche s'arrête.
+3. `PICTO_WORD` est envoyé au seul dessinateur et à l'admin / animateur. Le mot n'entre pas dans `GameState`.
+
+### Dessin — `STARTED`
+
+- Seul le VJoueur dessinateur émet `PICTO_STROKES`. Le serveur vérifie l'émetteur, l'époque et la forme, puis ajoute la
+  trame au journal et la relaie à la TV, à l'admin et à l'animateur. **Aucun `UPDATE` n'est émis pour un trait** et le moteur
+  ne voit que l'époque.
+- Les appuis `BUTTON` sont ignorés pendant la manche (buzzers et tablettes).
+- En `PAUSED`, la feuille est verrouillée : `PICTO_STROKES` est refusé.
+
+### État non livré
+
+Le jeton de session des tablettes (LOT-2.2) et la fin de manche avec révélation (`PICTO_FOUND`, `PICTO_OUTCOME` `FOUND` /
+`TIMEOUT` / `STOPPED`, `REVEALED`, LOT-2.3) ne sont **pas encore livrés**. Une manche PICTO ne se termine donc pas encore
+par une révélation dans cette version.
+
+### Champs `GameState` PICTO (tous présents, aucun `omitempty`, jamais persistés)
+
+Liste complète et règles de remise à vide : `docs/DATA_MODELS.md`, section « GameState PICTO_* ».
+
 ## Chronomètre de Réponse Configurable (v11.1.0, #219)
 
 ### Vue d'ensemble

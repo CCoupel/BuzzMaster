@@ -2,23 +2,39 @@
 
 Historique des versions du projet BuzzControl.
 
-## [13.0.0] - 2026-11-23 — Picto : type de question et éditeur (LOT-1, #191) — partiel
+## [13.0.0] - 2026-11-23 — Picto : type de question, préparation et dessin en direct (LOT-1 et LOT-2.1, #191 à #193) — partiel
 
-Entrée **partielle** : le type Picto est en cours de livraison (milestone v13.0.0). Le déroulé de la manche
-(équipe, dessinateur, dessin) suivra dans les lots suivants.
+Entrée **partielle** : le type Picto est en cours de livraison (milestone v13.0.0). La fin de manche avec révélation
+et le jeton de session des tablettes suivent dans les lots suivants.
 
 ### Added
 
-- **Type de question « ✏️ Picto » (#191)** — nouveau type de question, à côté des autres types. Le nom affiché
-  est « Picto » : le produit ne reprend aucun nom de jeu commercial.
+- **Type de question « ✏️ Picto » (#191)** — nouveau type de question. Le nom affiché est « Picto » : le produit ne
+  reprend aucun nom de jeu commercial.
 - **Éditeur Picto (#191)** — saisie d'un mot par ligne (1 à 20 mots, 1 à 40 caractères, sans doublon à la casse
   et aux accents près), durée de 30 à 300 secondes (90 par défaut), points et catégorie, avec un résumé avant
   l'enregistrement. Le serveur refuse un mot ou une durée invalide ; l'enregistrement ne se fait alors pas.
+- **Préparation d'une manche Picto (#192)** — choix de l'équipe qui dessine, puis du dessinateur : choix direct
+  parmi les joueurs connectés de l'équipe, ou tirage au hasard, rejouable tant que la manche n'a pas démarré. Le
+  lancement exige un dessinateur connecté.
+- **Mot secret et tirage au lancement (#192)** — le mot est tiré au hasard parmi ceux de la question à chaque
+  lancement, et envoyé seulement au dessinateur, à l'admin et à l'animateur. Il n'apparaît ni sur la TV ni sur les
+  tablettes, et les autres mots de la question sont retirés des messages TV et tablette.
+- **Dessin en direct (#193)** — le dessinateur trace sur sa tablette ; les traits sont relayés à la TV, à l'admin
+  et à l'animateur, sans passer par l'état du jeu. Une feuille est bornée (6 000 traits, 60 000 points), et un client
+  qui perd une trame redemande la feuille entière.
+
+### Changed
+
+- **Page Jeu (#192)** — le temps et les points affichés en préparation sont repris de la question, pour tous les types.
 
 ### Notes
 
-- Une question Picto est enregistrée et sauvegardée avec ses mots, mais la manche n'est pas encore jouable : elle
-  n'est pas lançable avant les lots suivants de v13.0.0 : elle reste en préparation.
+- Une manche Picto n'est pas encore révélée : la fin de manche (« Trouvé », temps écoulé, abandon, révélation du mot)
+  arrive dans un lot suivant. La relance de la question remet la manche en préparation avec une feuille vierge.
+- **Sécurité** : les mots sont lisibles par qui peut ouvrir la liste des questions ou les pages admin et animateur, qui
+  ne demandent pas encore d'authentification. Les tablettes joueurs doivent rester sur un réseau isolé de
+  l'administration en attendant la correction prévue avec #259 (voir ADMIN_GUIDE, « Sécurité »).
 
 ## [12.2.0] - 2026-11-22 — Roue de la Fortune : BONUS sur case à points (#316, #317)
 

@@ -1262,6 +1262,27 @@ dessinateur, tirage du mot, dessin en direct) arrive avec les lots suivants.
 
 > Les mots sont enregistrés avec la question et sauvegardés avec elle.
 
+### Préparer une manche Picto
+
+1. Sélectionner la question Picto. La manche passe en préparation.
+2. **Équipe** : choisir l'équipe qui dessine. Changer d'équipe efface le dessinateur s'il n'en fait pas partie.
+3. **Dessinateur** : choisir un joueur connecté de l'équipe dans la liste, ou cliquer sur **Tirer au hasard**. Le tirage peut
+   être refait tant que la manche n'a pas démarré. Seul un joueur qui a une tablette (VJoueur) connectée peut dessiner.
+4. **Lancer** reste grisé tant que le dessinateur n'est pas désigné et connecté. Le mot est tiré au lancement, parmi les
+   mots de la question, et il est envoyé seulement au dessinateur, à l'admin et à l'animateur.
+5. Pendant la manche, le dessin apparaît en direct sur la TV, sur cet écran et sur l'écran de l'animateur. Une tablette
+   déconnectée revient à sa feuille à la reconnexion.
+
+> Le déroulé est en cours de livraison : la manche ne se termine pas encore par une révélation du mot dans cette version.
+> La relance de la question remet la manche en préparation avec une feuille vierge.
+
+### Sécurité — à lire avant un événement
+
+- Les mots sont **lisibles** par toute personne qui peut ouvrir la liste des questions ou les pages admin et animateur,
+  qui ne demandent pas encore d'authentification.
+- **Conseil** : isoler les tablettes joueurs du réseau d'administration, et ne pas exposer la page de l'animateur ou de
+  l'admin hors du réseau de confiance. La correction est prévue avec #259.
+
 ## Roue de la Fortune (v12.0.0, #144, #145)
 
 > Fonctionnalité livrée dans la v12.0.0.
