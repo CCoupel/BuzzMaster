@@ -200,7 +200,8 @@ s'applique.
 | Appui `BUTTON` (buzzer, tablette, simulation) | — | toutes | **Ignoré** : aucun effet, aucun `UPDATE` général, aucune erreur. L'écho d'état ciblé #248 est conservé pour une tablette |
 
 **La feuille n'est jamais effacée pendant la manche.** Le dessinateur peut continuer par-dessus. Le journal est borné
-(§8.3) ; à 300 s de dessin, les bornes laissent une marge d'environ ×10 sur un usage réel. Pour repartir d'une
+(§8.3). Même en griffonnant sans arrêt pendant 300 s au débit maximal d'un doigt (§8.5, environ 128 points/s), on
+n'atteint que 64 % de la borne ; un dessin réel, avec des pauses, en reste loin. Pour repartir d'une
 feuille vierge, l'admin relance la question (§6.6).
 
 ### 6.4 Fin de manche — quatre issues, un seul chemin de révélation
@@ -291,8 +292,14 @@ VJoueur dessinateur ──PICTO_STROKES──► serveur : garde (§8.6) ─► 
 ### 8.3 Journal de feuille
 
 - Le serveur garde **la feuille de l'époque courante** : la liste ordonnée des traits et leurs points.
-- **Bornes** **[planner, ajustées après la mesure de charge]** : 6 000 traits et 60 000 points par époque. Au-delà,
-  `PICTO_STROKES` est refusé (`PICTO_ERROR CANVAS_FULL`) et le dessinateur voit « Feuille pleine ».
+- **Bornes** **[planner, confirmées après la mesure de charge du LOT-2.1]** : 6 000 traits et 60 000 points par
+  époque. Au-delà, `PICTO_STROKES` est refusé (`PICTO_ERROR CANVAS_FULL`), rien n'est relayé, et le dessinateur voit
+  « Feuille pleine ». Atteindre la borne est un comportement **contractuel**, pas une perte de relais.
+  - **Pourquoi 60 000** : une feuille pleine fait environ 0,7 Mo de JSON. Ce coût est payé à chaque `PICTO_CANVAS`
+    (copie sous verrou, sur le consommateur unique de `wsHub.Incoming`, risque #127). Une borne plus haute rendrait
+    chaque rattrapage plus lourd sans aucun bénéfice de jeu.
+  - **Usage réel** : un doigt produit au plus ~120 événements par seconde, moins après la simplification (§8.5). Une
+    manche de 300 s au débit maximal soutenu fait donc au plus ~38 400 points.
 - Le journal est vidé au `START` d'une manche, au changement de question et à `NEW_GAME`. Il est **conservé** en
   `REVEALED`.
 - Il vit hors moteur (patron REGIE_MESSAGE, « état hors moteur »), protégé par son propre verrou. L'époque est lue
@@ -318,6 +325,9 @@ VJoueur dessinateur ──PICTO_STROKES──► serveur : garde (§8.6) ─► 
   et au dessinateur qui se reconnecte (§6.7).
 - **Cadence côté client** : le VJoueur regroupe ses points et envoie au plus **une trame toutes les 60 ms**, avec au
   plus **200 points** par trame. Il simplifie : un point n'est gardé que s'il est à au moins 15 unités du précédent.
+  Les 200 points sont un **plafond de forme** (taille d'une trame ≤ 4 Ko), pas un débit : le **débit réel** d'un
+  dessinateur est borné par les événements du pointeur, soit environ **8 points par trame à 16 trames/s
+  (~128 points/s)**. C'est le débit de référence de la mesure de charge (§16, `testing.perf.picto_relay`).
 - L'action `PICTO_STROKES` est **exclue du `console.log` systématique** de `sendMessage` (`hooks/useWebSocket.js`).
 
 ### 8.6 Garde d'autorisation de `PICTO_STROKES` — règle de sécurité

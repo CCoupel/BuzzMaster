@@ -23,6 +23,10 @@
   puis plus rien, comme pour `PICTO_STROKES`. L'état de débit de `PICTO_STROKES` et de `PICTO_CANVAS_SYNC` est purgé
   à la fermeture de la connexion. Aucun client légitime n'est touché : la TV, l'admin, l'anim et le dessinateur
   restent servis.
+- **[CHANGED — précision, sans effet sur le code]** `picto.md` §8.3 / §8.5 : la borne de 60 000 points par époque est
+  confirmée, et `CANVAS_FULL` est un comportement contractuel. Le débit de référence d'un dessinateur est d'environ
+  128 points/s (16 trames × 8 points) ; les 200 points par trame sont un plafond de taille, pas un débit. Arbitrage de
+  la mesure de charge du LOT-2.1.
 
 ---
 ## [20261123] — v13.0.0 — Type de jeu PICTO (#191 à #194)
