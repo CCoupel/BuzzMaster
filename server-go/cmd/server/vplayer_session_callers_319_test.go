@@ -256,7 +256,7 @@ func enclosingFuncs319(src string, re *regexp.Regexp) []string {
 }
 
 func TestVPlayerSession319_Critical_NoProductionCallToExportedSeatCreators(t *testing.T) {
-	for _, call := range []string{"CreateVirtualPlayer", "HandleVirtualPlayerConnect"} {
+	for _, call := range []string{"CreateVirtualPlayer"} {
 		re := regexp.MustCompile(`\.` + call + `\(`)
 		for path, src := range productionGoFiles319(t) {
 			if hits := codeLines319(src, re); len(hits) > 0 {
@@ -306,8 +306,8 @@ func TestVPlayerSession319_Critical_SeatCreationOnlyThroughTheEnrolmentPath(t *t
 // Toute construction littérale d'une place de VJoueur en production est listée : une nouvelle doit être décidée ici.
 func TestVPlayerSession319_SeatConstructionSitesAreListed(t *testing.T) {
 	re := regexp.MustCompile(`IsVirtual:\s*true`)
-	// HandleVirtualPlayerConnect : ancienne entrée historique, aucun appelant (voir le test ci-dessus) — signalée à la revue.
-	allowed := map[string]bool{"createVirtualPlayerUnsafe": true, "HandleVirtualPlayerConnect": true}
+	// Seule construction légitime : createVirtualPlayerUnsafe (HandleVirtualPlayerConnect, ancienne entrée sans appelant, a été supprimée).
+	allowed := map[string]bool{"createVirtualPlayerUnsafe": true}
 	for path, src := range productionGoFiles319(t) {
 		for _, f := range enclosingFuncs319(src, re) {
 			if !allowed[f] {
