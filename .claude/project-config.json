@@ -48,7 +48,7 @@
           "credentials_env": [],
           "verified": {
             "status": "ok",
-            "at": "2026-11-16T10:20:00Z",
+            "at": "2026-11-23T16:20:00Z",
             "checks": [
               "target-dir (build/qualif_v<X.Y.Z>/ writable) : ok",
               "toolchain (go1.26.11, node v22.23.3, pio) : ok",
@@ -101,7 +101,25 @@
     "regression_at_qa": "gated",
     "full_regression_at": "qualif",
     "coverage_min": 70,
-    "lot_max_tests": 50
+    "lot_max_tests": 50,
+    "perf": {
+      "picto_relay": {
+        "p95_ms": 100,
+        "frame_max_bytes": 4096,
+        "nominal": {
+          "frames_per_s": 16,
+          "points_per_frame": 200,
+          "duration_s": 300,
+          "disconnects_max": 0,
+          "frames_lost_max": 0
+        },
+        "x3": {
+          "disconnects_max": 0,
+          "losses_tolerated": true
+        },
+        "source": "tests/perf/picto-load.md"
+      }
+    }
   },
   "security": {
     "concerns": []
