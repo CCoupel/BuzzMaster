@@ -135,8 +135,8 @@ describe('QuestionsPage — sélecteur de type de QUESTION, une seule rangée po
     vi.clearAllMocks()
   })
 
-  it('QUESTION_TYPES compte bien 8 entrées à ce jour (garde de contexte — si ce nombre change, les assertions ci-dessous restent valables sans modification)', () => {
-    expect(QUESTION_TYPES.length).toBe(8)
+  it('QUESTION_TYPES compte bien 9 entrées à ce jour (garde de contexte — si ce nombre change, les assertions ci-dessous restent valables sans modification)', () => {
+    expect(QUESTION_TYPES.length).toBe(9)
   })
 
   it('rend un bouton .type-btn pour CHAQUE entrée de QUESTION_TYPES, dans l\'ordre, sans aucun être omis ni dupliqué', () => {
