@@ -183,6 +183,10 @@ type Engine struct {
 	roueParams RoueWheelParams
 	roueSeq    int
 
+	// PICTO (v13.0.0, #192, contracts/picto.md §3.2/§10): the SECRET word of the round (never in GameState
+	// before REVEALED) — drawn at START, kept until the next Ready / NEW_GAME.
+	pictoWord string
+
 	// rafaleAlpha (#282, contracts/rafale.md §15.4) is the alphabetical draw
 	// queue of the current classic round; nil ⇔ option off. Ephemeral like
 	// rafaleDraw, but explicitly released by stopUnsafe/Ready/InitGame.
@@ -407,6 +411,14 @@ type Engine struct {
 	// read at each START; called under the engine lock, it must not call back
 	// into the Engine.
 	RoueWheelParamsFn func() RoueWheelParams
+	// PICTO callbacks (v13.0.0, #192, contracts/picto.md §6, §10), all fired OUTSIDE the engine lock.
+	// OnPictoChange: a preparation action changed the state — broadcast UPDATE, refresh LED / ambiance.
+	// OnPictoCanvasReset(epoch): the sheet journal must restart empty for this epoch (START: epoch+1;
+	// question change, relaunch, NEW_GAME: current epoch). OnPictoWord: the word of the round was drawn
+	// at START — send PICTO_WORD to the drawer and to admin / anim ONLY, never through GameState.
+	OnPictoChange      func()
+	OnPictoCanvasReset func(epoch int)
+	OnPictoWord        func(PictoWordInfo)
 	// OnRafaleInvalid (v11.0/#227, contracts/sound.md §2.1's CuePerdu) fires
 	// on a classic RAFALE round's RAFALE_INVALIDATE (RafaleInvalidate,
 	// below) or its question-timer expiry — "identique à réponse invalide"
@@ -495,6 +507,8 @@ func NewEngine() *Engine {
 			RoueTeams: []string{}, RoueCurrentTeamColor: []int{}, RoueTeamBank: map[string]int{},
 			RoueBoard: RoueBoard{Cols: RoueBoardCols, Rows: []string{}}, RoueLetters: []RoueLetter{},
 			RoueWheel: RoueWheel{Segments: []RoueSegment{}, Current: -1}, RoueAwards: map[string]int{},
+			// PICTO (v13.0.0, #192): never nil.
+			PictoTeamColor: []int{}, PictoCandidates: []PictoCandidate{},
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
 			// empty (not nil) so JSON serializes [] (not null) before the
 			// first UPDATE_QUIZ_META (contract game-state.md §"Aucun omitempty").
@@ -1128,6 +1142,7 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 		e.purgeInactiveParticipantUnsafe(teamLostLastBumper)
 		newPhase = e.reevaluatePrepareReadyUnsafe()
 	}
+	e.pictoRefreshUnsafe() // PICTO (#192): candidates / drawer connection follow the roster
 	callback := e.OnStateChange
 	e.mu.Unlock()
 
@@ -1277,6 +1292,7 @@ func (e *Engine) DeleteBumper(id string) *Bumper {
 		e.purgeInactiveParticipantUnsafe(deletedTeam)
 		newPhase = e.reevaluatePrepareReadyUnsafe()
 	}
+	e.pictoRefreshUnsafe() // PICTO (#192, §6.7): a deleted drawer is purged
 
 	callback := e.OnStateChange
 	e.mu.Unlock()
@@ -1509,6 +1525,15 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	if isNewQuestion || roueRoundLeft {
 		e.resetRoueStateUnsafe() // ROUE (#144, contract §4)
 	}
+	// PICTO (#192, contracts/picto.md §5, §6.6): a new question clears the preparation; a relaunch of the same
+	// question keeps team and drawer. Outcome, revealed word and secret word are always cleared.
+	if isNewQuestion {
+		e.resetPictoPrepUnsafe()
+	}
+	e.resetPictoRoundUnsafe()
+	e.pictoRefreshUnsafe()
+	pictoSheetReset := isNewQuestion || e.isPictoQuestionUnsafe()
+	pictoEpoch := e.state.PictoCanvasEpoch
 	rafaleNextReleased := false
 	if isNewQuestion || rafaleRoundAlreadyPlayed {
 		rafaleNextReleased = e.releaseRafaleNextUnsafe()
@@ -1537,6 +1562,10 @@ func (e *Engine) Ready(questionID string, question *Question) {
 
 	if rafaleNextReleased {
 		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
+
+	if pictoSheetReset {
+		e.firePictoCanvasReset(pictoEpoch) // PICTO (#192): the journal restarts empty
 	}
 
 	if callback != nil {
@@ -1653,6 +1682,12 @@ func (e *Engine) purgeInactiveParticipantUnsafe(teamID string) {
 			e.state.RafaleCurrentTeam = ""
 			e.state.RafaleCurrentTeamColor = []int{}
 		}
+	}
+
+	if e.state.PictoTeam == teamID {
+		e.state.PictoTeam, e.state.PictoDrawer = "", ""
+		e.pictoRefreshUnsafe()
+		removed = true
 	}
 
 	if removed {
@@ -1871,9 +1906,9 @@ func participantsConform(question *Question, state *GameState) bool {
 		// selection, same UX as MEMORY SOLO, before START).
 		return participantsCountConform(question.RafaleMode, len(state.RafaleParticipatingTeams))
 	case QuestionTypePicto:
-		// v13.0.0 LOT-1 (#191): the PICTO round does not exist yet — a PICTO question stays in
-		// PREPARE. LOT-2.1 replaces this with the real guard (team, time 30–300, at least one word).
-		return false
+		// v13.0.0 (#192, contracts/picto.md §6.1): a team chosen, TIME in 30–300 s, at least one word.
+		// The drawer is not required for READY; START requires it (PictoStartCheck).
+		return pictoParticipantsConform(question, state)
 	case QuestionTypeRoue:
 		// v12.0.0 (#144, contracts/roue.md §13 item 4): ROUE_TEAMS conform to
 		// ROUE_MODE (SOLO = 1 team, otherwise >= 2) and a non-empty phrase.
@@ -1973,6 +2008,12 @@ func (e *Engine) Start(delay int) {
 	// SetMotionParticipatingTeams), and READY is only reached when conform.
 	if e.state.Phase != PhaseReady {
 		log.Printf("[Engine] Cannot start game from phase %s (must be READY)", e.state.Phase)
+		e.mu.Unlock()
+		return
+	}
+	// PICTO (#192, §6.1): START refused without a designated, connected drawer (state unchanged).
+	if perr := e.pictoStartCheckUnsafe(); perr != nil {
+		log.Printf("[Engine] Cannot start PICTO round: %s", perr.Code)
 		e.mu.Unlock()
 		return
 	}
@@ -2371,6 +2412,7 @@ func (e *Engine) actualStart() {
 	// not skip it the way MEMOTION does.
 	rafaleStart := e.startRafaleRoundUnsafe()
 	e.startRoueRoundUnsafe() // ROUE (#144): board, wheel, pots, first team — no-op for any other type
+	pictoStart := e.startPictoRoundUnsafe() // PICTO (#192): epoch + free draw of the word — nil for any other type
 
 	// ENTRACTE (#214, v9.0.0): raise the pause flag from this question's own
 	// config — see startEntracteQuestionUnsafe's own doc comment. A no-op
@@ -2390,6 +2432,8 @@ func (e *Engine) actualStart() {
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
 	e.mu.Unlock()
+
+	e.finishPictoRoundStart(pictoStart) // PICTO (#192): sheet reset then PICTO_WORD, before the UPDATE
 
 	if callback != nil {
 		callback(PhaseStarted)
@@ -2454,6 +2498,7 @@ func (e *Engine) StartImmediate(delay int) {
 	// actualStart entirely (used by tests), so it needs the same init call.
 	rafaleStart := e.startRafaleRoundUnsafe()
 	e.startRoueRoundUnsafe() // ROUE (#144) — mirrors actualStart()
+	pictoStart := e.startPictoRoundUnsafe() // PICTO (#192) — mirrors actualStart()
 
 	// ENTRACTE (#214, v9.0.0) — mirrors actualStart(), same reasoning.
 	e.startEntracteQuestionUnsafe()
@@ -2474,6 +2519,8 @@ func (e *Engine) StartImmediate(delay int) {
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
 	e.mu.Unlock()
+
+	e.finishPictoRoundStart(pictoStart) // PICTO (#192): sheet reset then PICTO_WORD, before the UPDATE
 
 	if callback != nil {
 		callback(PhaseStarted)
@@ -3809,6 +3856,13 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		return false
 	}
 
+	// Ignore buzz for PICTO questions (v13.0.0, #192, contracts/picto.md §2.10, §6.3): the guessing is oral.
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypePicto {
+		log.Printf("[Engine] Ignoring buzz for PICTO question from %s", bumperID)
+		e.mu.Unlock()
+		return false
+	}
+
 	// Ignore buzz for ENTRACTE questions (v9.0.0, #214) — "ni buzzer"
 	// (contract game-state.md §"Second déclencheur"): a programmed pause has
 	// no player interaction whatsoever, same discipline as the RAFALE guard
@@ -4276,6 +4330,8 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	e.state.RafaleExhausted = false
 	e.resetRafaleAlphaUnsafe() // #282
 	e.resetRoueStateUnsafe()   // ROUE (#144, contract §4)
+	e.resetPictoPrepUnsafe()   // PICTO (#192, §5)
+	e.resetPictoRoundUnsafe()
 
 	log.Printf("[Engine] Game initialized (scores=%v players=%v teams=%v questions=%v)",
 		opts.PurgeScores, opts.PurgePlayers, opts.PurgeTeams, opts.ResetQuestions)
@@ -6568,6 +6624,7 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 			// to rename the current player). The server-side name is authoritative.
 			bumper.Connected = true
 			applyConnEventUnsafe(bumper, ConnEventReconnect)
+			e.pictoRefreshUnsafe() // PICTO (#192): drawer reconnected
 			// #122 B2/B3 — the player found their way back on their own: any
 			// pending "place demandée" signal or reclaim authorization for this
 			// bumper is now moot.
@@ -6666,6 +6723,7 @@ func (e *Engine) reattachVirtualPlayerUnsafe(oldID string, bumper *Bumper, name 
 	bumper.ReclaimRequested = false
 	bumper.reclaimAuthorizedUntil = time.Time{} // consumed — single use
 	applyConnEventUnsafe(bumper, ConnEventReconnect)
+	e.pictoRefreshUnsafe() // PICTO (#192): the seat is re-keyed
 
 	safeGo("SaveBumpers", e.SaveBumpers)
 	return newID
@@ -6756,6 +6814,7 @@ func (e *Engine) ReleaseSeat(id string) (newID string, wasConnected bool, ok boo
 	newID = e.rekeyBumperUnsafe(id, bumper, bumper.Name)
 	bumper.Connected = false
 	applyConnEventUnsafe(bumper, ConnEventDisconnect)
+	e.pictoRefreshUnsafe() // PICTO (#192): the evicted seat is re-keyed, a stale drawer ID is purged
 	bumper.ReclaimRequested = false
 	bumper.reclaimAuthorizedUntil = time.Now().Add(reclaimAuthorizationTTL)
 
@@ -8560,6 +8619,7 @@ func (e *Engine) RenameTeamState(oldName, newName string) []string {
 	note(moveKey(st.RoueTeamBank, oldName, newName), "ROUE_TEAM_BANK")
 	note(moveKey(st.RoueAwards, oldName, newName), "ROUE_AWARDS")
 	note(replaceInList(st.RoueTeams, oldName, newName), "ROUE_TEAMS")
+	note(e.pictoRenameTeamUnsafe(oldName, newName), "PICTO_TEAM")
 	for i := range st.RoueLetters {
 		if st.RoueLetters[i].Team == oldName {
 			st.RoueLetters[i].Team = newName
@@ -8654,6 +8714,7 @@ func (e *Engine) purgeTeamStateUnsafe(name string) {
 	st.MotionParticipatingTeams = drop(st.MotionParticipatingTeams)
 	st.RafaleParticipatingTeams = drop(st.RafaleParticipatingTeams)
 	st.RoueTeams = drop(st.RoueTeams)
+	e.pictoPurgeTeamUnsafe(name)
 	delete(st.RoueTeamBank, name)
 	delete(st.RoueAwards, name)
 	for _, f := range []*string{&st.RoueCurrentTeam, &st.RoueNextTeam, &st.RoueWinner} {

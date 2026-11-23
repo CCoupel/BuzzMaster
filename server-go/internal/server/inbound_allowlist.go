@@ -81,6 +81,14 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionRoueFlip:     {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionRoueAnswer:   {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionRoueNext:     {ClientTypeAdmin, ClientTypeAnim},
+	// PICTO (v13.0.0, #192/#193, contracts/picto.md §8.6, §9.1): the preparation is "conduite en direct"; the
+	// strokes come from a VPlayer only (the drawer — the handler checks identity, phase, epoch and rate); the
+	// sheet resync is open to every display and to the drawer's tablet. These are the ONLY widenings for vplayer.
+	protocol.ActionPictoSetTeam:    {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionPictoSetDrawer:  {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionPictoDrawDrawer: {ClientTypeAdmin, ClientTypeAnim},
+	protocol.ActionPictoStrokes:    {ClientTypeVPlayer},
+	protocol.ActionPictoCanvasSync: {ClientTypeAdmin, ClientTypeTV, ClientTypeAnim, ClientTypeVPlayer},
 	// QUESTION_SOUND (v11.1, #219, contract sound.md §10.2): the three
 	// conduite gestures (rejouer/pause/stop) on a question's attached
 	// sound — same périmètre as REVEAL/RAFALE_VALIDATE above.
@@ -345,6 +353,9 @@ var entracteAllowedActions = map[string]bool{
 	protocol.ActionUpdateEntracteConfig: true,
 	protocol.ActionPong:                 true,
 	protocol.ActionClientTrace:          true, // diagnostic: accepted in every phase (#246 arbitrage)
+	// PICTO (v13.0.0, #193, contracts/picto.md §9.1): every other PICTO_* action stays refused during an
+	// entracte; the resync of the sheet is read-only and a reloading display needs it.
+	protocol.ActionPictoCanvasSync: true,
 }
 
 // IsActionAllowedDuringEntracte reports whether action may proceed while

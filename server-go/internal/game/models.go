@@ -1082,6 +1082,20 @@ type GameState struct {
 	RoueWinner    string         `json:"ROUE_WINNER"`
 	RoueAwards    map[string]int `json:"ROUE_AWARDS"`
 
+	// PICTO (v13.0.0, #192, contracts/picto.md §5) — NO omitempty, arrays never null, never persisted,
+	// never sent to the buzzers. The secret word of the round is NEVER here (only PictoRevealedWord, in REVEALED).
+	PictoTeam             string           `json:"PICTO_TEAM"`
+	PictoTeamColor        []int            `json:"PICTO_TEAM_COLOR"`
+	PictoDrawer           string           `json:"PICTO_DRAWER"`
+	PictoDrawerName       string           `json:"PICTO_DRAWER_NAME"`
+	PictoDrawerConnected  bool             `json:"PICTO_DRAWER_CONNECTED"`
+	PictoCandidates       []PictoCandidate `json:"PICTO_CANDIDATES"`
+	PictoWordsCount       int              `json:"PICTO_WORDS_COUNT"`
+	PictoCanvasEpoch      int              `json:"PICTO_CANVAS_EPOCH"`
+	PictoOutcome          string           `json:"PICTO_OUTCOME"`
+	PictoRevealedWord     string           `json:"PICTO_REVEALED_WORD"`
+	PictoRevealedCategory string           `json:"PICTO_REVEALED_CATEGORY"`
+
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero
 	// values (IDLE/false), so a client resets cleanly between questions

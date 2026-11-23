@@ -177,12 +177,15 @@ func TestTeamRename249_ClosedListCoversEveryTeamIndexedGameStateField(t *testing
 		"MEMORY_CURRENT_TEAM": true, "MEMOTION_CURRENT_TEAM": true, "RAFALE_CURRENT_TEAM": true,
 		// v12.0.0 (#144) ROUE : reportés par RenameTeamState / purgeTeamStateUnsafe.
 		"ROUE_TEAMS": true, "ROUE_CURRENT_TEAM": true, "ROUE_NEXT_TEAM": true, "ROUE_TEAM_BANK": true,
+		// v13.0.0 (#192) PICTO : reporté par RenameTeamState / purgeTeamStateUnsafe.
+		"PICTO_TEAM": true,
 	}
 	exceptions := map[string]string{
 		"MEMORY_CURRENT_TEAM_COLOR":   "couleur : inchangée au renommage",
 		"MEMOTION_CURRENT_TEAM_COLOR": "couleur : inchangée au renommage",
 		"RAFALE_CURRENT_TEAM_COLOR":   "couleur : inchangée au renommage",
 		"ROUE_CURRENT_TEAM_COLOR":     "couleur : inchangée au renommage",
+		"PICTO_TEAM_COLOR":            "couleur : inchangée au renommage",
 		"TEAMS_LOCKED":                "drapeau, pas un index d'équipe",
 	}
 	typ := reflect.TypeOf(GameState{})

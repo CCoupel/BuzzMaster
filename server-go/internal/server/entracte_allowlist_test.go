@@ -96,6 +96,12 @@ var entracteExpectedAllowed = map[string]bool{
 	protocol.ActionRoueNext:     false,
 	protocol.ActionRouePass:     false,
 	protocol.ActionRoueReveal:   false,
+	// PICTO (v13.0.0, #192/#193): refused during an entracte, except the read-only resync of the sheet.
+	protocol.ActionPictoSetTeam:    false,
+	protocol.ActionPictoSetDrawer:  false,
+	protocol.ActionPictoDrawDrawer: false,
+	protocol.ActionPictoStrokes:    false,
+	protocol.ActionPictoCanvasSync: true,
 	// QUESTION_SOUND (v11.1, #219, contracts/sound.md §10.2) — same
 	// "conduite en direct" bucket as REVEAL/BUMPER_POINTS/RAFALE_VALIDATE
 	// above: a question's attached sound is part of an active round, and

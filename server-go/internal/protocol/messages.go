@@ -172,6 +172,18 @@ const (
 	ActionRouePass     = "ROUE_PASS"      // Admin → Server: pass the hand at once
 	ActionRoueReveal   = "ROUE_REVEAL"    // Admin → Server: « Dévoiler » the phrase, no winner
 	ActionRoueError    = "ROUE_ERROR"     // Server → emitter: refused action, state unchanged
+	// PICTO actions (v13.0.0, #192/#193 — contracts/picto.md §9). Client → server: the three preparation
+	// actions come from admin / anim; PICTO_STROKES from the drawer's VPlayer only; PICTO_CANVAS_SYNC from
+	// tv / admin / anim / vplayer. Server → client: PICTO_WORD (drawer + admin + anim, the secret word),
+	// PICTO_STROKES (tv / admin / anim, never the tablets), PICTO_CANVAS (the requester), PICTO_ERROR (the emitter).
+	ActionPictoSetTeam    = "PICTO_SET_TEAM"    // Admin/Anim → Server: {TEAM}
+	ActionPictoSetDrawer  = "PICTO_SET_DRAWER"  // Admin/Anim → Server: {PLAYER}
+	ActionPictoDrawDrawer = "PICTO_DRAW_DRAWER" // Admin/Anim → Server: draw the drawer at random
+	ActionPictoStrokes    = "PICTO_STROKES"     // VPlayer drawer → Server; Server → TV/admin/anim
+	ActionPictoCanvasSync = "PICTO_CANVAS_SYNC" // TV/Admin/Anim/VPlayer → Server: whole sheet please
+	ActionPictoCanvas     = "PICTO_CANVAS"      // Server → requester: whole sheet of the epoch
+	ActionPictoWord       = "PICTO_WORD"        // Server → drawer + admin + anim: the secret word
+	ActionPictoError      = "PICTO_ERROR"       // Server → emitter: refused action, state unchanged
 	// RAFALE_ANSWER/RAFALE_TICK are SERVER → CLIENT only (contract §5.2) —
 	// deliberately absent from internal/server/inbound_allowlist.go (see
 	// inbound_allowlist_rafale_test.go's regression guard). RAFALE_ANSWER
@@ -624,6 +636,41 @@ type RoueNextPayload struct {
 type RoueErrorPayload struct {
 	Code    string `json:"CODE"`
 	Message string `json:"MESSAGE"`
+}
+
+// PictoSetTeamPayload for PICTO_SET_TEAM ("" clears the team).
+type PictoSetTeamPayload struct {
+	Team string `json:"TEAM"`
+}
+
+// PictoSetDrawerPayload for PICTO_SET_DRAWER (bumper ID, "" clears the drawer).
+type PictoSetDrawerPayload struct {
+	Player string `json:"PLAYER"`
+}
+
+// PictoErrorPayload for PICTO_ERROR (to the emitter only).
+type PictoErrorPayload = RoueErrorPayload
+
+// PictoWordPayload for PICTO_WORD (contracts/picto.md §9.2): drawer + admin + anim only.
+type PictoWordPayload struct {
+	Word     string `json:"WORD"`
+	Category string `json:"CATEGORY"`
+	Epoch    int    `json:"EPOCH"`
+}
+
+// PictoStroke is one stroke of the sheet: PTS are [x, y] integers in 0..10000 (§8.2), END = finger lifted.
+type PictoStroke struct {
+	ID  int     `json:"ID"`
+	Pts [][]int `json:"PTS"`
+	End bool    `json:"END"`
+}
+
+// PictoStrokesPayload is the shape of PICTO_STROKES (in: from the drawer, SEQ ignored; out: relayed with the
+// SEQ the server assigned) and of PICTO_CANVAS (the whole sheet of the epoch and the current SEQ).
+type PictoStrokesPayload struct {
+	Epoch   int           `json:"EPOCH"`
+	Seq     int           `json:"SEQ"`
+	Strokes []PictoStroke `json:"STROKES"`
 }
 
 // RafaleSetTeamsPayload is an alias for MemorySetTeamsPayload — same

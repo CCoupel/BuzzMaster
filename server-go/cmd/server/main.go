@@ -56,6 +56,8 @@ type App struct {
 	dnsServer   *server.DNSServer
 	logger      *server.BroadcastLogger
 	ackManager  *server.AckManager // ACK tracking for priority buzzer messages (v3.8.0)
+	// pictoCanvas is the PICTO sheet journal (v13.0.0, #193): outside the engine, behind its own lock.
+	pictoCanvas *server.PictoCanvas
 	// soundEngine is the sound-bruitage engine (#227, contracts/sound.md),
 	// read through a.sound(). No real Output exists before #228, so it is
 	// always constructed disabled (see setupSound) — every notifySound()
@@ -659,7 +661,8 @@ func (a *App) setupCallbacks() {
 		a.ambiance().NotifyState()
 	}
 
-	a.setupRoueCallbacks() // ROUE (v12.0.0, #144) — cmd/server/roue.go
+	a.setupRoueCallbacks()  // ROUE (v12.0.0, #144) — cmd/server/roue.go
+	a.setupPictoCallbacks() // PICTO (v13.0.0, #192) — cmd/server/picto.go
 
 	// RAFALE invalid answer / timeout, classic round only (v11.0/#227,
 	// contracts/sound.md §2.1's CuePerdu) — sound-only, no lighting
@@ -1538,6 +1541,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handleReady(msg)
 
 	case protocol.ActionStart:
+		if a.pictoStartRefused(incoming.ClientID) { // PICTO (#192, §6.1): NO_DRAWER, state unchanged
+			break
+		}
 		a.handleStart(msg)
 
 	case protocol.ActionStop:
@@ -1715,6 +1721,15 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		protocol.ActionRoueFlip, protocol.ActionRoueAnswer, protocol.ActionRoueNext, protocol.ActionRouePass,
 		protocol.ActionRoueReveal, protocol.ActionRoueBuyVowel:
 		a.handleRoueAction(incoming.ClientID, msg)
+
+	case protocol.ActionPictoSetTeam, protocol.ActionPictoSetDrawer, protocol.ActionPictoDrawDrawer:
+		a.handlePictoPrepAction(incoming.ClientID, msg)
+
+	case protocol.ActionPictoStrokes:
+		a.handlePictoStrokes(incoming)
+
+	case protocol.ActionPictoCanvasSync:
+		a.handlePictoCanvasSync(incoming.ClientID)
 
 	case protocol.ActionQuestionSound:
 		a.handleQuestionSound(msg)
@@ -4232,6 +4247,8 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		a.wsHub.SendToClient(oldClient, evictedMsg)
 	}
 
+	a.sendPictoToPlayer(bumperID) // PICTO (#192/#193, §6.7): the drawer picks its word and its sheet back up
+
 	if reconnected {
 		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", bumperID, bumper.Name)
 		// #129 T1.4: Admin/TV/Buzzer see the roster change; no OTHER VPlayer
@@ -4546,6 +4563,7 @@ var suspendedDuringLaunch = map[string]bool{
 	protocol.ActionRoueSetTeams: true, protocol.ActionRoueSpin: true, protocol.ActionRoueStop: true,
 	protocol.ActionRoueLetter: true, protocol.ActionRoueBuyVowel: true, protocol.ActionRoueFlip: true, protocol.ActionRoueAnswer: true,
 	protocol.ActionRoueNext: true, protocol.ActionRouePass: true, protocol.ActionRoueReveal: true,
+	protocol.ActionPictoSetTeam: true, protocol.ActionPictoSetDrawer: true, protocol.ActionPictoDrawDrawer: true,
 	// points
 	protocol.ActionTeamPoints: true, protocol.ActionBumperPoints: true, protocol.ActionTeamPointsBatch: true,
 	protocol.ActionBumperPointsBatch: true, protocol.ActionSetCreditPoints: true,
@@ -5740,6 +5758,9 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 	if a.regieMessage != nil && a.regieMessage.Active && (clientType == server.ClientTypeAnim || clientType == server.ClientTypeAdmin) {
 		a.wsHub.SendToClient(clientID, a.buildRegieMessage())
 	}
+
+	// PICTO (v13.0.0, #193, contracts/picto.md §6.7): sheet (and word for admin / anim) of a round in progress.
+	a.sendPictoToClient(clientID, clientType)
 }
 
 // getStorageInfo returns file storage information (in bytes, like ESP32)
