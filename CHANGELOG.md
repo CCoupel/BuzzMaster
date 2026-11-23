@@ -18,7 +18,7 @@ Entrée **partielle** : le type Picto est en cours de livraison (milestone v13.0
 ### Notes
 
 - Une question Picto est enregistrée et sauvegardée avec ses mots, mais la manche n'est pas encore jouable : elle
-  n'est pas lançable avant les lots suivants de v13.0.0.
+  n'est pas lançable avant les lots suivants de v13.0.0 : elle reste en préparation.
 
 ## [12.2.0] - 2026-11-22 — Roue de la Fortune : BONUS sur case à points (#316, #317)
 

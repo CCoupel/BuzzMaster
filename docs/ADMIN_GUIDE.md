@@ -1250,14 +1250,15 @@ dessinateur, tirage du mot, dessin en direct) arrive avec les lots suivants.
 ### Créer une question Picto
 
 1. Page **Questions** → nouvelle question → type **✏️ Picto**.
-2. **Mots** : saisir un mot par ligne (1 à 20 mots). Un mot doit faire 1 à 40 caractères : lettres (accents compris),
+2. **Titre** (liste des questions) : obligatoire.
+3. **Mots** : saisir un mot par ligne (1 à 20 mots). Un mot doit faire 1 à 40 caractères : lettres (accents compris),
    chiffres, espace, apostrophe ou tiret. Deux mots identiques, accents et majuscules ignorés, sont refusés
    (« Éléphant » et « elephant » font un doublon). Les mots refusés sont signalés dans l'éditeur ; le serveur a le
    dernier mot.
-3. **Durée** : de 30 à 300 secondes, 90 par défaut.
-4. **Points** : points attribués à l'équipe qui trouve le mot, comme pour les autres types.
-5. **Catégorie** : une seule, affichée en indice sur la TV.
-6. Vérifier le résumé, puis enregistrer.
+4. **Durée** : de 30 à 300 secondes, 90 par défaut.
+5. **Points** : points proposés au crédit de l'équipe quand le mot est trouvé, ajustables (crédit manuel).
+6. **Catégorie** : une seule ; elle sera affichée en indice sur la TV à partir du LOT-2.1.
+7. Vérifier le résumé, puis enregistrer.
 
 > Les mots sont enregistrés avec la question et sauvegardés avec elle.
 
