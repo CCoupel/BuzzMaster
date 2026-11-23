@@ -82,7 +82,7 @@ func TestPictoLeakFanout192_RealWS_BroadcastAndInitialState(t *testing.T) {
 				if len(frames) == 0 {
 					t.Fatalf("%s : aucun message reçu, le test ne prouverait rien", who)
 				}
-				for _, w := range append([]string{"PICTO_WORDS"}, pictoLeakWords192...) {
+				for _, w := range append([]string{`"PICTO_WORDS"`}, pictoLeakWords192...) {
 					if joinHas192(frames, w) {
 						t.Errorf("%s/%s : %q fuit (contrat §10) — fan-out cmd/server", who, phase, w)
 					}

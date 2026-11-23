@@ -18,6 +18,7 @@ package main
 // ---------------------------------------------------------------------------
 
 import (
+	"buzzcontrol/internal/game"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -94,6 +95,8 @@ func newLoadEnv(t *testing.T) *loadEnv {
 	t.Helper()
 	w := newPictoWire(t) // 3 joueurs : la mesure en ajoute pour atteindre 12 VJoueurs
 	base := startAnimAllowlistTestServer(t, w.app)
+	prevPhase := w.app.engine.GetState().Phase
+	w.app.engine.SetPhase(game.PhaseEnroll) // les inscriptions ne sont ouvertes qu'en ENROLL
 	for i := 0; i < loadPlayers-3; i++ {
 		id := setupVirtualPlayer(t, w.app, fmt.Sprintf("Joueur%02d", i), "TeamA")
 		c := newWireClient(t, "extra", dialWS(t, base, "/ws/player"))
@@ -101,6 +104,7 @@ func newLoadEnv(t *testing.T) *loadEnv {
 		w.send(t, c, protocol.ActionPlayerConnect, protocol.PlayerConnectPayload{Name: fmt.Sprintf("Joueur%02d", i), ID: id})
 		c.waitAction(t, "PLAYER_CONNECTED", 1, 3*time.Second)
 	}
+	w.app.engine.SetPhase(prevPhase)
 	w.chooseTeamAndDrawer(t, w.aliceID)
 	w.startRound(t, w.alice)
 	epoch := int(gameField(t, w.admin, "PICTO_CANVAS_EPOCH").(float64))

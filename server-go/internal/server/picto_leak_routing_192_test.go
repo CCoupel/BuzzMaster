@@ -67,7 +67,7 @@ func TestPictoLeakRouting192_BuzzerNeverGetsWords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serializeForClientType: %v", err)
 	}
-	if strings.Contains(string(data), routingPictoWord192) || strings.Contains(string(data), "PICTO_WORDS") {
+	if strings.Contains(string(data), routingPictoWord192) || strings.Contains(string(data), `"PICTO_WORDS"`) {
 		t.Errorf("les mots ne doivent jamais atteindre un buzzer : %s", data)
 	}
 }

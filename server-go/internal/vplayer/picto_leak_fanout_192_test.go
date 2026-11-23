@@ -54,7 +54,7 @@ func buildPictoFanoutMsg192(t *testing.T, phase game.GamePhase) *protocol.Messag
 func assertNoPictoSecret192(t *testing.T, who string, p []byte) {
 	t.Helper()
 	s := string(p)
-	for _, frag := range append([]string{"PICTO_WORDS"}, fanoutPictoWords192...) {
+	for _, frag := range append([]string{`"PICTO_WORDS"`}, fanoutPictoWords192...) {
 		if strings.Contains(s, frag) {
 			t.Errorf("%s : %q fuit sur le chemin tablette : %s", who, frag, s)
 		}

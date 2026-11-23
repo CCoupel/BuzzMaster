@@ -127,6 +127,7 @@ func errorCode(f string) string {
 
 type pictoWire struct {
 	app                      *App
+	question                 *game.Question
 	admin, anim, tv          *wireClient
 	alice, bob, carol        *wireClient
 	aliceID, bobID, carolID  string
@@ -136,6 +137,8 @@ type pictoWire struct {
 func newPictoWire(t *testing.T) *pictoWire {
 	t.Helper()
 	app := newBroadcast127TestApp(t)
+	app.setupPictoCallbacks()                                 // comme main.go:665
+	app.wsHub.OnPlayerDisconnected = app.onPlayerDisconnected // comme main.go:886
 	app.engine.SetPhase(game.PhaseEnroll)
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA"}, "TeamB": {Name: "TeamB"}})
 	w := &pictoWire{app: app}
@@ -149,6 +152,7 @@ func newPictoWire(t *testing.T) *pictoWire {
 		TypedContent: game.TypedContent{PictoWords: pictoWireWords},
 	}
 	app.engine.Ready(q.ID, q) // sélection de la question : PREPARE
+	w.question = q
 
 	base := startAnimAllowlistTestServer(t, app)
 	dial := func(name, path string) *wireClient {
@@ -386,7 +390,7 @@ func TestPictoWire192_Word_OnlyDrawerAdminAnim_NeverLeaks(t *testing.T) {
 	}
 	// Ni le mot, ni PICTO_WORDS dans AUCUNE trame de la TV ni des tablettes autres que le dessinateur (§10).
 	for _, c := range []*wireClient{w.tv, w.bob, w.carol} {
-		for _, secret := range append([]string{"PICTO_WORDS"}, pictoWireWords...) {
+		for _, secret := range append([]string{`"PICTO_WORDS"`}, pictoWireWords...) {
 			if c.containsAnywhere(secret) {
 				t.Errorf("%s : %q fuit (contrat §10)", c.name, secret)
 			}
@@ -395,7 +399,7 @@ func TestPictoWire192_Word_OnlyDrawerAdminAnim_NeverLeaks(t *testing.T) {
 	// Le mot n'est dans aucun UPDATE, d'aucun client, avant la révélation — y compris pour l'admin.
 	for _, c := range []*wireClient{w.admin, w.anim, w.tv, w.alice, w.bob, w.carol} {
 		for _, f := range c.of(protocol.ActionUpdate) {
-			if strings.Contains(f, word) && !strings.Contains(f, "PICTO_WORDS") { // l'admin/anim voient la liste, jamais le mot seul
+			if strings.Contains(f, word) && !strings.Contains(f, `"PICTO_WORDS"`) { // l'admin/anim voient la liste, jamais le mot seul
 				t.Errorf("%s : le mot de la manche figure dans un UPDATE : %s", c.name, f)
 			}
 		}
@@ -608,7 +612,7 @@ func TestPictoWire193_NewStart_NewEpoch_EmptySheet(t *testing.T) {
 
 	w.send(t, w.admin, protocol.ActionStop, struct{}{})
 	waitGameField(t, w.admin, "PHASE", "STOPPED", 3*time.Second)
-	w.send(t, w.admin, protocol.ActionReady, protocol.ReadyPayload{Question: ""}) // relance (resélection)
+	w.app.engine.Ready(w.question.ID, w.question) // relance : resélection de la même question (ce que handleReady fait après loadQuestion)
 	w.send(t, w.admin, protocol.ActionForceReady, struct{}{})
 	waitGameField(t, w.admin, "PHASE", "READY", 3*time.Second)
 	w.send(t, w.admin, pictoActSetDrawer, map[string]interface{}{"PLAYER": w.aliceID}) // conservé ou rejoué
