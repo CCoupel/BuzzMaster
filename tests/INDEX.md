@@ -292,3 +292,6 @@
 | server-go/web/src/utils/questionTypeMeta.picto.191.test.js | unit | admin-game | #191 PICTO LOT-1 : entrée questionTypeMeta (label Picto, ✏️, non nestable, non générable) | feature | |
 | tests/procedures/picto/lot-1/creer-editer-question-picto.md | manual | admin-game | #191 PICTO LOT-1 procédure : créer/éditer une question Picto (5 scénarios HUMAIN) | feature | |
 | server-go/web/src/pages/QuestionsPage.picto.191.test.jsx | unit | admin-game | #191 PICTO LOT-1 éditeur (revue M4) : ajout Entrée/virgule/collage, retrait, plafond 20, durée 90 pré-remplie et bornes 30-300, prêt à enregistrer, FormData picto_words, refus serveur affiché, aucune règle de mot côté client | feature | critical |
+| server-go/internal/vplayer/picto_leak_fanout_192_test.go | integration | vplayer, protocol | #192 fuite PICTO_WORDS sur le chemin chaud tablettes (BuildPayloads, repli commun, toutes phases) §10 | feature | critical |
+| server-go/internal/server/picto_leak_routing_192_test.go | integration | websocket, protocol | #192 fuite PICTO_WORDS par type de client (admin/anim gardent, tv/tablette/buzzer jamais), 7 phases §10 | feature | critical |
+| server-go/cmd/server/picto_leak_fanout_192_test.go | integration | websocket, app | #192 fuite PICTO_WORDS au fan-out réel cmd/server (broadcastUpdateTo + sendStateToClient, vraie WS, 6 phases) §10 | feature | critical |
