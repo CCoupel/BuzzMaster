@@ -1523,6 +1523,17 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	// PICTO (v13.0.0, #191, contracts/picto.md §11): TIME 30–300 and the words
+	// (one per line) are re-read at each save — handleUploadQuestion rebuilds the
+	// question from scratch, a field not read here would be destroyed (RAFALE
+	// bugfix 2026-08-31). A refusal answers 400 prefixed by its code, nothing written.
+	if questionType == string(game.QuestionTypePicto) {
+		if status, msg := applyPictoFields(r, question); status != 0 {
+			http.Error(w, msg, status)
+			return
+		}
+	}
+
 	// Handle RAFALE specific fields (v8.0.0, #107, contract §3.3) — round
 	// configuration: difficulty/mode/seconds-per-question/max-questions.
 	// CATEGORY is already handled generically above (shared field, contract

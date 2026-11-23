@@ -66,15 +66,24 @@ func rafaleFold(s string) string {
 	return strings.ToUpper(b.String())
 }
 
+// foldKey is the shared folding of a text onto a comparison key: trims, drops
+// leading non-alphanumerics, folds accents, upper-cases, turns the typographic
+// apostrophe into '. Single implementation used by rafaleAlphaKey (RAFALE
+// alphabetical mode) and by the PICTO word uniqueness key (contracts/picto.md
+// §3.1) — never duplicated.
+func foldKey(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimLeftFunc(s, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	s = rafaleFold(s)
+	return strings.ReplaceAll(s, "’", "'")
+}
+
 // rafaleAlphaKey normalises a RAFALE answer for the alphabetical mode
 // (contract §15.3, pure function): trims, drops leading non-alphanumerics,
 // folds accents, upper-cases, removes ONE leading article, and returns the
 // resulting sort key together with its letter ("A".."Z", or "#").
 func rafaleAlphaKey(answer string) (letter, sortKey string) {
-	s := strings.TrimSpace(answer)
-	s = strings.TrimLeftFunc(s, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
-	s = rafaleFold(s)
-	s = strings.ReplaceAll(s, "’", "'")
+	s := foldKey(answer)
 	for _, art := range rafaleArticles {
 		if strings.HasPrefix(s, art) {
 			s = strings.TrimLeft(s[len(art):], " ")

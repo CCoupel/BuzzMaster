@@ -33,7 +33,9 @@ const persistedGameStateFormatVersion = 1
 // Explicitly NOT included, and why:
 //   - Phase, Question, Memory*, Motion* (including MotionActive — #184,
 //     B-B4, contract §5.2's "Non persisté"), ArdoiseAnswers,
-//     EnrollmentActive, ShowQRCode, Entracte (v6.5.2, #119), Rafale* (v8.0.0,
+//     EnrollmentActive, ShowQRCode, Entracte (v6.5.2, #119), Picto* (v13.0.0,
+//     contracts/picto.md §5 — "jamais persistés": team/drawer/epoch/outcome of
+//     the round in progress; the words live in the question file), Rafale* (v8.0.0,
 //     #107, contracts/rafale.md §4 — "tous ces champs sont éphémères"; only
 //     rafale_used.json, a separate file managed by rafale_store.go, actually
 //     persists across a restart): ephemeral, per-game-in-progress

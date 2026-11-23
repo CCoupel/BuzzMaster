@@ -180,6 +180,14 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		NestableInMotionCard: false, // contracts/roue.md §3
 		HasPlayerInput:       false, // the buzz goes through the existing BUTTON action
 	},
+	QuestionTypePicto: {
+		Type: QuestionTypePicto,
+		// CATEGORY (generic), TIME and POINTS are reused, not owned (contracts/picto.md §4).
+		OwnedFields:          []string{"PICTO_WORDS"},
+		MediaSlots:           nil,   // the word is text, the sheet is produced in play
+		NestableInMotionCard: false, // a round needs a drawer and a relay: meaningless in a card
+		HasPlayerInput:       true,  // PICTO_STROKES comes from a VPlayer
+	},
 	QuestionTypeEntracte: {
 		Type:        QuestionTypeEntracte,
 		OwnedFields: []string{"ENTRACTE_CONFIG"},

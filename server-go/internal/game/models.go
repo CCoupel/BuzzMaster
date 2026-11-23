@@ -176,6 +176,9 @@ const (
 	// guess letter by letter, a wheel drawing the value of each consonant —
 	// contracts/roue.md.
 	QuestionTypeRoue QuestionType = "ROUE"
+	// QuestionTypePicto (v13.0.0, #191): "Picto" — one team's drawer draws a
+	// secret word on a tablet, the team guesses it orally — contracts/picto.md.
+	QuestionTypePicto QuestionType = "PICTO"
 )
 
 // KeyboardType represents the virtual keyboard layout for ARDOISE questions
@@ -417,6 +420,11 @@ type TypedContent struct {
 	RoueBonusCount         *int `json:"ROUE_BONUS_COUNT,omitempty"` // BONUS marks laid on points cases (v12.2.0 #316; v12.1.0 #308: added cases), 0 (absent) to 4
 	// v12.2.0 #317 (contract §17.5): EPHEMERAL | PERMANENT, present = customised for this question, absent = global.
 	RoueBonusMode string `json:"ROUE_BONUS_MODE,omitempty"`
+
+	// PICTO (v13.0.0, #191, contracts/picto.md §4) — question host only, never
+	// nestable. 1 to 20 words (rules §3.1, see picto_words.go), one of which is
+	// drawn at each START. SECRET: stripped from TV / tablet messages (§10).
+	PictoWords []string `json:"PICTO_WORDS,omitempty"`
 }
 
 // Effective vowel settings (contract §15.1.1: absent = default).
@@ -649,6 +657,7 @@ func AllQuestionTypes() []QuestionType {
 		QuestionTypeRafale,
 		QuestionTypeEntracte,
 		QuestionTypeRoue,
+		QuestionTypePicto,
 	}
 }
 
