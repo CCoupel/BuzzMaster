@@ -1716,7 +1716,120 @@ se range dans `PRIVATE/<ENV>/` (Etape 10b) : la variable de `<env>.env` le desig
 
 ---
 
-## Etape 9 : Tests
+### Etape 8c : Fusion vers `main` (`release.merge_mode`) — autorisation a verifier
+
+PUBLISH PROD doit pouvoir livrer **en autonomie** : le mode par defaut est **`pr`** (le `deployer` ouvre une Pull Request
+`milestone/vX.Y.Z` → `main`, attend les checks requis, la fusionne en merge commit, puis tague). `direct` (merge local +
+`git push origin HEAD:main`) n'est propose que si `main` n'est pas protegee. Chaque milestone peut surcharger ce defaut
+au GATE 2 (`cadrage.merge_mode`, `MILESTONE_CADRAGE.md` §2). **On ne contourne jamais une regle de branche** (ni `--admin`,
+ni push force, ni desactivation de protection) : si l'autonomie est impossible, on explique comment l'autoriser sur GitHub.
+
+Deux causes distinctes, a ne pas confondre : le **jeton** (ce que `gh` a le droit de faire) et les **regles du depot**
+(protection de branche / rulesets — ce que *tout* acteur a le droit de faire sur `main`, branches et tags). Un jeton
+parfait ne leve pas une regle ; un depot sans regle ne sert a rien avec un jeton sans droit de PR.
+
+Role `infra`, sondes **lecture seule** (sans PR de test) :
+
+```bash
+R=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/$R" --jq '{push:.permissions.push, admin:.permissions.admin, merge_commit:.allow_merge_commit}'
+gh auth status 2>&1 | grep -i 'scopes'                     # jeton classique : scopes ; fine-grained : voir « Jeton »
+# Regles de main : TOUTES les regles actives (rulesets) — l'absence de protection classique (404) ne prouve rien
+gh api "repos/$R/rules/branches/main" --jq '[.[]|{type,id:.ruleset_id,params:.parameters}]'
+gh api "repos/$R/branches/main/protection" 2>/dev/null     # protection classique (404 = aucune ; 403 = non admin)
+# Pour chaque ruleset (branches ET tags — le tag vX.Y.Z est une creation de ref) : portee, contournement, droit de l'utilisateur courant
+gh api "repos/$R/rulesets" --jq '.[]|select(.enforcement=="active")|.id' | while read -r id; do
+  gh api "repos/$R/rulesets/$id" --jq '{name,target,rules:[.rules[].type],bypass:.bypass_actors,can_bypass:.current_user_can_bypass}'
+done
+```
+
+Lecture des regles, pour le flux PR de PUBLISH PROD (creer `milestone/*` et les branches de revert, ouvrir et fusionner la
+PR, pousser le tag `vX.Y.Z`) :
+
+| Regle active sur la cible | Effet | Verdict sans contournement |
+|---|---|---|
+| `update` (branche) | **aucune fusion de PR ni push sur `main`** — meme une PR ne passe pas | ✗ |
+| `creation` (branche) | creation de `milestone/*`, `chore/*`, `revert/*` impossible | ✗ |
+| `creation` / `update` / `deletion` / `non_fast_forward` (**tag** `v*`) | le tag officiel ne peut pas etre pousse (et un tag mal pousse ne peut pas etre retire par le rollback) | ✗ |
+| `deletion` / `non_fast_forward` (branche `main`) | sans effet sur la PR (aucune suppression ni force-push) | ✓ |
+| `pull_request` avec `required_approving_review_count` ≥ 1 | l'auteur ne peut pas approuver sa propre PR | ✗ |
+| `required_status_checks` | la PR attend que les checks requis passent (`ci-branch.yml`) | ✓ (attente) |
+| `merge_queue` / `required_deployments` | fusion differee ; le `deployer` attend la fusion effective | ? signaler |
+| `required_signatures` / `required_linear_history` | commits signes / historique lineaire : incompatible avec le merge commit | ✗ si le merge commit est interdit |
+| `permissions.push` faux ; `allow_merge_commit` faux | pas de droit d'ecriture ; merge commit interdit (l'historique du milestone doit rester dans `main`) | ✗ |
+
+Un ✗ levé par un **acteur de contournement declare** (`bypass_actors` du ruleset contenant le role ou l'utilisateur,
+`current_user_can_bypass` = `always`, ou `pull_request` pour la fusion seule) donne le verdict **⚠ ok par contournement
+declare** : le proprietaire du depot a lui-meme autorise ce role ; le flux passe sans `--admin` ni option speciale, et
+`release.verified.via` vaut `bypass` (a rappeler dans le rapport final). `current_user_can_bypass` = `never` ou
+absent → ✗.
+
+**Marche a suivre pour un ✗** (a afficher, regle par regle, avec le lien `https://github.com/<R>/settings/rules`) :
+- Regle `update` / `creation` bloquante → Settings → Rules → Rulesets → modifier le ruleset (ou limiter sa portee
+  `ref_name` a `main` + tags, sans `~ALL`) : retirer la regle, **ou** ajouter l'utilisateur/le role de l'agent dans
+  **Bypass list** (mode `For pull requests only` pour la fusion, `Always` pour la creation de branches/tags).
+- Approbation requise → Required approvals = 0 (projet solo), ou relecteur distinct.
+- Merge commit interdit → Settings → General → Pull Requests → **Allow merge commits**.
+- Droit insuffisant → l'acces **Write** (ou Maintain) au depot doit etre accorde par un administrateur.
+
+**Jeton — si une sonde le met en cause** (scopes insuffisants, `gh` non authentifie, 403 sur la PR/les checks/le tag), ne pas
+tatonner : proposer de **regenerer le jeton en cochant toutes les options necessaires d'un coup**
+(`https://github.com/settings/tokens`) puis `gh auth login --with-token` (ou la variable `GH_TOKEN` de `PRIVATE/`) :
+
+| Type | Options a cocher |
+|---|---|
+| Classique (`ghp_`) | `repo` (complet), `workflow` (si les workflows CI sont modifies), `read:org` ; `project` / `write:packages` seulement si le projet les utilise |
+| Fine-grained (`github_pat_`) | Repository access : le depot. Permissions : **Contents** RW, **Pull requests** RW, **Metadata** R, **Actions** R (`gh run watch`), **Checks** R + **Commit statuses** R (`gh pr checks`), **Issues** RW (labels, milestones), **Workflows** RW (si modification de `.github/workflows`), **Administration** R (lecture des rulesets pour cette sonde) |
+
+Le jeton **ne donne jamais** le droit de contourner une regle : le contournement vient du role de l'utilisateur dans
+le ruleset (voir ci-dessus).
+
+**Conformite = ✓ ou ⚠.** Reference : `TEMPLATE_claude/templates/rulesets/release-main.json` (sur `main` : suppression et
+force-push interdits, PR obligatoire, **0 approbation**, **merge commit seul**) et `release-tags.json` (sur `v*` : mise a
+jour et force-push interdits ; ni `creation` ni `deletion`, pour que le tag officiel et le rollback restent autonomes), tous
+deux **sans liste de contournement**. Un depot dont les regles bloquent le flux PR (✗) n'est pas laisse en l'etat : l'init
+**propose de les definir elle-meme**, apres avoir liste ce qui changera.
+
+**Correction automatique des regles (avec accord)** — si le verdict est ✗ pour cause de **regles** (pas de droit ni de jeton) :
+
+1. **Droit requis** : `permissions.admin` vrai (les rulesets se modifient en admin ; jeton classique `repo`, fine-grained
+   **Administration** RW). Sinon → ne rien tenter : afficher la marche a suivre ci-dessus **et** les JSON de reference a
+   transmettre a un administrateur.
+2. **Plan** — construire, sans rien ecrire, la liste exacte des operations :
+   - ruleset existant actif qui bloque (`update` / `creation` branche ou tag, portee `~ALL` qui englobe `main`, les branches
+     de travail ou les tags `v*`) → **modifier** : retirer les regles bloquantes et restreindre la portee (`ref_name`) a
+     `~DEFAULT_BRANCH` (branches) / `refs/tags/v*` (tags). Ses autres regles et sa liste de contournement ne sont **pas**
+     touchees (un contournement declare reste ⚠, jamais supprime sans demande) ;
+   - regles de reference absentes → **creer** `release-main` / `release-tags` depuis les JSON du template (un ruleset deja
+     conforme n'est pas recree) ;
+   - reglage general `allow_merge_commit` faux → `gh api -X PATCH repos/$R -F allow_merge_commit=true`.
+3. **Accord** — afficher le plan (par ruleset : nom, portee avant → apres, regles retirees / ajoutees, contournement
+   inchange) puis `AskUserQuestion` : **Appliquer ces changements** (Recommande) / **Je les fais moi-meme** (marche a suivre) /
+   **Reporter**. Rien n'est ecrit sans « Appliquer ».
+4. **Sauvegarde puis application** : copier le JSON courant de chaque ruleset modifie dans
+   `PRIVATE/GLOBAL/rulesets-backup-<date>/<id>.json` (gitignore ; retour arriere = `PUT` du fichier), puis
+   `gh api -X PUT repos/$R/rulesets/<id> --input <json>` (modification) / `gh api -X POST repos/$R/rulesets --input <json>`
+   (creation).
+5. **Rejouer les sondes** : verdict ✓/⚠ attendu, `release.verified` enregistre (`via`). Toujours ✗ → afficher l'ecart
+   restant, jamais de nouvelle ecriture sans nouvel accord.
+
+Cette correction ne concerne que le depot courant et ne s'execute qu'ici (init / synchronisation, etape d1h) ; PUBLISH PROD
+ne modifie jamais de regle.
+
+Question (`AskUserQuestion`), apres affichage du tableau de verdict : **Mode de fusion** — `pr` (Recommande, defaut) /
+`direct` (propose seulement si `main` n'est pas protegee). Verdict ✗ → AskUserQuestion : **Corriger et retester**
+(Recommande — l'utilisateur applique la marche a suivre ci-dessus, on relance les sondes) / **Reporter**
+(`release.verified.status: "skipped"` ; reporte au rapport final, **PUBLISH PROD refusera de partir** en mode `pr` tant que
+le statut n'est pas `ok`).
+
+Enregistrer (sans secret) :
+
+```json
+"release": { "merge_mode": "pr", "verified": { "status": "ok|failed|skipped|unknown", "via": "rules|bypass", "at": "<date ISO>", "blockers": ["<constat>"] } }
+```
+
+Hotfix : meme regle (`commands/hotfix.md`). Cette etape est rejouee a la synchronisation (etape d1h).
+
 
 ```
 10. Quels frameworks de tests utilises-tu ? (propositions par defaut selon la stack choisie
@@ -2006,6 +2119,11 @@ deplacement est fait a la Finalisation (sous-section « Elements prives »), apr
   },
   "marketing": {
     "site": "auto"
+    // "social": ["twitter", "linkedin"]   <- optionnel, absent par defaut (aucun post reseaux sociaux)
+  },
+  "release": {
+    "merge_mode": "pr",
+    "verified": { "status": "ok", "at": "<date ISO>", "blockers": [] }
   },
   "milestone": {
     "defaults": { "patch": "leger", "minor": "complet", "major": "complet" }
@@ -2043,6 +2161,7 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `commands.typecheck` | Frontend TS : `npm run typecheck` / `tsc --noEmit` — vide sinon |
 | `commands.coverage` | Stack : `go test -cover ./...` / `npm run test -- --coverage` / `pytest --cov` |
 | `marketing.site` | Defaut `"auto"` : un site marketing est attendu (branche `gh-pages`, uniquement — `MARKETING/` en est le worktree git, jamais un dossier de la branche de code) ; s'il n'existe pas, l'agent marketing declenche une initialisation (questions de cadrage + maquette). `false` = ordre direct de ne pas avoir de site (le CDP dispatche `PREPARE ... — SANS SITE`) |
+| `marketing.social` | Optionnel, **absent par defaut** : aucun post reseaux sociaux. Liste de canaux parmi `"twitter"`, `"linkedin"`, `"reddit"` ; l'agent marketing ne produit que les canaux listes. Jamais renseigne par `/init-project` de lui-meme : uniquement si l'utilisateur demande explicitement une publication sur un reseau |
 | `issues.close_on` | Etape 7. `ci` (defaut ; absent = `ci`) : issue fermee sur CI verte apres QA ; `validation` : issue laissee ouverte en `DONE` jusqu'a une validation utilisateur qui la couvre (GATE LOT explicite, sinon GATE 4) — `commands/context/GITHUB.md` §9.5 |
 | `progress.interval_min` | Defaut `20` (absent = `20`, aucune question, modifiable a la main ; projet deja initialise : rien a migrer). Cadence en minutes du point d'avancement periodique du teamleader (% et ETA par teammate actif) — `agents/cdp.md` « Point d'avancement periodique » |
 | `docs.mockup_dir` | Defaut `docs/mockup` (dossier des maquettes validees — voir `context/MOCKUPS.md` §14) |
@@ -2064,6 +2183,7 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `src_dir` | Detection Etape 0 (repertoire source principal) ou stack par defaut : `src`, `cmd`... |
 | `version_file` | Fichier source de verite de la version (ex: `package.json`, `config.json`, `VERSION`) |
 | `infrastructure.environments` | Defaut `[QUALIF, PROD]` (Etape 8, question « environnements de release ») ; `publish.mode` = `promote` pour tous sauf le dernier (`rebuild-ci`) ; `deploy.mechanism` reprend la reponse a la question « Comment deploies-tu ? » de l'Etape 8 pour chaque environnement, sauf personnalisation explicite |
+| `release` | Etape 8c : `merge_mode` (`pr` par defaut | `direct`) et `verified` (statut des sondes d'autorisation de la PR vers `main`, marche a suivre GitHub si blocage) |
 | `infrastructure.environments[].access` | Etape 8b : coordonnees non sensibles d'acces (`method`, `host`, `user`, `port`, `runtime`, `registry`/`context`...), **noms** des variables secretes (`credentials_env`) et resultat des sondes (`verified.status` : `ok` / `failed` / `skipped` / `unknown`). Jamais de valeur secrete. Lu par le preflight de `agents/deploy.md` et par les fichiers `deploy.<env>` (runtime, hote, port). `deploy.services` (optionnel) : seuls ces services/unites sont deployes |
 | Nom de fichier des environnements | `infrastructure.environments[].name` normalise : minuscules, espaces/underscores → tirets (ex. `PRE-PROD` → `pre-prod`) — utilise pour `.claude/agents/environments/{publish,deploy}.<nom>.template.md` (section 3bis) |
 
@@ -2806,7 +2926,7 @@ CHANGELOG_EOF
 ```
 
 > `_work/` est gitignore (purge a chaque `/start-session`, selective si un workflow interrompu est repris).
-> `.claude/workflow-state.json` et `.claude/workflow/` (copie du plan valide, gitignore) ne sont **pas** crees ici :
+> `.claude/workflow-state.json` (tracke par git) et `.claude/workflow/` (copie du plan valide, gitignore) ne sont **pas** crees ici :
 > ils sont crees par le CDP au premier workflow. `.claude/memory/` est tracke — l'inclure dans le commit d'init.
 
 ---
@@ -2873,6 +2993,17 @@ else
   git worktree remove --force "$WT" 2>/dev/null
 fi
 echo "$PUBLISH"
+```
+
+**`release.merge_mode` = `pr` (defaut, Etape 8c)** : si le push direct sur `main` est refuse (protection), les commits
+de l'init/sync partent par une Pull Request, sans contournement :
+
+```bash
+# a la place du `git push origin HEAD:main` ci-dessus (worktree $WT deja sur les commits reportes, ou branche courante)
+git -C "$WT" push origin HEAD:refs/heads/chore/init-sync
+PR=$(gh pr create --base main --head chore/init-sync --title "chore(claude): init-project" --body "Init / synchronisation du template" | grep -oE '[0-9]+$')
+gh pr checks "$PR" --watch --required && gh pr merge "$PR" --merge --delete-branch \
+  && PUBLISH="PR #$PR fusionnee sur main" || PUBLISH="PR #$PR ouverte, non fusionnee (regle de branche non satisfaite — voir 8c)"
 ```
 
 Regles :
@@ -3200,6 +3331,14 @@ Pour tout environnement dont le statut n'est pas `ok` : l'inclure au rapport d4 
 valide (<statut>)`), puis a l'etape d5 AskUserQuestion : Collecter et valider maintenant (Recommande —
 rejouer l'Etape 8b pour ces seuls environnements, avec le role `infra`) / Plus tard (l'ecart reste affiche
 a chaque sync et `/deploy <env>` refusera de partir tant que l'acces n'est pas valide).
+
+#### Etape d1h — Fusion vers `main` (`release.merge_mode`)
+
+Un projet initialise avant l'Etape 8c n'a pas de cle `release` : `merge_mode` vaut implicitement `pr`, **non verifie**.
+Lecture seule ici : `jq -r '.release // "absent"' .claude/project-config.json`. Cle absente, ou `verified.status` autre
+que `ok` / verifie il y a longtemps → au rapport d4 `[⚠] release — autorisation de la PR non verifiee (<statut>)` ; a
+l'etape d5 AskUserQuestion : Verifier maintenant (Recommande — rejouer l'Etape 8c avec le role `infra` : sondes puis, si les
+regles du depot bloquent, **proposition de les definir** apres liste et accord) / Plus tard (PUBLISH PROD refusera de partir en mode `pr` tant que le statut n'est pas `ok`).
 
 #### Etape d1g — Licence
 
