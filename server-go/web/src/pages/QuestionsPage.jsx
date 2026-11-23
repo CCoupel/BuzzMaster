@@ -2550,7 +2550,17 @@ export default function QuestionsPage() {
               >
                 {formData.type !== 'ROUE' && (
                 <div className="form-group">
-                  <label htmlFor="question-input">Question *</label>
+                  <label htmlFor="question-input">{formData.type === 'PICTO' ? 'Titre (liste des questions) *' : 'Question *'}</label>
+                  {formData.type === 'PICTO' ? (
+                    <input
+                      id="question-input"
+                      type="text"
+                      value={formData.question}
+                      onChange={(e) => handleInputChange('question', e.target.value)}
+                      placeholder="Ex. Picto — à la maison"
+                      required
+                    />
+                  ) : (
                   <textarea
                     id="question-input"
                     value={formData.question}
@@ -2559,6 +2569,7 @@ export default function QuestionsPage() {
                     rows={3}
                     required
                   />
+                  )}
                 </div>
                 )}
 

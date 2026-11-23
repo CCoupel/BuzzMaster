@@ -44,6 +44,7 @@ export function isPictoReady(values) {
 
 export default function PictoEditor({ values, onChange, error, customCategories = [] }) {
   const [draft, setDraft] = useState('')
+  const [ignored, setIgnored] = useState(0) // mots non ajoutés car au-delà de 20 (M3)
   const words = values.pictoWords || []
   const full = words.length >= PICTO_WORDS_MAX
   const timeOk = validPictoTime(values.time)
@@ -53,10 +54,12 @@ export default function PictoEditor({ values, onChange, error, customCategories 
   const addWords = (raw) => {
     const incoming = String(raw ?? '').split(/[\n,;]+/).map(normalizePictoWord).filter(Boolean)
     if (!incoming.length) return
-    onChange('pictoWords', [...words, ...incoming].slice(0, PICTO_WORDS_MAX))
+    const all = [...words, ...incoming]
+    onChange('pictoWords', all.slice(0, PICTO_WORDS_MAX))
+    setIgnored(Math.max(0, all.length - PICTO_WORDS_MAX))
     setDraft('')
   }
-  const removeWord = (i) => onChange('pictoWords', words.filter((_, k) => k !== i))
+  const removeWord = (i) => { setIgnored(0); onChange('pictoWords', words.filter((_, k) => k !== i)) }
 
   const onKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
@@ -117,6 +120,11 @@ export default function PictoEditor({ values, onChange, error, customCategories 
               Avec un seul mot, c'est toujours ce mot. Ces mots ne sont jamais montrés sur la TV ni sur les tablettes.
             </p>
           </div>
+          {ignored > 0 && (
+            <p className="picto-hint err" role="alert">
+              {ignored} mot{ignored > 1 ? 's' : ''} ignoré{ignored > 1 ? 's' : ''} : {PICTO_WORDS_MAX} mots au maximum par question.
+            </p>
+          )}
           {words.length === 0 && <p className="picto-hint err">Saisissez au moins un mot.</p>}
           {error && <div className="picto-error" role="alert">{pictoRefusalText(error)}</div>}
           <p className="picto-hint">La catégorie (une seule) ci-dessus est l'indice affiché sur la TV.</p>
