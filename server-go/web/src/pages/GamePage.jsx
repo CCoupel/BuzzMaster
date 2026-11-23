@@ -121,6 +121,22 @@ export default function GamePage() {
   const [timeInput, setTimeInput] = useState(30)
   const [pointsInput, setPointsInput] = useState(1)
 
+  // Temps et points suivent la question courante, quelle que soit la façon dont elle a été choisie (liste de cette page,
+  // anim, « question suivante », relance, rechargement) : sinon START envoyait un Delay périmé (30 s au lieu de la durée
+  // de la question). Une seule reprise par question (`syncedQuestionId`) : une saisie faite ensuite n'est pas écrasée.
+  // Seulement en préparation (PREPARE / READY), là où ces champs servent au prochain START : jamais pendant une manche
+  // (champs figés), ni après coup (le montant de crédit d'une question jouée reste celui affiché).
+  const syncedQuestionId = useRef(null)
+  useEffect(() => {
+    const q = gameState.question
+    if (!q || q.ID === undefined || q.ID === null) return
+    if (gameState.phase !== 'PREPARE' && gameState.phase !== 'READY') return
+    if (syncedQuestionId.current === q.ID) return
+    syncedQuestionId.current = q.ID
+    setTimeInput(parseInt(q.TIME) || 30)
+    setPointsInput(parseInt(q.POINTS) || 1)
+  }, [gameState.question, gameState.phase])
+
   // MAJEUR-1 (revue de code #155/#156) — pointsInput est un état React
   // local, dont le serveur n'avait connaissance d'aucune façon avant ce
   // mécanisme : /anim créditait question.POINTS brut pendant que /admin
