@@ -21,14 +21,15 @@ func PictoClamp(v int) int {
 }
 
 // PictoNormalize converts a pixel position on a width × height sheet to integer sheet units:
-// x = round(px / width × 10000), y = round(py / height × 10000), halves rounded up (as JavaScript's
+// x = round(px × 10000 / width), y = round(py × 10000 / height) — multiply FIRST (px / width × 10000 gives
+// 1.4999… for 1.5), halves rounded up (as JavaScript's
 // Math.round), then clamped to 0..10000. The origin is the top-left corner. A non-positive side yields 0.
 func PictoNormalize(px, py, width, height float64) (x, y int) {
 	if width <= 0 || height <= 0 {
 		return 0, 0
 	}
-	x = PictoClamp(int(math.Floor(px/width*PictoCoordMax + 0.5)))
-	y = PictoClamp(int(math.Floor(py/height*PictoCoordMax + 0.5)))
+	x = PictoClamp(int(math.Floor(px*PictoCoordMax/width + 0.5)))
+	y = PictoClamp(int(math.Floor(py*PictoCoordMax/height + 0.5)))
 	return x, y
 }
 

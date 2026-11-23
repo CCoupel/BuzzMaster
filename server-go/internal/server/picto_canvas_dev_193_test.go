@@ -196,3 +196,10 @@ func TestPictoGeometryDev_NamedCases(t *testing.T) {
 		t.Error("épaisseur fixe de 80 unités, un point seul = disque de ce diamètre")
 	}
 }
+
+// Multiplier d'abord : (3/20000)*10000 = 1.4999999999999998 en flottant, alors que 3*10000/20000 = 1.5 → 2.
+func TestPictoGeometryDev_RoundHalfMultipliesFirst(t *testing.T) {
+	if x, y := PictoNormalize(3, 3, 20000, 20000); x != 2 || y != 2 {
+		t.Errorf("(%d,%d), attendu (2,2)", x, y)
+	}
+}
