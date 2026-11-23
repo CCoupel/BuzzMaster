@@ -52,4 +52,15 @@ describe('pictoCanvasStore — époque, SEQ, rattrapage (contrat §8.4/§8.5)', 
     expect(s.getSeq()).toBe(0)
     expect(s.maxStrokeId()).toBe(1)
   })
+
+  it('clearSheet : feuille vierge hors manche sans changer d\'époque (relance PREPARE/READY)', () => {
+    const s = createPictoCanvasStore(); s.setEpoch(2)
+    s.applyFrame(frame(2, 1, st(1, [[0, 0]])))
+    s.addLocal(2, [[5, 5]], true)
+    s.clearSheet()
+    expect(s.getStrokes()).toHaveLength(0)
+    expect(s.getSeq()).toBe(0)
+    expect(s.getEpoch()).toBe(2)
+    expect(s.applyFrame(frame(2, 1, st(1, [[9, 9]])))).toBe('ok') // la manche suivante repart de SEQ 1 dans la même époque
+  })
 })

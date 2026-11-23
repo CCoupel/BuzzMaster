@@ -104,6 +104,16 @@ export function createPictoCanvasStore() {
     /** Marque la demande de resynchronisation comme envoyée (évite d'en émettre une par trame). */
     markSyncRequested() { syncing = true; syncSince = Date.now() },
 
+    /**
+     * Feuille vierge sans changer d'époque : hors manche (PREPARE / READY / COUNTDOWN) aucune feuille ne s'affiche,
+     * alors que `PICTO_CANVAS_EPOCH` ne change qu'au START (le serveur vide son journal au READY).
+     */
+    clearSheet() {
+      if (!strokes.length && !seq && !held.length && !syncing) return
+      clear()
+      notify()
+    },
+
     reset() { clear(); epoch = null; notify() },
   }
 }

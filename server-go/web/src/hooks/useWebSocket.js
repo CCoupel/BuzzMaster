@@ -547,6 +547,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
           trackArdoiseCleared(MSG.GAME)
           // PICTO — un changement d'époque efface la feuille locale (contrat picto.md §8.4)
           pictoCanvasStoreRef.current.setEpoch(MSG.GAME.PICTO_CANVAS_EPOCH)
+          // hors manche, jamais l'ancienne feuille : l'époque ne change qu'au START (relance → PREPARE/READY)
+          if (['PREPARE', 'READY', 'COUNTDOWN', 'NEW_GAME'].includes(MSG.GAME.PHASE)) pictoCanvasStoreRef.current.clearSheet()
           setGameState(prev => ({
             ...prev,
             phase: MSG.GAME.PHASE || prev.phase,
