@@ -3926,7 +3926,11 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 			loadErr := h.engine.LoadVPlayerSessions() // v13.0.0: the session fingerprints come back with the players
 			// vplayer-session.md §6: WARN with the NUMBER of seats left without fingerprint (never an ID or a token).
 			if n := h.engine.VPlayerSeatsWithoutFingerprint(); n > 0 || loadErr != nil {
-				LogWarn(game.LogComponentHTTP, "VPLAYER_SESSIONS (restauration) : %d place(s) VJoueur sans empreinte, en « premier arrivé » (cas 1c) ; fichier d'empreintes absent, illisible ou ancien : %v", n, loadErr != nil)
+				cause := "sauvegarde d'avant v13.0.0 ou sans vplayer_sessions.json"
+				if loadErr != nil {
+					cause = "vplayer_sessions.json absent, illisible ou corrompu"
+				}
+				LogWarn(game.LogComponentHTTP, "VPLAYER_SESSIONS (restauration) : %s — %d place(s) VJoueur sans empreinte, en « premier arrivé » (cas 1c) jusqu'à leur première reconnexion", cause, n)
 			}
 			restoredMap["bumpers"] = true
 			log.Printf("[HTTP] Restore: Bumpers loaded into engine")
