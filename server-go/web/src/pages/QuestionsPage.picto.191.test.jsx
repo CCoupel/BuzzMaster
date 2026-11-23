@@ -217,5 +217,35 @@ describe('QuestionsPage — type PICTO (#191)', () => {
     expect(document.querySelector('.picto-editor').textContent).not.toMatch(/pictionary|picsonary/i)
   })
 
-  // M3 (collage de plus de 20 mots) : comportement retenu par dev-frontend — voir test ci-dessous.
+  // M3 (revue LOT-1) : au-delà de 20 mots, les mots en trop ne sont pas ajoutés et un message le dit.
+  it('M3 — un collage de 23 mots garde 20 mots et annonce « 3 mots ignorés »', () => {
+    openPicto()
+    paste(Array.from({ length: 23 }, (_, i) => `mot${i}`).join('\n'))
+    expect(chips()).toHaveLength(20)
+    expect(chips()[19]).toBe('mot19')
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toBe('3 mots ignorés : 20 mots au maximum par question.')
+  })
+
+  it('M3 — « mot ignoré » au singulier pour un seul mot en trop', () => {
+    openPicto()
+    paste(Array.from({ length: 21 }, (_, i) => `mot${i}`).join('\n'))
+    expect(screen.getByRole('alert').textContent).toBe('1 mot ignoré : 20 mots au maximum par question.')
+  })
+
+  it('M3 — le message disparaît au retrait d\'un mot ; aucun message sous la limite', () => {
+    openPicto()
+    paste('a\nb\nc')
+    expect(screen.queryByRole('alert')).toBeNull()
+    paste(Array.from({ length: 20 }, (_, i) => `x${i}`).join('\n'))
+    expect(screen.getByRole('alert')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Retirer « a »' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('M2 — le champ générique devient « Titre (liste des questions) », sur une ligne', () => {
+    openPicto()
+    expect(screen.getByLabelText(/Titre \(liste des questions\)/)).toBe(document.getElementById('question-input'))
+    expect(document.getElementById('question-input').tagName).toBe('INPUT')
+  })
 })
