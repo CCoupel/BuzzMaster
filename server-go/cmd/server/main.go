@@ -1729,7 +1729,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handlePictoStrokes(incoming)
 
 	case protocol.ActionPictoCanvasSync:
-		a.handlePictoCanvasSync(incoming.ClientID)
+		a.handlePictoCanvasSync(incoming)
 
 	case protocol.ActionQuestionSound:
 		a.handleQuestionSound(msg)
@@ -4535,6 +4535,9 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 // and releases the "Lancer la partie" lock if this connection owned it (#253).
 func (a *App) onClientClosed(clientID string) {
 	a.forgetClientDiag(clientID)
+	if a.pictoCanvas != nil {
+		a.pictoCanvas.ForgetClient(clientID) // PICTO (#193): rate-limit state of the closed connection
+	}
 	if rel, ok := a.engine.CloseLaunchLock(clientID, "disconnect"); ok {
 		a.logLaunchLockReleased(clientID, rel)
 		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)

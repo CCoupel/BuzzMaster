@@ -695,8 +695,8 @@ func (h *WebSocketHub) TrySendToTypes(msg *protocol.Message, types ...ClientType
 		}
 		dataByType[t] = data
 	}
+	dropped := 0
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 	for client := range h.clients {
 		data, ok := dataByType[client.Type]
 		if !ok {
@@ -705,9 +705,12 @@ func (h *WebSocketHub) TrySendToTypes(msg *protocol.Message, types ...ClientType
 		select {
 		case client.Send <- data:
 		default:
-			// buffer full: this frame is lost, the connection is kept (no close, no delete)
-			LogDebug(game.LogComponentWebSocket, "TrySendToTypes: frame dropped for client=%s type=%s queue=%d (catch-up by SEQ)", client.ID, client.Type, len(client.Send))
+			dropped++ // buffer full: this frame is lost, the connection is kept (no close, no delete)
 		}
+	}
+	h.mu.RUnlock()
+	if dropped > 0 { // one aggregated line, outside the lock (catch-up by SEQ)
+		LogDebug(game.LogComponentWebSocket, "TrySendToTypes: frame dropped for %d client(s) with a full buffer (catch-up by SEQ)", dropped)
 	}
 }
 

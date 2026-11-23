@@ -141,7 +141,29 @@ func (a *App) pictoCanvasMessage() *protocol.Message {
 }
 
 // handlePictoCanvasSync answers PICTO_CANVAS_SYNC to the requester alone (an empty sheet outside a round).
-func (a *App) handlePictoCanvasSync(clientID string) {
+// Contract §9.1: open to tv / admin / anim, and to a vplayer only if it is the drawer (its connection's bound
+// player, never the payload); a non-drawer gets PICTO_ERROR NOT_DRAWER. Rate-limited per connection: each
+// call serialises the whole sheet on the single consumer of the hub's Incoming channel (#127).
+func (a *App) handlePictoCanvasSync(incoming *protocol.IncomingMessage) {
+	clientID := incoming.ClientID
+	if server.ClientType(incoming.ClientType) == server.ClientTypeVPlayer {
+		boundID, connected := a.wsHub.ClientBinding(clientID)
+		if !connected {
+			boundID = incoming.BoundPlayerID
+		}
+		drawer, _, _, _ := a.engine.PictoStrokeContext()
+		if boundID == "" || boundID != drawer {
+			a.sendPictoError(clientID, &game.PictoError{Code: game.PictoErrNotDrawer, Message: "seul le dessinateur peut demander la feuille"})
+			return
+		}
+	}
+	allowed, report := a.pictoCanvas.AllowSync(clientID, time.Now())
+	if !allowed {
+		if report {
+			a.sendPictoError(clientID, &game.PictoError{Code: game.PictoErrRateLimited, Message: "trop de demandes de feuille par seconde"})
+		}
+		return
+	}
 	if m := a.pictoCanvasMessage(); m != nil {
 		a.wsHub.SendToClient(clientID, m)
 	}

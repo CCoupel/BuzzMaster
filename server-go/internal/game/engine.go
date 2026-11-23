@@ -4335,7 +4335,10 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 
 	log.Printf("[Engine] Game initialized (scores=%v players=%v teams=%v questions=%v)",
 		opts.PurgeScores, opts.PurgePlayers, opts.PurgeTeams, opts.ResetQuestions)
+	pictoEpoch := e.state.PictoCanvasEpoch
 	e.mu.Unlock()
+
+	e.firePictoCanvasReset(pictoEpoch) // PICTO (#193, §8.3): NEW_GAME empties the sheet journal
 
 	safeGo("SaveHistory", e.SaveHistory)
 	safeGo("SaveTeams", e.SaveTeams)

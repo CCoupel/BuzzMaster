@@ -354,3 +354,23 @@ func TestPicto192_DeletedDrawerIsPurged(t *testing.T) {
 		t.Error("le dessinateur supprimé doit être purgé")
 	}
 }
+
+// Revue M3 : NEW_GAME vide le journal de feuille (callback de remise à zéro, époque courante).
+func TestPicto192_NewGameResetsSheetJournal(t *testing.T) {
+	r := newPictoRig(t)
+	if err := r.e.PictoSetTeam("red"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.e.PictoSetDrawer("v-alice"); err != nil {
+		t.Fatal(err)
+	}
+	r.e.StartImmediate(60)
+	before := len(r.resets)
+	r.e.InitGameWith(NewGameOptions{})
+	if len(r.resets) != before+1 || r.resets[len(r.resets)-1] != 1 {
+		t.Errorf("NEW_GAME doit déclencher une remise à zéro du journal à l'époque 1 : %v", r.resets)
+	}
+	if st := r.st(); st.PictoTeam != "" || st.PictoDrawer != "" {
+		t.Errorf("NEW_GAME vide aussi la préparation : %q %q", st.PictoTeam, st.PictoDrawer)
+	}
+}

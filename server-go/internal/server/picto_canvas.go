@@ -20,6 +20,7 @@ const (
 	PictoMaxFrameStroke = 20    // strokes per frame
 	PictoMaxFramePoints = 200   // points per frame
 	PictoMaxFramesPerS  = 40    // frames per second per connection; beyond: RATE_LIMITED
+	PictoMaxSyncsPerS   = 2     // PICTO_CANVAS_SYNC per second per connection (each one serialises the whole sheet)
 )
 
 // PictoStrokeContext is what the guard needs to know about the sender and the game (§8.6): the identity comes
@@ -48,12 +49,13 @@ type PictoCanvas struct {
 	strokes []protocol.PictoStroke
 	index   map[int]int // stroke ID → position in strokes (a frame may continue an open stroke)
 	points  int
-	rate    map[string]*pictoRate // per connection
+	rate    map[string]*pictoRate // per connection (frames)
+	syncs   map[string]*pictoRate // per connection (PICTO_CANVAS_SYNC)
 }
 
 // NewPictoCanvas returns an empty journal.
 func NewPictoCanvas() *PictoCanvas {
-	return &PictoCanvas{index: map[int]int{}, strokes: []protocol.PictoStroke{}, rate: map[string]*pictoRate{}}
+	return &PictoCanvas{index: map[int]int{}, strokes: []protocol.PictoStroke{}, rate: map[string]*pictoRate{}, syncs: map[string]*pictoRate{}}
 }
 
 func (c *PictoCanvas) resetLocked(epoch int) {
@@ -73,6 +75,7 @@ func (c *PictoCanvas) Reset(epoch int) {
 func (c *PictoCanvas) ForgetClient(clientID string) {
 	c.mu.Lock()
 	delete(c.rate, clientID)
+	delete(c.syncs, clientID)
 	c.mu.Unlock()
 }
 
@@ -105,6 +108,31 @@ func (c *PictoCanvas) rateAllowLocked(clientID string, now time.Time) (bool, boo
 	}
 	r.count++
 	if r.count <= PictoMaxFramesPerS {
+		return true, false
+	}
+	if now.Sub(r.lastErr) >= time.Second {
+		r.lastErr = now
+		return false, true
+	}
+	return false, false
+}
+
+// AllowSync rate-limits PICTO_CANVAS_SYNC per connection (PictoMaxSyncsPerS per second): each call serialises
+// the whole sheet (up to ~700 KB) on the single consumer of the hub's Incoming channel. Returns (allowed,
+// reportError): beyond the limit the request is refused, with an error reported at most once per second.
+func (c *PictoCanvas) AllowSync(clientID string, now time.Time) (bool, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r := c.syncs[clientID]
+	if r == nil {
+		r = &pictoRate{windowStart: now}
+		c.syncs[clientID] = r
+	}
+	if now.Sub(r.windowStart) >= time.Second {
+		r.windowStart, r.count = now, 0
+	}
+	r.count++
+	if r.count <= PictoMaxSyncsPerS {
 		return true, false
 	}
 	if now.Sub(r.lastErr) >= time.Second {

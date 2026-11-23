@@ -203,3 +203,34 @@ func TestPictoGeometryDev_RoundHalfMultipliesFirst(t *testing.T) {
 		t.Errorf("(%d,%d), attendu (2,2)", x, y)
 	}
 }
+
+// Revue M1 (majeur) : PICTO_CANVAS_SYNC limité à PictoMaxSyncsPerS par connexion, une erreur au plus par seconde.
+func TestPictoCanvasDev_AllowSyncRateLimit(t *testing.T) {
+	c := NewPictoCanvas()
+	now := time.Now()
+	for i := 0; i < PictoMaxSyncsPerS; i++ {
+		if ok, rep := c.AllowSync("c1", now); !ok || rep {
+			t.Fatalf("demande %d : acceptée attendue", i+1)
+		}
+	}
+	if ok, rep := c.AllowSync("c1", now); ok || !rep {
+		t.Errorf("au-delà : refusée avec une erreur, got ok=%v report=%v", ok, rep)
+	}
+	if ok, rep := c.AllowSync("c1", now); ok || rep {
+		t.Errorf("une seule erreur par seconde : refusée en silence ensuite, got ok=%v report=%v", ok, rep)
+	}
+	if ok, _ := c.AllowSync("c2", now); !ok {
+		t.Error("la limite est par connexion")
+	}
+	if ok, _ := c.AllowSync("c1", now.Add(1100*time.Millisecond)); !ok {
+		t.Error("la fenêtre suivante doit repartir")
+	}
+	c.ForgetClient("c1") // revue M2 : l'état de la connexion fermée est libéré
+	c.mu.Lock()
+	_, a := c.syncs["c1"]
+	_, b := c.rate["c1"]
+	c.mu.Unlock()
+	if a || b {
+		t.Error("ForgetClient doit oublier les deux compteurs")
+	}
+}
