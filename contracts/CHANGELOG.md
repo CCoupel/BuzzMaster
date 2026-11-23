@@ -19,7 +19,8 @@
   dans la sauvegarde et la réinitialisation sélectives.
 - **[CHANGED]** Reprise de place #122 / libération #134 : la re-clé émet un nouveau jeton.
 - **[CHANGED]** `PICTO_CANVAS_SYNC` : refusé à une tablette autre que celle du dessinateur (`NOT_DRAWER`) ; au plus
-  2 demandes/s par connexion (`RATE_LIMITED`). L'état de débit de `PICTO_STROKES` et de `PICTO_CANVAS_SYNC` est purgé
+  2 demandes/s par connexion. Au-delà, la demande est ignorée et `RATE_LIMITED` est émise au plus une fois par seconde,
+  puis plus rien, comme pour `PICTO_STROKES`. L'état de débit de `PICTO_STROKES` et de `PICTO_CANVAS_SYNC` est purgé
   à la fermeture de la connexion. Aucun client légitime n'est touché : la TV, l'admin, l'anim et le dessinateur
   restent servis.
 

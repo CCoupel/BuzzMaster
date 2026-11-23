@@ -351,7 +351,7 @@ VJoueur dessinateur ──PICTO_STROKES──► serveur : garde (§8.6) ─► 
 | `PICTO_DRAW_DRAWER` | `{}` | admin, anim | `PREPARE`, `READY` |
 | `PICTO_FOUND` | `{}` | admin, anim | `STARTED`, `PAUSED`, et `STOPPED` après `TIMEOUT` |
 | `PICTO_STROKES` | `{ "EPOCH": int, "STROKES": [ { "ID": int, "PTS": [[x, y], ...], "END": bool } ] }` | vplayer (dessinateur) | `STARTED` |
-| `PICTO_CANVAS_SYNC` | `{}` | tv, admin, anim ; vplayer **seulement si `PlayerID == PICTO_DRAWER`**, sinon `PICTO_ERROR NOT_DRAWER` (révision 7, mineure m2) | toutes (réponse vide hors manche). **Débit** : au plus 2 demandes/s par connexion, quel que soit l'émetteur ; au-delà, `RATE_LIMITED` et pas de copie de la feuille |
+| `PICTO_CANVAS_SYNC` | `{}` | tv, admin, anim ; vplayer **seulement si `PlayerID == PICTO_DRAWER`**, sinon `PICTO_ERROR NOT_DRAWER` (révision 7, mineure m2) | toutes (réponse vide hors manche). **Débit** : au plus 2 demandes/s par connexion, quel que soit l'émetteur ; au-delà, la demande est ignorée (aucune copie de la feuille) et `PICTO_ERROR RATE_LIMITED` est émise **au plus une fois par seconde** et par connexion, puis plus rien jusqu'à la seconde suivante (même règle que pour `PICTO_STROKES`, §8.6) |
 
 Détail de `PICTO_STROKES` :
 - `ID` : numéro de trait, attribué par le VJoueur et croissant dans l'époque. Une trame peut poursuivre un trait
