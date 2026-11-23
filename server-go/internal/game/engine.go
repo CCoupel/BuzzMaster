@@ -6975,58 +6975,6 @@ func (e *Engine) StopEnrollment() {
 	log.Printf("[Engine] Enrollment stopped")
 }
 
-// HandleVirtualPlayerConnect handles a virtual player connection request
-// Returns (bumperID, bumper, error)
-func (e *Engine) HandleVirtualPlayerConnect(name, sessionID string) (string, *Bumper, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	// Check if enrollment is active
-	if !e.state.EnrollmentActive {
-		return "", nil, &EnrollmentError{Reason: "ENROLLMENT_CLOSED"}
-	}
-
-	// Check if limit is reached
-	virtualCount := e.countVirtualPlayersUnsafe()
-	if virtualCount >= e.state.VirtualPlayerLimit {
-		return "", nil, &EnrollmentError{Reason: "ENROLLMENT_FULL"}
-	}
-
-	// Validate name (2-20 characters, alphanumeric + spaces)
-	if len(name) < 2 || len(name) > 20 {
-		return "", nil, &EnrollmentError{Reason: "INVALID_NAME"}
-	}
-
-	// Check if name is already taken
-	for _, bumper := range e.data.Bumpers {
-		if bumper.Name == name && bumper.IsVirtual {
-			return "", nil, &EnrollmentError{Reason: "PSEUDO_TAKEN"}
-		}
-	}
-
-	// Generate unique ID using sessionID
-	id := sessionID
-	if id == "" {
-		id = "vplayer_" + name + "_" + time.Now().Format("20060102_150405")
-	}
-
-	// Create virtual bumper (VPlayer = true for virtual players, allows all QCM colors)
-	bumper := &Bumper{
-		Name:      name,
-		Team:      "",
-		Score:     0,
-		IsVirtual: true,
-		IsVPlayer: true, // VPlayer can answer all QCM colors
-		Status:    "READY",
-	}
-
-	e.data.Bumpers[id] = bumper
-	e.state.VirtualPlayerCount++
-
-	log.Printf("[Engine] Virtual player connected: id=%s, name=%s, sessionID=%s", id, name, sessionID)
-	return id, bumper, nil
-}
-
 // reconnectVPlayer reconnects an existing virtual player
 func (e *Engine) reconnectVPlayer(sessionID string) (string, *Bumper, error) {
 	e.mu.RLock()

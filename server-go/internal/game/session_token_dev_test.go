@@ -199,7 +199,6 @@ func TestSessionToken_PersistsAcrossRestartAndRestore(t *testing.T) {
 		t.Error("après redémarrage, l'absence de jeton reste refusée")
 	}
 	// Restauration : rechargement depuis le fichier, élagué sur le roster restauré.
-	e2.SetBumpers(map[string]*Bumper{})
 	e2.SetBumpers(map[string]*Bumper{id: {Name: "Alice", IsVirtual: true, IsVPlayer: true}})
 	e2.LoadVPlayerSessions()
 	e2.mu.RLock()
