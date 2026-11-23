@@ -228,9 +228,15 @@ func (w *pictoWire) chooseTeamAndDrawer(t *testing.T, drawerID string) {
 // startRound mène la manche jusqu'à STARTED (décompte compris) et attend le mot du dessinateur.
 func (w *pictoWire) startRound(t *testing.T, drawer *wireClient) string {
 	t.Helper()
+	return w.startRoundWithDelay(t, drawer, 0) // 0 = délai par défaut du serveur (DefaultDelay, 30 s)
+}
+
+// startRoundWithDelay : `delay` est la durée de la manche (START {DELAY}, main.go handleStart) ; 0 = défaut serveur.
+func (w *pictoWire) startRoundWithDelay(t *testing.T, drawer *wireClient, delay int) string {
+	t.Helper()
 	w.send(t, w.admin, protocol.ActionForceReady, struct{}{})
 	waitGameField(t, w.admin, "PHASE", "READY", 3*time.Second)
-	w.send(t, w.admin, protocol.ActionStart, protocol.StartPayload{Delay: 0})
+	w.send(t, w.admin, protocol.ActionStart, protocol.StartPayload{Delay: delay})
 	frames := drawer.waitAction(t, pictoActWord, 1, 15*time.Second)
 	var p struct {
 		Msg struct {

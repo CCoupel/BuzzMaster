@@ -43,7 +43,7 @@ const (
 	loadNominalPoints  = 8
 	loadMaxFramePoints = 200
 	loadCanvasMax      = 60000
-	loadRoundSeconds   = 300 // TIME de la question de la fixture : maximum du contrat (30 à 300 s, §4)
+	loadRoundSeconds   = 300 // DELAY du START = durée de la manche de la fixture (la question reste à 90 s : TIME n'est pas la durée du chrono)
 	loadRoundMargin    = 15  // marge entre la fin du dessin et la fin de la manche (le chrono démarre au START)
 	loadP95Max         = 100 * time.Millisecond
 	loadFrameMaxBytes  = 4096
@@ -113,14 +113,13 @@ func newLoadEnv(t *testing.T) *loadEnv {
 		c.waitAction(t, "PLAYER_CONNECTED", 1, 3*time.Second)
 	}
 	w.app.engine.SetPhase(prevPhase)
-	// La manche doit durer plus longtemps que le dessin : la question de la fixture dure 300 s (maximum du contrat),
-	// pas les 90 s du harnais fonctionnel — sinon le chronomètre arrête la manche et les trames sont refusées hors STARTED.
-	long := *w.question
-	long.Time = strconv.Itoa(loadRoundSeconds)
-	w.question = &long
-	w.app.engine.Ready(long.ID, &long)
 	w.chooseTeamAndDrawer(t, w.aliceID)
-	w.startRound(t, w.alice)
+	// La durée de la manche est le DELAY du START (main.go handleStart : 0 = défaut serveur, 30 s), pas question.Time :
+	// elle doit dépasser le dessin, sinon le chronomètre arrête la manche et les trames sont refusées hors STARTED.
+	w.startRoundWithDelay(t, w.alice, loadRoundSeconds)
+	if got := w.app.engine.GetState().Delay; got != loadRoundSeconds {
+		t.Fatalf("durée de la manche = %d s, attendu %d s (DELAY du START)", got, loadRoundSeconds)
+	}
 	epoch := int(gameField(t, w.admin, "PICTO_CANVAS_EPOCH").(float64))
 
 	// Lecteurs dédiés (TV, admin, anim) : on arrête les collecteurs de trames du harnais fonctionnel en les
@@ -227,7 +226,7 @@ func runLoadScenario(t *testing.T, sc loadScenario) {
 		}
 	}
 	if dur+loadRoundMargin*time.Second > loadRoundSeconds*time.Second {
-		t.Fatalf("scénario plus long que la manche : %.0f s de dessin + %d s de marge > %d s (TIME maximal du contrat, §4) — la manche s'arrêterait avant la fin de la mesure", dur.Seconds(), loadRoundMargin, loadRoundSeconds)
+		t.Fatalf("scénario plus long que la manche : %.0f s de dessin + %d s de marge > %d s (DELAY du START) — la manche s'arrêterait avant la fin de la mesure", dur.Seconds(), loadRoundMargin, loadRoundSeconds)
 	}
 	env := newLoadEnv(t)
 	sent := env.drawAt(t, sc.fps, sc.points, dur)
@@ -300,7 +299,7 @@ func runLoadScenario(t *testing.T, sc loadScenario) {
 }
 
 // Nominal : 16 trames/s × 8 points × 280 s = 35 840 points (< 60 000) ; 280 s et non 300 s : la manche dure au plus
-// 300 s (contrat §4) et le dessin ne peut pas occuper toute la manche.
+// 300 s (DELAY du START) et le dessin ne peut pas occuper toute la manche.
 func TestPictoLoad193_Nominal_ZeroDisconnectZeroLoss_P95(t *testing.T) {
 	runLoadScenario(t, loadScenario{name: "nominal", fps: loadNominalFPS, points: loadNominalPoints,
 		fullSeconds: 280, smokeSeconds: 5, zeroLoss: true, underCanvasBound: true})

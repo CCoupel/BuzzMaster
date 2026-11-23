@@ -12,7 +12,7 @@ WebSockets). Seuils : `testing.perf.picto_relay` de `project-config.json`. Arbit
 | Trame maximale (`TestPictoLoad193_MaxFrame_…`) | 16 trames/s × 200 points × 15 s | 48 000 | 0 déconnexion, 0 trame perdue, p95 ≤ 100 ms, trame ≤ 4 096 o |
 | 3 × le débit (`TestPictoLoad193_TripleRate_…`) | 48 trames/s × 200 points × 60 s | > 60 000 | 0 déconnexion ; pertes, `RATE_LIMITED` et `CANVAS_FULL` tolérés (comptés et rapportés) |
 
-La manche de la fixture dure 300 s, maximum du contrat (§4) : le nominal dessine 280 s (et non 300 s) pour ne pas être
+La durée de la manche est le `DELAY` du `START` (300 s dans la fixture ; la question reste à `TIME` 90 s, qui n’est pas la durée du chrono) : le nominal dessine 280 s (et non 300 s) pour ne pas être
 interrompu par le chronomètre. Une garde fait échouer explicitement un scénario dont « durée + 15 s de marge » dépasse
 la manche, et la phase `STARTED` est vérifiée à la fin du dessin.
 
