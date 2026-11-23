@@ -8,8 +8,11 @@ package main
 // Seuils (à reporter dans `testing.perf`) :
 //   - relais serveur, de l'entrée à la sortie : p95 ≤ 100 ms ;
 //   - taille d'une trame relayée : ≤ 4 Ko ;
-//   - débit nominal (16 trames/s, 200 points), 5 minutes : 0 déconnexion ET 0 trame perdue ;
-//   - 3 × le débit nominal : 0 déconnexion (les pertes sont tolérées, puis rattrapées).
+//   - nominal : 16 trames/s × 8 points × 300 s (38 400 points) : 0 déconnexion ET 0 trame perdue ;
+//   - trame maximale : 16 trames/s × 200 points × 15 s (48 000 points) : 0 perte, trame ≤ 4 096 o ;
+//   - 3 × le débit : 48 trames/s × 200 points × 60 s : 0 déconnexion ; pertes et CANVAS_FULL tolérés (comptés).
+//   Garde de cohérence : le nominal et la trame maximale restent SOUS la borne de 60 000 points par époque (§8.3).
+//   Arbitrage : _work/reports/plan-arbitrage-perf-picto-20261123.md ; seuils : testing.perf.picto_relay.
 //
 // Exécution : la mesure complète de 5 minutes est réservée au scope perf :
 //     PICTO_LOAD=1 go test ./cmd/server -run TestPictoLoad193 -v -timeout 20m
@@ -37,7 +40,9 @@ import (
 const (
 	loadPlayers        = 12
 	loadNominalFPS     = 16
-	loadPointsPerFrame = 200
+	loadNominalPoints  = 8
+	loadMaxFramePoints = 200
+	loadCanvasMax      = 60000
 	loadP95Max         = 100 * time.Millisecond
 	loadFrameMaxBytes  = 4096
 )
@@ -85,6 +90,7 @@ func startLoadReader(name string, conn *websocket.Conn) *loadRecv {
 type loadEnv struct {
 	app       *App
 	drawer    *websocket.Conn
+	drawerC   *wireClient
 	epoch     int
 	receivers []*loadRecv
 	conns     []*websocket.Conn
@@ -112,7 +118,7 @@ func newLoadEnv(t *testing.T) *loadEnv {
 	// Lecteurs dédiés (TV, admin, anim) : on arrête les collecteurs de trames du harnais fonctionnel en les
 	// remplaçant par des lecteurs qui horodatent — les connexions sont partagées, donc on ouvre de NOUVEAUX
 	// clients de mesure plutôt que de lire en double.
-	env := &loadEnv{app: w.app, drawer: w.alice.conn, epoch: epoch}
+	env := &loadEnv{app: w.app, drawer: w.alice.conn, drawerC: w.alice, epoch: epoch}
 	for _, spec := range []struct{ name, path string }{{"tv", "/ws/tv"}, {"admin", "/ws/admin"}, {"anim", "/ws/anim"}} {
 		c := dialWS(t, base, spec.path)
 		learnClientID(t, w.app, c)
@@ -138,8 +144,8 @@ func newLoadEnv(t *testing.T) *loadEnv {
 	return env
 }
 
-// drawAt envoie des trames de 200 points à `fps` trames/s pendant d ; retourne les instants d'envoi.
-func (e *loadEnv) drawAt(t *testing.T, fps int, d time.Duration) []time.Time {
+// drawAt envoie des trames de `pointsPerFrame` points à `fps` trames/s pendant d ; retourne les instants d'envoi.
+func (e *loadEnv) drawAt(t *testing.T, fps, pointsPerFrame int, d time.Duration) []time.Time {
 	t.Helper()
 	interval := time.Second / time.Duration(fps)
 	sentAt := []time.Time{}
@@ -147,7 +153,7 @@ func (e *loadEnv) drawAt(t *testing.T, fps int, d time.Duration) []time.Time {
 	end := next.Add(d)
 	strokeID := 1
 	for next.Before(end) {
-		pts := make([][2]int, loadPointsPerFrame)
+		pts := make([][2]int, pointsPerFrame)
 		for i := range pts {
 			pts[i] = [2]int{(i*47 + len(sentAt)*13) % 10001, (i*91 + len(sentAt)*7) % 10001}
 		}
@@ -184,24 +190,55 @@ func loadSeconds(def int) time.Duration {
 	return time.Duration(def) * time.Second
 }
 
-func TestPictoLoad193_Nominal_ZeroDisconnectZeroLoss_P95(t *testing.T) {
+// loadScenario décrit un scénario du plan d'arbitrage (testing.perf.picto_relay).
+type loadScenario struct {
+	name             string
+	fps, points      int
+	fullSeconds      int  // durée de la mesure complète (PICTO_LOAD=1)
+	smokeSeconds     int  // durée du smoke (sans PICTO_LOAD)
+	zeroLoss         bool // nominal et trame maximale : 0 perte, p95 et taille contrôlés
+	underCanvasBound bool // garde : fps × points × durée ≤ 60 000 (§8.3)
+}
+
+func (sc loadScenario) duration() time.Duration {
+	if os.Getenv("PICTO_LOAD") != "" {
+		return loadSeconds(sc.fullSeconds)
+	}
+	return time.Duration(sc.smokeSeconds) * time.Second
+}
+
+func runLoadScenario(t *testing.T, sc loadScenario) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("mesure de charge : exclue de la boucle rapide (-short)")
 	}
-	dur := 5 * time.Second
-	if os.Getenv("PICTO_LOAD") != "" {
-		dur = loadSeconds(300) // 5 minutes de dessin continu
+	dur := sc.duration()
+	if sc.underCanvasBound {
+		if total := sc.fps * sc.points * int(dur.Seconds()); total > loadCanvasMax {
+			t.Fatalf("scénario au-delà de la borne : %d trames/s × %d points × %.0f s = %d points > %d par époque (§8.3) — la mesure déclencherait CANVAS_FULL", sc.fps, sc.points, dur.Seconds(), total, loadCanvasMax)
+		}
 	}
 	env := newLoadEnv(t)
-	sent := env.drawAt(t, loadNominalFPS, dur)
+	sent := env.drawAt(t, sc.fps, sc.points, dur)
 	time.Sleep(1500 * time.Millisecond) // laisse arriver les dernières trames
 
 	if got := env.app.wsHub.ClientCount(); got != env.clients0 {
-		t.Errorf("déconnexion(s) pendant la mesure : %d clients au départ, %d à la fin", env.clients0, got)
+		t.Errorf("%s : déconnexion(s) pendant la mesure : %d clients au départ, %d à la fin", sc.name, env.clients0, got)
 	}
+	var canvasFull, rateLimited int
+	for _, f := range env.drawerC.of(pictoActError) {
+		switch errorCode(f) {
+		case "CANVAS_FULL":
+			canvasFull++
+		case "RATE_LIMITED":
+			rateLimited++
+		}
+	}
+	t.Logf("PERF %s : %d trames/s × %d points × %.0f s, %d trames envoyées, CANVAS_FULL=%d, RATE_LIMITED=%d",
+		sc.name, sc.fps, sc.points, dur.Seconds(), len(sent), canvasFull, rateLimited)
 	for _, r := range env.receivers {
 		if r.dead.Load() {
-			t.Errorf("%s : connexion coupée pendant la mesure", r.name)
+			t.Errorf("%s/%s : connexion coupée pendant la mesure", sc.name, r.name)
 		}
 		r.mu.Lock()
 		got := len(r.seqAt)
@@ -214,37 +251,54 @@ func TestPictoLoad193_Nominal_ZeroDisconnectZeroLoss_P95(t *testing.T) {
 		}
 		r.mu.Unlock()
 		p50, p95, p99 := percentile(lat, 0.50), percentile(lat, 0.95), percentile(lat, 0.99)
-		t.Logf("PERF %s : %d/%d trames reçues, p50=%v p95=%v p99=%v, trame max=%d o", r.name, got, len(sent), p50, p95, p99, maxBytes)
+		t.Logf("PERF %s/%s : %d/%d trames reçues, p50=%v p95=%v p99=%v, trame max=%d o", sc.name, r.name, got, len(sent), p50, p95, p99, maxBytes)
+		if !sc.zeroLoss {
+			continue // ×3 : pertes et CANVAS_FULL tolérés (comptés ci-dessus)
+		}
 		if got != len(sent) {
-			t.Errorf("%s : %d trame(s) perdue(s) sur %d (seuil : 0 au débit nominal)", r.name, len(sent)-got, len(sent))
+			t.Errorf("%s/%s : %d trame(s) perdue(s) sur %d (seuil : 0)", sc.name, r.name, len(sent)-got, len(sent))
 		}
 		if p95 > loadP95Max {
-			t.Errorf("%s : latence p95 = %v, seuil %v", r.name, p95, loadP95Max)
+			t.Errorf("%s/%s : latence p95 = %v, seuil %v", sc.name, r.name, p95, loadP95Max)
 		}
 		if maxBytes > loadFrameMaxBytes {
-			t.Errorf("%s : trame de %d o, seuil %d o", r.name, maxBytes, loadFrameMaxBytes)
+			t.Errorf("%s/%s : trame de %d o, seuil %d o", sc.name, r.name, maxBytes, loadFrameMaxBytes)
 		}
+	}
+	if sc.zeroLoss && (canvasFull > 0 || rateLimited > 0) {
+		t.Errorf("%s : CANVAS_FULL=%d / RATE_LIMITED=%d inattendus (le scénario reste sous les bornes)", sc.name, canvasFull, rateLimited)
+	}
+	// Rattrapage : la feuille du journal ne dépasse jamais la borne, même à 3 × le débit.
+	raw, _ := json.Marshal(env.app.pictoCanvas.Snapshot())
+	var snap struct {
+		Strokes []struct {
+			Pts [][2]int `json:"PTS"`
+		} `json:"STROKES"`
+	}
+	_ = json.Unmarshal(raw, &snap)
+	points := 0
+	for _, s := range snap.Strokes {
+		points += len(s.Pts)
+	}
+	if points > loadCanvasMax {
+		t.Errorf("%s : le journal contient %d points, borne %d", sc.name, points, loadCanvasMax)
 	}
 }
 
-func TestPictoLoad193_TripleRate_ZeroDisconnect_LossToleratedThenCaughtUp(t *testing.T) {
-	if testing.Short() {
-		t.Skip("mesure de charge : exclue de la boucle rapide (-short)")
-	}
-	dur := 5 * time.Second
-	if os.Getenv("PICTO_LOAD") != "" {
-		dur = loadSeconds(60)
-	}
-	env := newLoadEnv(t)
-	env.drawAt(t, 3*loadNominalFPS, dur)
-	time.Sleep(1500 * time.Millisecond)
+// Nominal : 16 trames/s × 8 points × 300 s = 38 400 points (< 60 000).
+func TestPictoLoad193_Nominal_ZeroDisconnectZeroLoss_P95(t *testing.T) {
+	runLoadScenario(t, loadScenario{name: "nominal", fps: loadNominalFPS, points: loadNominalPoints,
+		fullSeconds: 300, smokeSeconds: 5, zeroLoss: true, underCanvasBound: true})
+}
 
-	if got := env.app.wsHub.ClientCount(); got != env.clients0 {
-		t.Errorf("3 × le débit : %d clients au départ, %d à la fin — aucune déconnexion tolérée", env.clients0, got)
-	}
-	for _, r := range env.receivers {
-		if r.dead.Load() {
-			t.Errorf("%s : connexion coupée à 3 × le débit", r.name)
-		}
-	}
+// Trame maximale : 16 trames/s × 200 points × 15 s = 48 000 points (< 60 000), trame ≤ 4 096 o.
+func TestPictoLoad193_MaxFrame_ZeroLoss_SizeAndP95(t *testing.T) {
+	runLoadScenario(t, loadScenario{name: "max_frame", fps: loadNominalFPS, points: loadMaxFramePoints,
+		fullSeconds: 15, smokeSeconds: 5, zeroLoss: true, underCanvasBound: true})
+}
+
+// 3 × le débit : 48 trames/s × 200 points × 60 s — 0 déconnexion ; pertes, RATE_LIMITED et CANVAS_FULL tolérés.
+func TestPictoLoad193_TripleRate_ZeroDisconnect_LossToleratedThenCaughtUp(t *testing.T) {
+	runLoadScenario(t, loadScenario{name: "x3", fps: 3 * loadNominalFPS, points: loadMaxFramePoints,
+		fullSeconds: 60, smokeSeconds: 5})
 }
