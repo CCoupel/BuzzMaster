@@ -386,7 +386,9 @@ func (a *App) init() {
 	a.engine.SetHistoryPath(filepath.Join(configDir, "history.json"))
 	a.engine.SetTeamsPath(filepath.Join(configDir, "teams.json"))
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
-	a.engine.SetVPlayerSessionsPath(filepath.Join(configDir, "vplayer_sessions.json")) // v13.0.0 session tokens (fingerprints only)
+	if err := a.engine.SetVPlayerSessionsPath(filepath.Join(configDir, "vplayer_sessions.json")); err != nil { // v13.0.0 session tokens (fingerprints only)
+		server.LogWarn(game.LogComponentApp, "vplayer_sessions.json absent ou illisible (%v): les places des tablettes repassent en « premier arrivé » (cas 1c)", err)
+	}
 	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
 	a.engine.SetStatePath(filepath.Join(configDir, "game_state.json")) // #141
 
@@ -4216,7 +4218,7 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 			reason = enrollErr.Reason
 		}
 		if reason == game.ErrInvalidSession { // vplayer-session.md §3, §4.2 1b: the ID only, NEVER a token
-			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_TOKEN_INVALID id=%s client=%s", payload.ID, clientID)
+			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_TOKEN_INVALID id=%s client=%s", diag.LogToken(payload.ID), clientID)
 		}
 
 		rejectPayload := protocol.PlayerRejectedPayload{

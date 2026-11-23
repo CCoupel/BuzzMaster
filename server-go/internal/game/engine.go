@@ -6592,7 +6592,12 @@ func (e *Engine) createVirtualPlayerUnsafe(name string) (string, *Bumper, error)
 	return id, bumper, nil
 }
 
-// ReconnectOrCreateVirtualPlayer resolves a PLAYER_CONNECT request per the
+// ReconnectOrCreateVirtualPlayer — RESERVED FOR TESTS AND TOOLS: no production path may call it. It takes no
+// session token, so it verifies no proof of possession and leaves new seats without fingerprint (v13.0.0,
+// contracts/vplayer-session.md). Every real PLAYER_CONNECT goes through
+// ReconnectOrCreateVirtualPlayerWithToken (architecture guard: vplayer_session_callers_319_test.go).
+//
+// It resolves a PLAYER_CONNECT request per the
 // backend-ID decision matrix (fix R1, code-review CRITICAL —
 // _work/reports/planner-20260725-143029-r1-fix.md §3.3). The bumper ID
 // (already generated and returned to the client at enrollment, in

@@ -3923,7 +3923,9 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 
 	if detected["bumpers"] {
 		if err := h.engine.LoadBumpers(); err == nil {
-			h.engine.LoadVPlayerSessions() // v13.0.0: the session fingerprints come back with the players
+			if err := h.engine.LoadVPlayerSessions(); err != nil { // v13.0.0: the session fingerprints come back with the players
+				LogWarn(game.LogComponentHTTP, "Restore: vplayer_sessions.json absent ou illisible (%v): les places restaurées repassent en « premier arrivé »", err)
+			}
 			restoredMap["bumpers"] = true
 			log.Printf("[HTTP] Restore: Bumpers loaded into engine")
 		}

@@ -209,3 +209,30 @@ func TestSessionToken_PersistsAcrossRestartAndRestore(t *testing.T) {
 		t.Error("après restauration, la session doit rester valable (empreinte rechargée pour un joueur présent)")
 	}
 }
+
+// Audit n3 : un fichier absent ou illisible est signalé (l'appelant journalise un WARN) sans jamais exposer son contenu.
+func TestSessionToken_LoadReportsMissingOrUnreadableFile(t *testing.T) {
+	dir := t.TempDir()
+	e := NewEngine()
+	if err := e.SetVPlayerSessionsPath(filepath.Join(dir, "absent.json")); err == nil {
+		t.Error("fichier absent : une erreur est attendue")
+	}
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte(`{"TOKENS": {"x": "secret-fingerprint"`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err := e.SetVPlayerSessionsPath(bad)
+	if err == nil {
+		t.Fatal("fichier illisible : une erreur est attendue")
+	}
+	if strings.Contains(err.Error(), "secret-fingerprint") {
+		t.Error("l'erreur ne doit jamais contenir le contenu du fichier")
+	}
+	good := filepath.Join(dir, "good.json")
+	if err := os.WriteFile(good, []byte(`{"TOKENS": {}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.SetVPlayerSessionsPath(good); err != nil {
+		t.Errorf("fichier valable : pas d'erreur attendue, got %v", err)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -62,47 +63,52 @@ func (s *vplayerSessionStore) verify(id, token string) (has, ok bool) {
 	return true, subtle.ConstantTimeCompare([]byte(got), []byte(fp)) == 1
 }
 
-// SetVPlayerSessionsPath sets the persistence file and loads the fingerprints from it (a missing file is an
-// empty store).
-func (e *Engine) SetVPlayerSessionsPath(path string) {
+// SetVPlayerSessionsPath sets the persistence file and loads the fingerprints from it. A missing or unreadable
+// file gives an empty store AND a non-nil error (the caller journals a WARN: every seat is back to "first to
+// arrive", matrix case 1c). Never carries a token or a fingerprint.
+func (e *Engine) SetVPlayerSessionsPath(path string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.sessions == nil {
 		e.sessions = &vplayerSessionStore{tokens: map[string]string{}}
 	}
 	e.sessions.path = path
-	e.loadVPlayerSessionsUnsafe()
+	return e.loadVPlayerSessionsUnsafe()
 }
 
 // LoadVPlayerSessions reloads the fingerprints from disk (restoration of a backup).
-func (e *Engine) LoadVPlayerSessions() {
+func (e *Engine) LoadVPlayerSessions() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.sessions != nil {
-		e.loadVPlayerSessionsUnsafe()
-		e.sessionPruneUnsafe() // the restored roster is the reference: no fingerprint for a seat it does not hold
+	if e.sessions == nil {
+		return nil
 	}
+	err := e.loadVPlayerSessionsUnsafe()
+	e.sessionPruneUnsafe() // the restored roster is the reference: no fingerprint for a seat it does not hold
+	return err
 }
 
-func (e *Engine) loadVPlayerSessionsUnsafe() {
+// loadVPlayerSessionsUnsafe fills the store from the file; the error (missing or unreadable file) never
+// contains the file's content.
+func (e *Engine) loadVPlayerSessionsUnsafe() error {
 	s := e.sessions
 	s.tokens = map[string]string{}
 	if s.path == "" {
-		return
+		return nil
 	}
 	data, err := os.ReadFile(s.path)
 	if err != nil {
-		return
+		return err
 	}
 	var f vplayerSessionsFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		log.Printf("[Engine] vplayer sessions: unreadable file ignored: %v", err)
-		return
+		return fmt.Errorf("vplayer_sessions.json illisible: %w", err)
 	}
 	for id, fp := range f.Tokens {
 		s.tokens[id] = fp
 	}
 	log.Printf("[Engine] vplayer sessions loaded: %d seat(s)", len(s.tokens))
+	return nil
 }
 
 // SaveVPlayerSessions writes the fingerprints atomically (temp file + rename).
