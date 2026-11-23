@@ -12,7 +12,7 @@ import { fnv1a } from '../utils/fnv1a'
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
 import {
-  clearOwnVPlayerSession, getStoredVPlayerId, isStaleVPlayerSession,
+  clearOwnVPlayerSession, getStoredVPlayerId, isStaleVPlayerSession, playerConnectPayload,
   saveArdoiseDraft, loadArdoiseDraft, clearArdoiseDraft,
 } from '../utils/vplayerSession'
 import './VPlayerPage.css'
@@ -315,7 +315,7 @@ export default function VPlayerPage() {
     // PLAYER_CONNECT avec un ID déjà supprimé — le serveur le traite comme
     // absent et recrée un VJoueur fantôme sous le même nom.
     // #246 : seulement si l'ID stocké est le nôtre (le localStorage est partagé).
-    if (getStoredVPlayerId() === ownIdRef.current) localStorage.removeItem('vplayer_id')
+    if (getStoredVPlayerId() === ownIdRef.current) { localStorage.removeItem('vplayer_id'); localStorage.removeItem('vplayer_token') }
     setEvictedReason(playerEvictedStatus.reason ?? '')
     clearPlayerEvictedStatus()
   }, [playerEvictedStatus, clearPlayerEvictedStatus, sendClientTrace])
@@ -365,7 +365,7 @@ export default function VPlayerPage() {
         return
       }
       console.log('[VPlayer] PLAYER_CONNECT name:', playerSession.name, 'id:', playerSession.id)
-      sendMessage('PLAYER_CONNECT', { NAME: playerSession.name, ID: playerSession.id })
+      sendMessage('PLAYER_CONNECT', playerConnectPayload(playerSession.name, playerSession.id)) // #319 : TOKEN lu à chaque envoi (reçu après une migration)
     }
 
     attemptConnect()
@@ -883,7 +883,7 @@ export default function VPlayerPage() {
     setSuperseded(false)
     supersededRef.current = false
     if (playerSession) {
-      sendMessage('PLAYER_CONNECT', { NAME: playerSession.name, ID: playerSession.id })
+      sendMessage('PLAYER_CONNECT', playerConnectPayload(playerSession.name, playerSession.id))
     }
   }, [playerSession, sendMessage])
 

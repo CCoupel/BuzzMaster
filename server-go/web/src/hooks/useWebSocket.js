@@ -31,6 +31,11 @@ const HEARTBEAT_MISS_THRESHOLD = 3
 // 4,0-5,0s au lieu de 4,0-4,5s.
 const LIVENESS_CHECK_INTERVAL_MS = 500
 
+// #319 — le jeton de session (PLAYER_CONNECT / PLAYER_CONNECTED) n'entre jamais dans la console du navigateur.
+function redactToken(msg) {
+  return msg && typeof msg === 'object' && msg.TOKEN ? { ...msg, TOKEN: '[masqué]' } : msg
+}
+
 function nextReconnectDelay() {
   const jitter = RECONNECT_INTERVAL * RECONNECT_JITTER_RATIO
   return RECONNECT_INTERVAL + (Math.random() * 2 - 1) * jitter
@@ -513,7 +518,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
 
   const handleMessage = useCallback((data) => {
     const { ACTION, MSG, FSINFO, VERSION } = data
-    if (ACTION !== 'PICTO_STROKES') console.log('[WS] Received:', ACTION, MSG) // PICTO_STROKES : rafale (contrat picto.md §8.5)
+    if (ACTION !== 'PICTO_STROKES') console.log('[WS] Received:', ACTION, redactToken(MSG)) // PICTO_STROKES : rafale (contrat picto.md §8.5)
     // DEBUG: Log GAME state if present
     if (MSG?.GAME) {
       console.log('[WS DEBUG] GAME state:', {
@@ -992,9 +997,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         break
 
       case 'PLAYER_CONNECTED':
-        console.log('[WS] PLAYER_CONNECTED:', MSG)
+        console.log('[WS] PLAYER_CONNECTED:', redactToken(MSG)) // #319 : jamais le jeton dans la console
         // Fix R1 (#109) : capturer l'ID renvoyé par le serveur pour le
         // renvoyer à la reconnexion (lookup par ID côté backend, plus par nom).
+        // #319 : jeton de session (contrat vplayer-session.md §5), écrit AVANT l'ID avec la même règle d'onglet (#246 F-ID) :
+        // seulement si l'ID stocké est vide ou celui de cette réponse. Jamais journalisé (le log ci-dessus l'exclut).
+        if (MSG?.ID && MSG?.TOKEN) {
+          const storedId = localStorage.getItem('vplayer_id')
+          if (!storedId || storedId === MSG.ID) localStorage.setItem('vplayer_token', MSG.TOKEN)
+        }
         if (MSG?.ID) {
           localStorage.setItem('vplayer_id', MSG.ID)
         }
@@ -1220,7 +1231,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const sendMessage = useCallback((action, msg = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({ ACTION: action, MSG: msg })
-      if (action !== 'PICTO_STROKES') console.log('[WS] Sending:', action, msg) // exclue : une trame toutes les 60 ms (picto.md §8.5)
+      if (action !== 'PICTO_STROKES') console.log('[WS] Sending:', action, redactToken(msg)) // exclue : une trame toutes les 60 ms (picto.md §8.5)
       wsRef.current.send(message)
       return true
     } else {
