@@ -17,6 +17,8 @@ func applyPictoFields(r *http.Request, question map[string]interface{}) (int, st
 	if err != nil || !game.ValidPictoTime(t) {
 		return http.StatusBadRequest, game.PictoErrTimeInvalid + ": time doit être un entier de 30 à 300 secondes"
 	}
+	// Store the validated, normalised duration — never the raw input (" 090" → "90").
+	question["TIME"] = strconv.Itoa(t)
 	var raw []string
 	for _, line := range strings.Split(r.FormValue("picto_words"), "\n") {
 		line = strings.TrimRight(line, "\r")

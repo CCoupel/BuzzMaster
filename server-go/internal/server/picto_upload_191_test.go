@@ -286,3 +286,16 @@ func TestPicto_NotInGenerableQuestionTypes(t *testing.T) {
 		}
 	}
 }
+
+// Revue M1 : la durée enregistrée est la valeur validée normalisée, pas la saisie brute.
+func TestPictoUpload_TimeStoredNormalised(t *testing.T) {
+	server, dataDir := newPictoServer(t)
+	f := pictoFields("chat")
+	f["time"] = " 090 "
+	if r := postPictoQuestion(t, server, f); r.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", r.Code, r.Body.String())
+	}
+	if got := toStr(readOnlyQuestionJSON(t, dataDir)["TIME"]); got != "90" {
+		t.Errorf("TIME = %q, want \"90\"", got)
+	}
+}
