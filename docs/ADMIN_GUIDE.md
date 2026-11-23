@@ -542,8 +542,11 @@ possible pendant 5 minutes. Quiconque connaît le nom affiché sur la TV peut al
 que lorsque son propriétaire est prêt à se reconnecter.
 
 **Restauration d'une sauvegarde** : une sauvegarde faite avant v13.0.0, ou une sauvegarde sans le fichier des empreintes
-(`vplayer_sessions.json`), remet toutes les places en « premier arrivé ». Après une restauration, relancer les tablettes
-tout de suite.
+(`vplayer_sessions.json`), remet toutes les places en « premier arrivé ». Le journal affiche alors un avertissement. Après
+une restauration, laisser les tablettes se reconnecter rapidement.
+
+Le même avertissement apparaît au démarrage du serveur si le fichier est absent ou illisible. Au tout premier démarrage,
+l'absence du fichier est normale.
 
 #### Suppression d'un joueur
 
