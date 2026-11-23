@@ -187,6 +187,9 @@ type Engine struct {
 	// before REVEALED) — drawn at START, kept until the next Ready / NEW_GAME.
 	pictoWord string
 
+	// sessions holds the fingerprints of the VJoueur session tokens (v13.0.0, vplayer_sessions.go).
+	sessions *vplayerSessionStore
+
 	// rafaleAlpha (#282, contracts/rafale.md §15.4) is the alphabetical draw
 	// queue of the current classic round; nil ⇔ option off. Ephemeral like
 	// rafaleDraw, but explicitly released by stopUnsafe/Ready/InitGame.
@@ -471,6 +474,7 @@ type Engine struct {
 // NewEngine creates a new game engine
 func NewEngine() *Engine {
 	return &Engine{
+		sessions: &vplayerSessionStore{tokens: map[string]string{}}, // v13.0.0 session tokens: in memory, persisted once a path is set
 		state: GameState{
 			Phase:              PhaseStopped,
 			Delay:              30,
@@ -1227,6 +1231,7 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 	// silently satisfying participantsConform).
 	oldActiveTeams := teamsWithBumpers(oldBumpers)
 	e.data.Bumpers = bumpers
+	e.sessionPruneUnsafe() // vplayer-session.md §7: no fingerprint for a seat that is gone
 	newActiveTeams := teamsWithBumpers(bumpers)
 	teamsLostLastBumper := false
 	for teamID := range oldActiveTeams {
@@ -1284,6 +1289,7 @@ func (e *Engine) DeleteBumper(id string) *Bumper {
 	}
 	deletedTeam := deleted.Team
 	delete(e.data.Bumpers, id)
+	e.sessionRemoveUnsafe(id) // vplayer-session.md §7
 	delete(e.flipMemo, id) // #248: the bumper's FLIP_ID memory goes with it
 	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
 
@@ -4252,6 +4258,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 		for id, bumper := range e.data.Bumpers {
 			if bumper != nil && bumper.IsVirtual {
 				delete(e.data.Bumpers, id)
+				e.sessionRemoveUnsafe(id) // vplayer-session.md §7: NEW_GAME purge
 				res.PurgedPlayerIDs = append(res.PurgedPlayerIDs, id)
 			}
 		}
@@ -4460,6 +4467,7 @@ func (e *Engine) RAZScores() {
 func (e *Engine) ClearBumpers() {
 	e.mu.Lock()
 	e.data.Bumpers = make(map[string]*Bumper)
+	e.sessionPruneUnsafe()
 
 	// Reset team references to bumpers
 	for _, team := range e.data.Teams {
@@ -4481,6 +4489,7 @@ func (e *Engine) ClearBumpers() {
 func (e *Engine) ClearAll() {
 	e.mu.Lock()
 	e.data.Bumpers = make(map[string]*Bumper)
+	e.sessionPruneUnsafe()
 	e.data.Teams = make(map[string]*Team)
 	log.Printf("[Engine] All teams and bumpers cleared")
 	e.mu.Unlock()
@@ -6615,14 +6624,45 @@ func (e *Engine) createVirtualPlayerUnsafe(name string) (string, *Bumper, error)
 // Returns (id, bumper, reconnected, err). reconnected is false only when a
 // brand-new bumper was created.
 func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumper, bool, error) {
+	id, b, reconnected, _, err := e.reconnectOrCreateVirtualPlayer(id, name, "", false)
+	return id, b, reconnected, err
+}
+
+// ReconnectOrCreateVirtualPlayerWithToken is ReconnectOrCreateVirtualPlayer with the session token of the
+// connecting tablet (contracts/vplayer-session.md §4.2). The extra result is the token the bound tablet must
+// keep and resend: the presented one for a valid reconnection (1a), a freshly issued one for a seat without
+// fingerprint (1c, migration), a new enrolment or a re-keyed seat. When the feature is off it is "".
+// A seat that has a token and receives none or a wrong one is refused with EnrollmentError{INVALID_SESSION}
+// BEFORE any state change (1b): nothing is bound, nobody is evicted.
+func (e *Engine) ReconnectOrCreateVirtualPlayerWithToken(id, name, token string) (string, *Bumper, bool, string, error) {
+	return e.reconnectOrCreateVirtualPlayer(id, name, token, true)
+}
+
+// reconnectOrCreateVirtualPlayer is the shared body; enforce=false skips the 1b refusal (legacy entry point
+// kept for tests and tools, see vplayer_sessions.go).
+func (e *Engine) reconnectOrCreateVirtualPlayer(id, name, token string, enforce bool) (string, *Bumper, bool, string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	normalized := strings.TrimSpace(name)
 
-	// Case 1: a resolvable ID is unambiguous — always a genuine reconnection.
+	// Case 1: a resolvable ID is a reconnection — provided the tablet proves it owns the seat (token).
 	if id != "" {
 		if bumper, ok := e.data.Bumpers[id]; ok && bumper != nil && bumper.IsVirtual {
+			sessionToken := ""
+			if e.sessions != nil { // always true for an engine built by NewEngine; nil only for a zero Engine
+				has, valid := e.sessions.verify(id, token)
+				switch {
+				case has && !valid && !enforce:
+					sessionToken = ""
+				case has && !valid: // 1b: no binding, no eviction, no side effect
+					return "", nil, false, "", &EnrollmentError{Reason: ErrInvalidSession}
+				case has: // 1a
+					sessionToken = token
+				default: // 1c: seat created before v13.0.0, first to arrive gets its token
+					sessionToken = e.sessionIssueUnsafe(id)
+				}
+			}
 			// #246: the client-sent name never renames the bumper (a stale tab used
 			// to rename the current player). The server-side name is authoritative.
 			bumper.Connected = true
@@ -6635,7 +6675,7 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 			bumper.reclaimAuthorizedUntil = time.Time{}
 			log.Printf("[Engine] Virtual player reconnected by ID: id=%s, name=%s", id, bumper.Name)
 			safeGo("SaveBumpers", e.SaveBumpers)
-			return id, bumper, true, nil
+			return id, bumper, true, sessionToken, nil
 		}
 		// Case 2: stale/unknown ID — fall through as if none was provided.
 	}
@@ -6661,7 +6701,7 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 
 			newID := e.reattachVirtualPlayerUnsafe(oldID, cand, normalized)
 			log.Printf("[Engine] Virtual player reclaimed: old_id=%s, new_id=%s, name=%s", oldID, newID, normalized)
-			return newID, cand, true, nil
+			return newID, cand, true, e.issueUnlessLegacyUnsafe(newID, "reclaim", enforce), nil
 		}
 	}
 
@@ -6684,15 +6724,35 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 				// card for the animateur right now, not after some delay.
 				cand.ReclaimRequested = true
 				safeGo("SaveBumpers", e.SaveBumpers)
-				return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN_OFFLINE"}
+				return "", nil, false, "", &EnrollmentError{Reason: "NAME_TAKEN_OFFLINE"}
 			}
-			return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN"}
+			return "", nil, false, "", &EnrollmentError{Reason: "NAME_TAKEN"}
 		}
 	}
 
 	// Case 4/5: no usable id, name free -> new enrollment.
 	newID, newBumper, err := e.createVirtualPlayerUnsafe(normalized)
-	return newID, newBumper, false, err
+	if err != nil {
+		return "", nil, false, "", err
+	}
+	return newID, newBumper, false, e.issueUnlessLegacyUnsafe(newID, "enrol", enforce), nil
+}
+
+// issueUnlessLegacyUnsafe issues a token for a new or re-keyed seat, except through the legacy entry point
+// (enforce=false: tests and tools), whose seats stay without fingerprint like a seat created before v13.0.0
+// (matrix case 1c: the first tablet to arrive gets its token).
+func (e *Engine) issueUnlessLegacyUnsafe(id, reason string, enforce bool) string {
+	if !enforce {
+		return ""
+	}
+	return e.issueAndLogUnsafe(id, reason)
+}
+
+// issueAndLogUnsafe issues a token for a new or re-keyed seat and logs the event (never the token).
+func (e *Engine) issueAndLogUnsafe(id, reason string) string {
+	// The journal line (VPLAYER_TOKEN_ISSUED id=… reason=…, never the token) is written by the application
+	// layer, which knows the outcome of the connection (cmd/server handlePlayerConnect).
+	return e.sessionIssueUnsafe(id)
 }
 
 // rekeyBumperUnsafe moves bumper from oldID to a freshly generated ID —
@@ -6709,6 +6769,7 @@ func (e *Engine) rekeyBumperUnsafe(oldID string, bumper *Bumper, name string) st
 	delete(e.data.Bumpers, oldID)
 	e.data.Bumpers[newID] = bumper
 	bumper.Name = name
+	e.sessionRemoveUnsafe(oldID) // vplayer-session.md §7: the re-keyed seat gets a NEW token under its new ID
 
 	return newID
 }
@@ -6815,6 +6876,8 @@ func (e *Engine) ReleaseSeat(id string) (newID string, wasConnected bool, ok boo
 	// site flipping CONNECTED fires the matching event (see UpdateBumper's
 	// CONNECTED handling a few hundred lines up).
 	newID = e.rekeyBumperUnsafe(id, bumper, bumper.Name)
+	// vplayer-session.md §7: the released seat gets a fresh token nobody holds — it can only be reclaimed by name (#122).
+	e.issueAndLogUnsafe(newID, "release")
 	bumper.Connected = false
 	applyConnEventUnsafe(bumper, ConnEventDisconnect)
 	e.pictoRefreshUnsafe() // PICTO (#192): the evicted seat is re-keyed, a stale drawer ID is purged

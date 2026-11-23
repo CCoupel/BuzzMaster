@@ -3251,6 +3251,12 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		if _, err := os.Stat(bumpersPath); err == nil {
 			h.addFileToTAR(tw, bumpersPath, "config/bumpers.json")
 		}
+		// v13.0.0 (vplayer-session.md §7): the session fingerprints travel with the players, so a seat stays
+		// valid after a restoration.
+		sessionsPath := filepath.Join(configDir, "vplayer_sessions.json")
+		if _, err := os.Stat(sessionsPath); err == nil {
+			h.addFileToTAR(tw, sessionsPath, "config/vplayer_sessions.json")
+		}
 	}
 
 	// Add history.json
@@ -3530,6 +3536,7 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		h.engine.SetBumpers(make(map[string]*game.Bumper))
 		bumpersPath := filepath.Join(configDir, "bumpers.json")
 		os.Remove(bumpersPath)
+		os.Remove(filepath.Join(configDir, "vplayer_sessions.json")) // v13.0.0: fingerprints go with the players (SetBumpers pruned the store)
 		result["bumpers"] = true
 		log.Printf("[HTTP] Reset: Bumpers cleared")
 	}
@@ -3832,6 +3839,11 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(configDir, "bumpers.json")
 				allowed = true
 			}
+		case tarPath == "config/vplayer_sessions.json": // v13.0.0: same flag as the players
+			if detected["bumpers"] {
+				targetPath = filepath.Join(configDir, "vplayer_sessions.json")
+				allowed = true
+			}
 		case tarPath == "config/history.json":
 			if detected["history"] {
 				targetPath = filepath.Join(configDir, "history.json")
@@ -3911,6 +3923,7 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 
 	if detected["bumpers"] {
 		if err := h.engine.LoadBumpers(); err == nil {
+			h.engine.LoadVPlayerSessions() // v13.0.0: the session fingerprints come back with the players
 			restoredMap["bumpers"] = true
 			log.Printf("[HTTP] Restore: Bumpers loaded into engine")
 		}
@@ -4079,7 +4092,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["effects"] = true
 		case tarPath == "config/teams.json" || tarPath == "teams.json":
 			detected["teams"] = true
-		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json":
+		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json", tarPath == "config/vplayer_sessions.json":
 			detected["bumpers"] = true
 		case tarPath == "config/history.json" || tarPath == "history.json":
 			detected["history"] = true

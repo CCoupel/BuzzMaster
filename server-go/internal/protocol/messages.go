@@ -762,8 +762,11 @@ type RafaleTickPayload struct {
 
 // PlayerConnectPayload for PLAYER_CONNECT action (virtual player enrollment)
 type PlayerConnectPayload struct {
-	Name string `json:"NAME"`         // Player name
-	ID   string `json:"ID,omitempty"` // Bumper ID from a prior PLAYER_CONNECTED (fix R1, #109) —
+	Name string `json:"NAME"` // Player name
+	// Token (v13.0.0, contracts/vplayer-session.md §4.1): session token from a prior PLAYER_CONNECTED, sent with ID.
+	// Never logged, never in a GameState.
+	Token string `json:"TOKEN,omitempty"`
+	ID    string `json:"ID,omitempty"` // Bumper ID from a prior PLAYER_CONNECTED (fix R1, #109) —
 	// omitted on first enrollment. When present and it resolves to an existing
 	// VJoueur bumper, the reconnection is unambiguous and never rejected/merged
 	// by name. Omitempty keeps old clients (that never send it) working as a
@@ -776,11 +779,14 @@ type PlayerConnectedPayload struct {
 	ID   string `json:"ID"`   // Bumper ID
 	Name string `json:"NAME"` // Player name
 	Team string `json:"TEAM"` // Team name (if assigned)
+	// Token (v13.0.0, contracts/vplayer-session.md §4.3): the seat's session token, sent to the bound tablet only,
+	// at every PLAYER_CONNECTED. omitempty: absent when the feature is off.
+	Token string `json:"TOKEN,omitempty"`
 }
 
 // PlayerRejectedPayload for PLAYER_REJECTED action (enrollment rejected)
 type PlayerRejectedPayload struct {
-	Reason string `json:"REASON"` // Rejection reason: ENROLLMENT_CLOSED, LIMIT_REACHED,
+	Reason string `json:"REASON"` // Rejection reason: INVALID_SESSION (v13.0.0, vplayer-session.md §4.4), ENROLLMENT_CLOSED, LIMIT_REACHED,
 	// INVALID_NAME, or NAME_TAKEN (fix R1, #109 — no ID provided/resolvable and
 	// the name is already used by another VJoueur, connected or not; never
 	// merged/replaced, the client must pick a different name). Also carries

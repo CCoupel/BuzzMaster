@@ -386,6 +386,7 @@ func (a *App) init() {
 	a.engine.SetHistoryPath(filepath.Join(configDir, "history.json"))
 	a.engine.SetTeamsPath(filepath.Join(configDir, "teams.json"))
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
+	a.engine.SetVPlayerSessionsPath(filepath.Join(configDir, "vplayer_sessions.json")) // v13.0.0 session tokens (fingerprints only)
 	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
 	a.engine.SetStatePath(filepath.Join(configDir, "game_state.json")) // #141
 
@@ -4207,12 +4208,15 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_NAME_MISMATCH id=%s server_name=%q client_name=%q client=%s", payload.ID, existing.Name, playerName, clientID)
 		}
 	}
-	bumperID, bumper, reconnected, err := a.engine.ReconnectOrCreateVirtualPlayer(payload.ID, playerName)
+	bumperID, bumper, reconnected, sessionToken, err := a.engine.ReconnectOrCreateVirtualPlayerWithToken(payload.ID, playerName, payload.Token)
 	if err != nil {
 		// Send rejection to this client only
 		reason := "ENROLLMENT_CLOSED"
 		if enrollErr, ok := err.(*game.EnrollmentError); ok {
 			reason = enrollErr.Reason
+		}
+		if reason == game.ErrInvalidSession { // vplayer-session.md §3, §4.2 1b: the ID only, NEVER a token
+			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_TOKEN_INVALID id=%s client=%s", payload.ID, clientID)
 		}
 
 		rejectPayload := protocol.PlayerRejectedPayload{
@@ -4226,11 +4230,24 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		return
 	}
 
+	// vplayer-session.md §3: journal the issuance of a token (ID and cause only, never the token).
+	if sessionToken != "" && sessionToken != payload.Token {
+		cause := "enrol"
+		switch {
+		case reconnected && bumperID == payload.ID:
+			cause = "legacy"
+		case reconnected:
+			cause = "reclaim"
+		}
+		server.LogInfo(game.LogComponentWebSocket, "VPLAYER_TOKEN_ISSUED id=%s reason=%s", bumperID, cause)
+	}
+
 	// Send confirmation to this client
 	connectedPayload := protocol.PlayerConnectedPayload{
-		ID:   bumperID,
-		Name: bumper.Name,
-		Team: bumper.Team,
+		ID:    bumperID,
+		Name:  bumper.Name,
+		Team:  bumper.Team,
+		Token: sessionToken, // vplayer-session.md §4.3: to the bound tablet only, never logged
 	}
 	connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
 	a.wsHub.SendToClient(clientID, connectedMsg)
