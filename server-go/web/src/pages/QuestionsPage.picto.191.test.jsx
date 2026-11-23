@@ -243,6 +243,17 @@ describe('QuestionsPage — type PICTO (#191)', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('M3 — le message ne survit pas à une remise à zéro du formulaire (autre question, enregistrement)', async () => {
+    openPicto()
+    fillTitle()
+    paste(Array.from({ length: 22 }, (_, i) => `mot${i}`).join('\n'))
+    expect(screen.getByRole('alert')).toBeTruthy()
+    fireEvent.change(timeInput(), { target: { value: '90' } })
+    fireEvent.click(submitBtn())
+    await waitFor(() => expect(postedForm()).not.toBeNull())
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+
   it('M2 — le champ générique devient « Titre (liste des questions) », sur une ligne', () => {
     openPicto()
     expect(screen.getByLabelText(/Titre \(liste des questions\)/)).toBe(document.getElementById('question-input'))

@@ -9,7 +9,7 @@
  * renvoyé (`error`). Seules les bornes de saisie (liste 1 à 20) servent à
  * désactiver l'ajout / l'enregistrement.
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { categoryMeta } from '../../utils/categoryUtils'
 import './PictoEditor.css'
 
@@ -46,6 +46,9 @@ export default function PictoEditor({ values, onChange, error, customCategories 
   const [draft, setDraft] = useState('')
   const [ignored, setIgnored] = useState(0) // mots non ajoutés car au-delà de 20 (M3)
   const words = values.pictoWords || []
+  // Liste émise par cet éditeur : toute autre liste (autre question chargée, formulaire remis à zéro) efface le message.
+  const emitted = useRef(words)
+  useEffect(() => { if (words !== emitted.current) setIgnored(0) }, [words])
   const full = words.length >= PICTO_WORDS_MAX
   const timeOk = validPictoTime(values.time)
   const cat = values.category ? categoryMeta(values.category, customCategories) : null
@@ -55,11 +58,13 @@ export default function PictoEditor({ values, onChange, error, customCategories 
     const incoming = String(raw ?? '').split(/[\n,;]+/).map(normalizePictoWord).filter(Boolean)
     if (!incoming.length) return
     const all = [...words, ...incoming]
-    onChange('pictoWords', all.slice(0, PICTO_WORDS_MAX))
+    const next = all.slice(0, PICTO_WORDS_MAX)
+    emitted.current = next
+    onChange('pictoWords', next)
     setIgnored(Math.max(0, all.length - PICTO_WORDS_MAX))
     setDraft('')
   }
-  const removeWord = (i) => { setIgnored(0); onChange('pictoWords', words.filter((_, k) => k !== i)) }
+  const removeWord = (i) => { setIgnored(0); const next = words.filter((_, k) => k !== i); emitted.current = next; onChange('pictoWords', next) }
 
   const onKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
