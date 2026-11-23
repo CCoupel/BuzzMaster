@@ -545,9 +545,14 @@ que lorsque son propriétaire est prêt à se reconnecter.
 (`vplayer_sessions.json`), remet toutes les places en « premier arrivé ». Le journal affiche alors un avertissement. Après
 une restauration, laisser les tablettes se reconnecter rapidement.
 
-Le même avertissement apparaît au démarrage du serveur si le fichier est absent ou illisible, ou si des places n'ont pas
-d'empreinte. Il indique le **nombre** de places concernées, sans jamais afficher d'ID ni de jeton. Un fichier absent ne
-produit d'avertissement que s'il reste des places sans empreinte.
+Le même avertissement apparaît au démarrage du serveur si le fichier est illisible ou corrompu, ou s'il reste des places
+sans empreinte. Il indique le **nombre** de places concernées, sans jamais afficher d'ID ni de jeton. Un fichier absent
+seul ne produit pas d'avertissement : sur une installation neuve, il n'y a pas de place à avertir.
+
+**Deux joueurs sur le même navigateur** : tant qu'un joueur est actif dans un navigateur, l'inscription d'un second joueur
+dans ce même navigateur est refusée, avec le message « Un joueur est déjà connecté sur ce navigateur. Fermez son onglet ou
+faites libérer sa place pour inscrire un autre joueur. » Un second onglet du même navigateur peut en revanche reprendre la
+place du premier avec « Reprendre ici » : c'est voulu.
 
 #### Suppression d'un joueur
 

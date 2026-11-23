@@ -34,7 +34,8 @@ suit dans un lot suivant.
   Un jeton aléatoire est remis à l'enrôlement et à chaque reconnexion ; le serveur ne garde que son empreinte. Une
   reconnexion sans le bon jeton est refusée (`INVALID_SESSION`), sans éviction du joueur légitime. Les places créées
   avant v13.0.0 n'ont pas de jeton : la première tablette qui s'y connecte la prend (voir ADMIN_GUIDE, « Tablette qui a
-  perdu son jeton »). Les buzzers physiques ne sont pas concernés.
+  perdu son jeton »). Les buzzers physiques ne sont pas concernés. Un navigateur ne peut pas inscrire un second joueur
+  tant qu'un joueur y est actif.
 
 ### Notes
 

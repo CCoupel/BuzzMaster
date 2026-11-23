@@ -1547,9 +1547,9 @@ sérialisée vers tous les clients, un fichier séparé ne peut donc pas fuiter 
   les joueurs (`NEW_GAME` purge, suppression d'un bumper, re-clé #122/#134).
 - Un fichier **absent** ou **illisible** est traité comme vide : toutes les places repassent en « premier arrivé »
   (cas 1c). Au démarrage, après le chargement des joueurs, et à la restauration d'une sauvegarde, un WARN est
-  journalisé s'il y a une erreur de chargement **ou** au moins une place VJoueur sans empreinte. Il donne le **nombre** de
-  places concernées et la cause (fichier absent, illisible ou corrompu, ou empreintes chargées). Il ne contient jamais
-  d'ID, de jeton ni d'empreinte. Un fichier absent ne produit de WARN que s'il reste des places sans empreinte.
+  journalisé s'il y a un fichier illisible ou corrompu **ou** au moins une place VJoueur sans empreinte. Il donne le
+  **nombre** de places concernées et la cause (fichier absent, illisible ou corrompu, ou empreintes chargées). Il ne
+  contient jamais d'ID, de jeton ni d'empreinte. Un fichier absent seul ne produit pas de WARN (installation neuve).
 
 ## Bumper enrichi (v3.1.0+)
 
