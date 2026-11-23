@@ -1870,6 +1870,10 @@ func participantsConform(question *Question, state *GameState) bool {
 		// PREPARE->READY gate: SOLO now needs an explicit "who is playing"
 		// selection, same UX as MEMORY SOLO, before START).
 		return participantsCountConform(question.RafaleMode, len(state.RafaleParticipatingTeams))
+	case QuestionTypePicto:
+		// v13.0.0 LOT-1 (#191): the PICTO round does not exist yet — a PICTO question stays in
+		// PREPARE. LOT-2.1 replaces this with the real guard (team, time 30–300, at least one word).
+		return false
 	case QuestionTypeRoue:
 		// v12.0.0 (#144, contracts/roue.md §13 item 4): ROUE_TEAMS conform to
 		// ROUE_MODE (SOLO = 1 team, otherwise >= 2) and a non-empty phrase.

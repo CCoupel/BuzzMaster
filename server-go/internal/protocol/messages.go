@@ -1250,8 +1250,10 @@ func (m *Message) SerializeForTV() ([]byte, error) {
 // SecretQuestionFields lists QUESTION fields that never leave for the TV nor
 // the tablettes, in any phase (ROUE: the phrase to guess, contracts/roue.md §9
 // — the fully revealed board is enough after the resolution). The admin and
-// the animateur keep them.
-var SecretQuestionFields = []string{"ROUE_PHRASE"}
+// the animateur keep them. PICTO (v13.0.0, contracts/picto.md §10): the words of
+// the question — the other words of a multi-word question are never shown, not
+// even in REVEALED.
+var SecretQuestionFields = []string{"ROUE_PHRASE", "PICTO_WORDS"}
 
 // serializeFiltered is the shared implementation behind SerializeForWebClient
 // and SerializeForVPlayerCommon (#128): strips AdminOnlyBumperFields from
