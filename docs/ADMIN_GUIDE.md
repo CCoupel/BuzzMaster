@@ -549,10 +549,11 @@ Le même avertissement apparaît au démarrage du serveur si le fichier est illi
 sans empreinte. Il indique le **nombre** de places concernées, sans jamais afficher d'ID ni de jeton. Un fichier absent
 seul ne produit pas d'avertissement : sur une installation neuve, il n'y a pas de place à avertir.
 
-**Deux joueurs sur le même navigateur** : tant qu'un joueur est actif dans un navigateur, l'inscription d'un second joueur
-dans ce même navigateur est refusée, avec le message « Un joueur est déjà connecté sur ce navigateur. Fermez son onglet ou
-faites libérer sa place pour inscrire un autre joueur. » Un second onglet du même navigateur peut en revanche reprendre la
-place du premier avec « Reprendre ici » : c'est voulu.
+**Deux joueurs sur le même navigateur** : l'inscription d'un second joueur est refusée tant que la place du premier est
+mémorisée dans ce navigateur, que son onglet soit ouvert ou fermé, et que la place existe encore. Le message est « Un joueur
+est déjà inscrit sur ce navigateur. Faites libérer sa place par l’animateur pour inscrire un autre joueur. » Pour inscrire
+un autre joueur, l'animateur libère la place. Un second onglet du même navigateur peut en revanche reprendre la place du
+premier avec « Reprendre ici » : c'est voulu.
 
 #### Suppression d'un joueur
 

@@ -1550,6 +1550,9 @@ sérialisée vers tous les clients, un fichier séparé ne peut donc pas fuiter 
   journalisé s'il y a un fichier illisible ou corrompu **ou** au moins une place VJoueur sans empreinte. Il donne le
   **nombre** de places concernées et la cause (fichier absent, illisible ou corrompu, ou empreintes chargées). Il ne
   contient jamais d'ID, de jeton ni d'empreinte. Un fichier absent seul ne produit pas de WARN (installation neuve).
+  La même règle s'applique au démarrage et à la restauration d'une sauvegarde (`LogVPlayerSessionsWarn`,
+  `internal/server/vplayer_sessions_warn.go`) : absent et 0 place → silence ; chargé et 0 place → silence ;
+  illisible ou corrompu → WARN, même à 0 place ; au moins une place sans empreinte → WARN.
 
 ## Bumper enrichi (v3.1.0+)
 
