@@ -110,7 +110,7 @@
         "nominal": {
           "frames_per_s": 16,
           "points_per_frame": 8,
-          "duration_s": 300,
+          "duration_s": 280,
           "disconnects_max": 0,
           "frames_lost_max": 0
         },
