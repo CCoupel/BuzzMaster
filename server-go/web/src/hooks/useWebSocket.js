@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPictoCanvasStore } from '../components/picto/pictoCanvasStore'
 
 const RECONNECT_INTERVAL = 5000
 // #118 (F5) — dispersion : ±30% autour de RECONNECT_INTERVAL, pour éviter que
@@ -206,6 +207,19 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     ROUE_LAST_EVENT: { SEQ: 0, KIND: '', TEAM: '', LETTER: '', COUNT: 0, VALUE: 0, GAIN: 0 },
     ROUE_WINNER: '',
     ROUE_AWARDS: {},
+    // PICTO fields (v13.0.0, #192/#193 — contrat picto.md §5). Jamais null côté serveur ; le mot de la manche n'y figure
+    // jamais (action dédiée PICTO_WORD), seulement PICTO_REVEALED_WORD en REVEALED.
+    PICTO_TEAM: '',
+    PICTO_TEAM_COLOR: [],
+    PICTO_DRAWER: '',
+    PICTO_DRAWER_NAME: '',
+    PICTO_DRAWER_CONNECTED: false,
+    PICTO_CANDIDATES: [],
+    PICTO_WORDS_COUNT: 0,
+    PICTO_CANVAS_EPOCH: 0,
+    PICTO_OUTCOME: '',
+    PICTO_REVEALED_WORD: '',
+    PICTO_REVEALED_CATEGORY: '',
     // Son de la question (v11.1, #219, contrats game-state.md/sound.md §10).
     // Jamais omitempty côté serveur (règle projet) : les défauts ci-dessous
     // sont les valeurs zéro correctes ("aucune lecture en cours" / "le
@@ -276,6 +290,13 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // ROUE_ERROR (v12.0.0, #144, contrat roue.md §8.3) — refus d'une action ROUE_*, adressé à l'émetteur seul.
   // `SEQ` croît à chaque erreur pour que deux refus identiques consécutifs restent distinguables.
   const [roueError, setRoueError] = useState(null)
+  // PICTO (v13.0.0, contrat picto.md §9.2) — mot de la manche (dessinateur, admin, anim seulement : `PICTO_WORD`,
+  // jamais dans le GameState) et refus d'une action PICTO_* (`PICTO_ERROR`, émetteur seul). La feuille vit dans un
+  // store hors React (les trames arrivent en rafale) : `pictoCanvasStore`.
+  const [pictoWord, setPictoWord] = useState(null)
+  const [pictoError, setPictoError] = useState(null)
+  const pictoCanvasStoreRef = useRef(null)
+  if (!pictoCanvasStoreRef.current) pictoCanvasStoreRef.current = createPictoCanvasStore()
   // Résultat du dernier PLAYER_CONNECT en attente de réponse serveur — consommé
   // par EnrollPage (attend PLAYER_CONNECTED/PLAYER_REJECTED au lieu de naviguer
   // en aveugle, fix R1 #109). { status: 'connected', id, name } | { status: 'rejected', reason } | null
@@ -492,7 +513,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
 
   const handleMessage = useCallback((data) => {
     const { ACTION, MSG, FSINFO, VERSION } = data
-    console.log('[WS] Received:', ACTION, MSG)
+    if (ACTION !== 'PICTO_STROKES') console.log('[WS] Received:', ACTION, MSG) // PICTO_STROKES : rafale (contrat picto.md §8.5)
     // DEBUG: Log GAME state if present
     if (MSG?.GAME) {
       console.log('[WS DEBUG] GAME state:', {
@@ -524,6 +545,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       case 'UPDATE':
         if (MSG?.GAME) {
           trackArdoiseCleared(MSG.GAME)
+          // PICTO — un changement d'époque efface la feuille locale (contrat picto.md §8.4)
+          pictoCanvasStoreRef.current.setEpoch(MSG.GAME.PICTO_CANVAS_EPOCH)
           setGameState(prev => ({
             ...prev,
             phase: MSG.GAME.PHASE || prev.phase,
@@ -610,6 +633,18 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             ROUE_LAST_EVENT: MSG.GAME.ROUE_LAST_EVENT ?? prev.ROUE_LAST_EVENT,
             ROUE_WINNER: MSG.GAME.ROUE_WINNER ?? prev.ROUE_WINNER,
             ROUE_AWARDS: MSG.GAME.ROUE_AWARDS ?? prev.ROUE_AWARDS,
+            // PICTO fields (v13.0.0 — contrat picto.md §5)
+            PICTO_TEAM: MSG.GAME.PICTO_TEAM ?? prev.PICTO_TEAM,
+            PICTO_TEAM_COLOR: MSG.GAME.PICTO_TEAM_COLOR ?? prev.PICTO_TEAM_COLOR,
+            PICTO_DRAWER: MSG.GAME.PICTO_DRAWER ?? prev.PICTO_DRAWER,
+            PICTO_DRAWER_NAME: MSG.GAME.PICTO_DRAWER_NAME ?? prev.PICTO_DRAWER_NAME,
+            PICTO_DRAWER_CONNECTED: MSG.GAME.PICTO_DRAWER_CONNECTED ?? prev.PICTO_DRAWER_CONNECTED,
+            PICTO_CANDIDATES: MSG.GAME.PICTO_CANDIDATES ?? prev.PICTO_CANDIDATES,
+            PICTO_WORDS_COUNT: MSG.GAME.PICTO_WORDS_COUNT ?? prev.PICTO_WORDS_COUNT,
+            PICTO_CANVAS_EPOCH: MSG.GAME.PICTO_CANVAS_EPOCH ?? prev.PICTO_CANVAS_EPOCH,
+            PICTO_OUTCOME: MSG.GAME.PICTO_OUTCOME ?? prev.PICTO_OUTCOME,
+            PICTO_REVEALED_WORD: MSG.GAME.PICTO_REVEALED_WORD ?? prev.PICTO_REVEALED_WORD,
+            PICTO_REVEALED_CATEGORY: MSG.GAME.PICTO_REVEALED_CATEGORY ?? prev.PICTO_REVEALED_CATEGORY,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
             virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,
@@ -818,6 +853,25 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // MAJEUR-1 — contrepartie serveur→client de SET_CREDIT_POINTS,
         // contrat §CREDIT_POINTS. Toujours un entier (0 = rien à créditer).
         setCreditPoints(MSG?.POINTS ?? 0)
+        break
+
+      case 'PICTO_WORD':
+        setPictoWord({ WORD: MSG?.WORD || '', CATEGORY: MSG?.CATEGORY || '', EPOCH: MSG?.EPOCH ?? 0 })
+        break
+
+      case 'PICTO_ERROR':
+        setPictoError(prev => ({ CODE: MSG?.CODE || '', MESSAGE: MSG?.MESSAGE || '', SEQ: (prev?.SEQ || 0) + 1 }))
+        break
+
+      case 'PICTO_STROKES':
+        // Trame relayée (TV, admin, anim) : un trou de SEQ demande la feuille entière (contrat §8.5).
+        if (pictoCanvasStoreRef.current.applyFrame(MSG) === 'gap' && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ ACTION: 'PICTO_CANVAS_SYNC', MSG: {} }))
+        }
+        break
+
+      case 'PICTO_CANVAS':
+        pictoCanvasStoreRef.current.applyCanvas(MSG)
         break
 
       case 'ROUE_ERROR':
@@ -1164,7 +1218,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const sendMessage = useCallback((action, msg = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({ ACTION: action, MSG: msg })
-      console.log('[WS] Sending:', action, msg)
+      if (action !== 'PICTO_STROKES') console.log('[WS] Sending:', action, msg) // exclue : une trame toutes les 60 ms (picto.md §8.5)
       wsRef.current.send(message)
       return true
     } else {
@@ -1650,6 +1704,11 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     rafaleAnswer,
     roueError,
     clearRoueError: () => setRoueError(null),
+    // PICTO (v13.0.0)
+    pictoWord,
+    pictoError,
+    clearPictoError: () => setPictoError(null),
+    pictoCanvasStore: pictoCanvasStoreRef.current,
     rafaleValidate,
     rafaleInvalidate,
     rafaleSetTeams,

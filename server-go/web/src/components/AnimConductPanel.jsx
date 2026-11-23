@@ -21,6 +21,7 @@ import AnimRafaleQuestion from './AnimRafaleQuestion'
 import AnimSoundActions from './AnimSoundActions'
 import './AnimConductPanel.css'
 import AnimRoue from './roue/AnimRoue'
+import AnimPicto from './picto/AnimPicto'
 
 // L1 — cinq emplacements FIXES (#166/F5) : la liste ne varie jamais dans
 // son nombre d'entrées, seul l'état de chaque bouton varie par phase.
@@ -48,7 +49,7 @@ function buildL1(phase, question, handlers) {
 // passé en prop. Vient remplacer le repli générique "indispo." pour le
 // bouton LANCER en PREPARE — même emplacement, même style, aucun nouveau
 // badge ni CSS (#166).
-function buttonSubLabel(key, state, phase, waitReason, ardoiseBlocked, launchLocked) {
+function buttonSubLabel(key, state, phase, waitReason, ardoiseBlocked, launchLocked, pictoLaunchReason) {
   // #253 : popup « Lancer la partie » ouverte sur le poste régie → conduite suspendue
   if (launchLocked) return 'suspendu'
   // #246 : RÉPONSE bloquée par la garde ARDOISE (réponses finales manquantes)
@@ -58,6 +59,7 @@ function buttonSubLabel(key, state, phase, waitReason, ardoiseBlocked, launchLoc
   if (state === 'danger') return 'arrête'
   // state === 'off'
   if (key === 'start' && phase === 'PREPARE' && waitReason) return waitReason
+  if (key === 'start' && phase === 'READY' && pictoLaunchReason) return pictoLaunchReason
   if (key === 'start' && (phase === 'STARTED' || phase === 'PAUSED')) return 'en cours'
   if (key === 'reveal' && (phase === 'STARTED' || phase === 'PAUSED')) return 'après arrêt'
   if (key === 'reveal' && phase === 'REVEALED') return 'déjà révélée'
@@ -209,13 +211,14 @@ export default function AnimConductPanel({
   onQuestionSound,
   ardoiseGate = null,
   launchLocked = false, // #253 : conduite suspendue (verrou « Lancer la partie » d'un autre poste)
+  pictoLaunchReason = null, // PICTO (#192) : « Lancer » grisé tant qu'aucun dessinateur connecté n'est désigné (contrat picto.md §6.1)
 }) {
   // #246 (F-STOP) — garde de REVEAL ARDOISE (calculée par AnimPage, règle
   // commune avec /admin) : RÉPONSE passe 'off' tant qu'une équipe attendue
   // n'a pas transmis son texte final.
   const ardoiseBlocked = !!ardoiseGate?.blocked
   const l1 = buildL1(phase, question, { onStart, onPause, onContinue, onStop, onReveal })
-    .map((btn) => (launchLocked || (btn.key === 'reveal' && ardoiseBlocked) ? { ...btn, state: 'off' } : btn))
+    .map((btn) => (launchLocked || (btn.key === 'reveal' && ardoiseBlocked) || (btn.key === 'start' && pictoLaunchReason && phase === 'READY') ? { ...btn, state: 'off' } : btn))
   const isQcm = question?.TYPE === 'QCM'
   const isMemory = question?.TYPE === 'MEMORY'
   // #160/F7 — premier mode à occuper L2 (ex-vide, #166/E4). GRID/MEMORIZE
@@ -229,6 +232,8 @@ export default function AnimConductPanel({
   const isRafale = question?.TYPE === 'RAFALE'
   // ROUE (v12.0.0, #144, maquette M7) — l'animateur commande la manche : panneau dédié en L3 (aucun geste de mode en L2)
   const isRoue = question?.TYPE === 'ROUE'
+  // PICTO (v13.0.0, #192/#193, maquette M1) — panneau dédié en L3 (préparation, dessin en direct), aucun geste de mode en L2
+  const isPicto = question?.TYPE === 'PICTO'
   // #219 (v11.1) — SPEEDY/QCM/ARDOISE porteurs d'un son : occupe L2 comme
   // MEMOTION/RAFALE ci-dessus, mais par PRÉSENCE d'un son plutôt que par
   // TYPE (le champ est structurellement commun à tous les types, plan
@@ -352,7 +357,7 @@ export default function AnimConductPanel({
             onClick={btn.state === 'off' ? undefined : btn.onClick}
           >
             {btn.label}
-            <span className="anim-conduct-btn-sub">{buttonSubLabel(btn.key, btn.state, phase, waitReason, ardoiseBlocked, launchLocked)}</span>
+            <span className="anim-conduct-btn-sub">{buttonSubLabel(btn.key, btn.state, phase, waitReason, ardoiseBlocked, launchLocked, pictoLaunchReason)}</span>
           </button>
         ))}
       </div>
@@ -402,7 +407,7 @@ export default function AnimConductPanel({
               onValidate={onRafaleValidate}
               onInvalidate={onRafaleInvalidate}
             />
-          ) : isRoue ? null : showSound ? (
+          ) : (isRoue || isPicto) ? null : showSound ? (
             <AnimSoundActions soundState={soundState} onCommand={onQuestionSound} />
           ) : (
             <div className="anim-conduct-reserved">{modeGestureText}</div>
@@ -467,6 +472,8 @@ export default function AnimConductPanel({
             <AnimRafaleQuestion {...(rafale || {})} />
           ) : isRoue ? (
             <AnimRoue />
+          ) : isPicto ? (
+            <AnimPicto />
           ) : (
             <div className="anim-conduct-reserved">Aucun élément spécifique à cette question</div>
           )}

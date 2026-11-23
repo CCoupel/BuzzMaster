@@ -24,6 +24,7 @@ import { QCM_COLORS } from '../constants/colors'
 import Timer from '../components/Timer'
 import AnimTeamCard from '../components/AnimTeamCard'
 import AnimConductPanel from '../components/AnimConductPanel'
+import { pictoLaunchBlocked, pictoLaunchReason } from '../components/picto/pictoState'
 import AnimAnswerZone from '../components/AnimAnswerZone'
 import AnimCreditControl from '../components/AnimCreditControl'
 import AnimArdoiseList from '../components/AnimArdoiseList'
@@ -886,6 +887,7 @@ export default function AnimPage() {
           onStop={stopGame}
           onReveal={() => revealAnswer()}
           launchLocked={launchLocked}
+          pictoLaunchReason={pictoLaunchBlocked(gameState) ? pictoLaunchReason(gameState) : null}
           ardoiseGate={{
             blocked: ardoiseBlocked,
             pending: ardoiseGatePending,

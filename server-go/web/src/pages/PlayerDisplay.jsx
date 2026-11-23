@@ -23,6 +23,7 @@ import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils
 import { getArdoiseTvLayout } from '../utils/ardoiseTvLayout'
 import TvPointsAward from '../components/TvPointsAward'
 import RoueTv from '../components/roue/RoueTv'
+import PictoTv from '../components/picto/PictoTv'
 import { usePointsAward } from '../hooks/usePointsAward'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
@@ -60,6 +61,8 @@ const GAME_TYPE_COLORS = {
   // sélecteur (utils/questionTypeMeta.js, #f97316) : bugfix cohérence UI,
   // même esprit que le badge de QuestionCard.jsx (retour QUALIF 8.0.0.3).
   RAFALE:   { color: '#f97316', shadow: 'rgba(249,115,22,0.6)' },
+  // PICTO (v13.0.0, #192) — couleur du type (utils/questionTypeMeta.js, #0891b2)
+  PICTO:    { color: '#22d3ee', shadow: 'rgba(8,145,178,0.6)' },
 }
 
 function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
@@ -219,7 +222,7 @@ function RafaleDifficultyPastilles({ difficulties }) {
 }
 
 export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, playerId = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false, vplayerPending = null, onFlipCard = null }) {
-  const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard, status: connectionStatus } = useGame()
+  const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard, status: connectionStatus, sendMessage: pictoSend, pictoWord, pictoError, pictoCanvasStore } = useGame()
   const { categories: apiCategories } = useCategories()
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
@@ -711,7 +714,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // inatteignable avec les données actuelles (5 types connus).
   // ROUE (v12.0.0, #144, contrat roue.md) — dispatch positif, jamais de repli sur le bloc SPEEDY générique.
   const isRoue = gameState.question?.TYPE === 'ROUE'
-  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale || isEntracte || isRoue
+  // PICTO (v13.0.0, #192/#193, contrat picto.md) — dispatch positif aussi : jamais de repli sur le bloc SPEEDY générique.
+  const isPicto = gameState.question?.TYPE === 'PICTO'
+  // Tablette du dessinateur : écran « C'est toi qui dessines ! » à la place des écrans génériques de préparation (maquette M4)
+  const pictoDrawerPrep = isPicto && isVPlayer && !!playerId && playerId === gameState.PICTO_DRAWER && ['PREPARE', 'READY', 'COUNTDOWN'].includes(gameState.phase)
+  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale || isEntracte || isRoue || isPicto
   const isSpeedy = !isKnownOtherType && (!gameState.question?.TYPE || gameState.question?.TYPE === 'SPEEDY')
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
@@ -1560,7 +1567,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* PREPARE State - Fixed "Preparez-vous" centered, no category (all question types) */}
-            {showPrepare && (
+            {showPrepare && !pictoDrawerPrep && (
               <motion.div
                 className="prepare-state"
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -1587,7 +1594,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 Repli via `effectiveRafaleCategories` (une pastille par
                 catégorie retenue, `RafaleCategoryPastilles` ci-dessus),
                 SPEEDY/ARDOISE inchangés (une seule catégorie, badge unique). */}
-            {showCountdown && (isSpeedy || isArdoise || isRafale) && (
+            {showCountdown && !pictoDrawerPrep && (isSpeedy || isArdoise || isRafale || isPicto) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -1671,7 +1678,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 (donc avant que `gameState.entracte` ne lève le panneau, backend engine.go
                 SetEntracte), READY afficherait sinon un écran vide plutôt que le même minuteur
                 neutre que les autres types. */}
-            {showReady && (isSpeedy || isArdoise || isEntracte) && (
+            {showReady && !pictoDrawerPrep && (isSpeedy || isArdoise || isEntracte || isPicto) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -3136,6 +3143,22 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 isVPlayer={isVPlayer}
                 teamName={teamName}
                 onStop={onMediaClick}
+              />
+            )}
+
+            {/* PICTO (v13.0.0, #192/#193, maquettes M3 TV / M4 tablettes) — zones communes à tous les types ; en préparation,
+                seule la tablette du dessinateur a son propre écran. Le mot n'est jamais lu ici (seulement PICTO_REVEALED_WORD). */}
+            {isPicto && (showGameContent || pictoDrawerPrep) && (
+              <PictoTv
+                gameState={gameState}
+                catMeta={categoryMeta(gameState.question?.CATEGORY, apiCategories)}
+                isVPlayer={isVPlayer}
+                playerId={playerId}
+                teamName={teamName}
+                pictoWord={pictoWord}
+                store={pictoCanvasStore}
+                sendMessage={pictoSend}
+                error={pictoError}
               />
             )}
 
