@@ -30,6 +30,7 @@ import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import EntracteFields from '../components/EntracteFields'
+import PictoEditor, { isPictoReady, PICTO_TIME_DEFAULT } from '../components/picto/PictoEditor'
 import RoueEditor, { roueRefusalText, validVowelPrice } from '../components/roue/RoueEditor'
 import RoundGroup from '../components/RoundGroup'
 import RoundDeleteDialog from '../components/RoundDeleteDialog'
@@ -129,6 +130,7 @@ export default function QuestionsPage() {
     rafaleAlphabetical: false,
     rafaleWheelLayout: 'strip',
     // ROUE fields (v12.0.0, #145, contrat roue.md §3)
+    pictoWords: [], // PICTO (v13.0.0, #191) : mots de la question (contrat picto.md §4)
     rouePhrase: '',
     rouePresentation: '',
     roueMode: 'TANT_QUE_JE_GAGNE',
@@ -763,6 +765,10 @@ export default function QuestionsPage() {
           updates.time = '120'
           updates.points = '2'
         }
+        // PICTO (v13.0.0, #191, contrat picto.md §4) — durée de dessin pré-remplie à 90 s (30 à 300), en entrant seulement.
+        if (value === 'PICTO') {
+          updates.time = PICTO_TIME_DEFAULT
+        }
       }
       return { ...prev, ...updates }
     })
@@ -917,7 +923,7 @@ export default function QuestionsPage() {
 
                       {/* CA2 — le refus nomme sa cause (message serveur brut,
                           ValidateQuestionSound), jamais une étiquette générique. */}
-                      {soundError && (
+                      {soundError && !(formData.type === 'PICTO' && /PICTO_/.test(soundError)) && (
                         <p className="sound-error-message">✕ {soundError}</p>
                       )}
 
@@ -1229,6 +1235,7 @@ export default function QuestionsPage() {
       rafaleAlphabetical: question.RAFALE_ALPHABETICAL === true,
       rafaleWheelLayout: question.RAFALE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip',
       // ROUE (#145) — ROUE_SHOW_LETTERS absent = true (le champ n'est écrit que pour false)
+      pictoWords: Array.isArray(question.PICTO_WORDS) ? question.PICTO_WORDS : [],
       rouePhrase: question.ROUE_PHRASE || '',
       rouePresentation: question.ROUE_PRESENTATION || '',
       roueMode: question.ROUE_MODE || 'TANT_QUE_JE_GAGNE',
@@ -1405,6 +1412,7 @@ export default function QuestionsPage() {
       rafaleMaxQuestions: 100,
       rafaleAlphabetical: false,
       rafaleWheelLayout: 'strip',
+      pictoWords: [],
       // ROUE fields (#145) — voir état initial
       rouePhrase: '',
       rouePresentation: '',
@@ -1709,6 +1717,9 @@ export default function QuestionsPage() {
     // ROUE (#145) — pas d'énoncé : la phrase est validée par le serveur (aperçu) ; bouton désactivé tant qu'elle est refusée
     if (formData.type === 'ROUE') {
       if (!formData.rouePhrase.trim() || !roueValid || !roueWheelValid || !validVowelPrice(formData.roueVowelPrice ?? 250)) return
+    } else if (formData.type === 'PICTO') {
+      // PICTO (#191) — pas de réponse ; mots et durée vérifiés ici pour les bornes seulement, le reste est refusé par le serveur
+      if (!formData.question || !isPictoReady(formData)) return
     } else if (!formData.question) return
     if (formData.type === 'SPEEDY' && !formData.answer) return
     if (formData.type === 'ARDOISE' && !formData.answer) return
@@ -2010,6 +2021,10 @@ export default function QuestionsPage() {
       // repli textuel pour tout consommateur qui n'afficherait pas les chips
       // dédiées de QuestionCard.jsx).
       data.append('answer', `${formData.rafaleCategories.join('/') || '?'} - ${formData.rafaleDifficulties.map(d => '★'.repeat(d)).join(', ')}`)
+    } else if (formData.type === 'PICTO') {
+      // PICTO (#191, contrat picto.md §11) — un mot par ligne, relus à chaque enregistrement (sinon détruits côté serveur)
+      data.append('picto_words', (formData.pictoWords || []).join('\n'))
+      data.append('answer', '—')
     } else if (formData.type === 'ROUE') {
       // ROUE (#145, contrat roue.md §11.1) — tous les champs sont envoyés à chaque enregistrement (un champ non lu serait perdu)
       data.append('roue_phrase', formData.rouePhrase)
@@ -3687,6 +3702,16 @@ export default function QuestionsPage() {
                     dans le déroulé (maquette §02) — Titre/Sous-titre
                     ci-dessous sont ce qui s'affiche RÉELLEMENT sur le
                     panneau pendant la pause. */}
+                {/* PICTO (v13.0.0, #191, maquette M5 C) — mots, durée, points, résumé ; refus serveur affiché dans la section */}
+                {formData.type === 'PICTO' && (
+                  <PictoEditor
+                    values={formData}
+                    onChange={handleInputChange}
+                    error={/PICTO_/.test(soundError || '') ? soundError : null}
+                    customCategories={customCategories}
+                  />
+                )}
+
                 {/* ROUE (v12.0.0, #145, maquette M3) — section en composant séparé */}
                 {formData.type === 'ROUE' && (
                   <RoueEditor
@@ -3751,7 +3776,7 @@ export default function QuestionsPage() {
                   {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card.
                       ENTRACTE (#214) — ne rapporte jamais aucun point (maquette
                       entracte-programme-214.html §04). */}
-                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && (
+                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && formData.type !== 'PICTO' && (
                     <div className="form-group">
                       <label htmlFor="points-input">Points</label>
                       <input
@@ -3804,7 +3829,7 @@ export default function QuestionsPage() {
                       </p>
                     </div>
                   )}
-                  {formData.type !== 'MEMOTION' && formData.type !== 'ROUE' && (
+                  {formData.type !== 'MEMOTION' && formData.type !== 'ROUE' && formData.type !== 'PICTO' && (
                     <div className="form-group">
                       <label htmlFor="time-input">Temps (s)</label>
                       <input
@@ -3825,7 +3850,7 @@ export default function QuestionsPage() {
                     panneau), mais avec son propre champ dédié dans la section ENTRACTE ci-dessous
                     (libellé "Image de fond", pas "Image question") — pas de "Image reponse" (aucun
                     sens pour ce type), donc exclu ici comme les 3 autres. */}
-                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && (
+                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && formData.type !== 'PICTO' && (
                   <>
                     <div className="form-group">
                       <label htmlFor="media-input">Image question (optionnel)</label>
@@ -3892,7 +3917,7 @@ export default function QuestionsPage() {
                 {/* #235 — Son pour MEMORY, ENTRACTE et hôte MEMOTION (maquette
                     admin_question_editor__sound_memory_memotion_entracte.html) :
                     même bloc, filtre de type levé. */}
-                {['MEMORY', 'MEMOTION', 'ENTRACTE', 'ROUE'].includes(formData.type) && renderQuestionSoundBlock()}
+                {['MEMORY', 'MEMOTION', 'ENTRACTE', 'ROUE', 'PICTO'].includes(formData.type) && renderQuestionSoundBlock()}
 
                 {/* Refus serveur (corps HTTP brut) pour les types sans section « Son »
                     (RAFALE) — ex. POINTS_RULE_* (#190). */}
@@ -3905,8 +3930,8 @@ export default function QuestionsPage() {
                   variant={editingId ? 'primary' : 'fun'}
                   size="lg"
                   loading={isUploading}
-                  disabled={(formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)) || (formData.type === 'ROUE' && (!roueValid || !roueWheelValid || !validVowelPrice(formData.roueVowelPrice ?? 250)))}
-                  title={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty) ? 'Corrigez la pénalité de mauvaise réponse' : (formData.type === 'ROUE' && !roueValid ? 'Saisissez une phrase acceptée par le plateau' : undefined)}
+                  disabled={(formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)) || (formData.type === 'ROUE' && (!roueValid || !roueWheelValid || !validVowelPrice(formData.roueVowelPrice ?? 250))) || (formData.type === 'PICTO' && !isPictoReady(formData))}
+                  title={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty) ? 'Corrigez la pénalité de mauvaise réponse' : (formData.type === 'ROUE' && !roueValid ? 'Saisissez une phrase acceptée par le plateau' : (formData.type === 'PICTO' && !isPictoReady(formData) ? 'Saisissez 1 à 20 mots et une durée de 30 à 300 s' : undefined))}
                   className="submit-btn"
                 >
                   {editingId ? 'Modifier' : 'Ajouter'}
