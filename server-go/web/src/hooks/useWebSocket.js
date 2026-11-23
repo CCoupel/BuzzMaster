@@ -1000,14 +1000,16 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         console.log('[WS] PLAYER_CONNECTED:', redactToken(MSG)) // #319 : jamais le jeton dans la console
         // Fix R1 (#109) : capturer l'ID renvoyé par le serveur pour le
         // renvoyer à la reconnexion (lookup par ID côté backend, plus par nom).
-        // #319 : jeton de session (contrat vplayer-session.md §5), écrit AVANT l'ID avec la même règle d'onglet (#246 F-ID) :
-        // seulement si l'ID stocké est vide ou celui de cette réponse. Jamais journalisé (le log ci-dessus l'exclut).
-        if (MSG?.ID && MSG?.TOKEN) {
-          const storedId = localStorage.getItem('vplayer_id')
-          if (!storedId || storedId === MSG.ID) localStorage.setItem('vplayer_token', MSG.TOKEN)
-        }
+        // #319 : ID et jeton de session (contrat vplayer-session.md §5) s'écrivent ENSEMBLE, sous la MÊME condition (règle d'onglet,
+        // #246 F-ID : le localStorage est partagé, on n'écrit que si l'ID stocké est vide ou celui de cette réponse). Jamais
+        // {ID neuf, jeton d'une autre place} (→ INVALID_SESSION à la reconnexion). Sans jeton dans la réponse (serveur
+        // antérieur), le jeton déjà stocké pour ce même ID est conservé. Jamais journalisé.
         if (MSG?.ID) {
-          localStorage.setItem('vplayer_id', MSG.ID)
+          const storedId = localStorage.getItem('vplayer_id')
+          if (!storedId || storedId === MSG.ID) {
+            localStorage.setItem('vplayer_id', MSG.ID)
+            if (MSG.TOKEN) localStorage.setItem('vplayer_token', MSG.TOKEN)
+          }
         }
         setPlayerConnectStatus({ status: 'connected', id: MSG?.ID, name: MSG?.NAME })
         // Player successfully enrolled - state will be updated via UPDATE message
