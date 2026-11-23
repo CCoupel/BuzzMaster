@@ -221,3 +221,98 @@ func (e *env246) reconnectWithToken319(t *testing.T, cid, name, id, token string
 	t.Helper()
 	e.send(t, cid, "vplayer", protocol.ActionPlayerConnect, map[string]interface{}{"NAME": name, "ID": id, "TOKEN": token})
 }
+
+// ---- revue M2 : les endroits de production qui CRÉENT une place de VJoueur (donc une place qui doit recevoir un jeton) ----
+//
+// Une place créée sans passer par l'émission d'un jeton resterait « sans empreinte » (cas 1c : premier arrivé) — c'est
+// la migration voulue pour les places d'avant v13.0.0, jamais un chemin neuf. Chemins légitimes (contrat §4.2, §7) :
+//   - enrôlement : reconnectOrCreateVirtualPlayer → createVirtualPlayerUnsafe, puis émission du jeton ;
+//   - re-clé #122 / #134 : rekeyBumperUnsafe, nouveau jeton (reconnectOrCreateVirtualPlayer / ReleaseSeat).
+// CreateVirtualPlayer (exporté, sans jeton) est réservé aux tests et aux outils.
+
+var funcDecl319 = regexp.MustCompile(`^func (\([^)]*\) )?([A-Za-z0-9_]+)\(`)
+
+// enclosingFuncs319 retourne, pour chaque ligne de code qui contient le motif, le nom de la fonction qui l'englobe.
+func enclosingFuncs319(src string, re *regexp.Regexp) []string {
+	var out []string
+	cur := ""
+	for _, line := range strings.Split(src, "\n") {
+		if m := funcDecl319.FindStringSubmatch(line); m != nil {
+			cur = m[2]
+			continue
+		}
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "//") {
+			continue
+		}
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		if re.MatchString(line) {
+			out = append(out, cur)
+		}
+	}
+	return out
+}
+
+func TestVPlayerSession319_Critical_NoProductionCallToExportedSeatCreators(t *testing.T) {
+	for _, call := range []string{"CreateVirtualPlayer", "HandleVirtualPlayerConnect"} {
+		re := regexp.MustCompile(`\.` + call + `\(`)
+		for path, src := range productionGoFiles319(t) {
+			if hits := codeLines319(src, re); len(hits) > 0 {
+				t.Errorf("%s appelle %s : une place créée ainsi n'a pas de jeton (cas 1c). Chemin légitime = ReconnectOrCreateVirtualPlayerWithToken : %v", path, call, hits)
+			}
+		}
+	}
+}
+
+func TestVPlayerSession319_Critical_SeatCreationOnlyThroughTheEnrolmentPath(t *testing.T) {
+	engine := productionGoFiles319(t)["../../internal/game/engine.go"]
+	if engine == "" {
+		t.Fatal("internal/game/engine.go introuvable")
+	}
+	// createVirtualPlayerUnsafe n'est appelée que par CreateVirtualPlayer (outil/tests) et par l'enrôlement.
+	got := enclosingFuncs319(engine, regexp.MustCompile(`\bcreateVirtualPlayerUnsafe\(`))
+	want := map[string]bool{"CreateVirtualPlayer": true, "reconnectOrCreateVirtualPlayer": true}
+	for _, f := range got {
+		if !want[f] {
+			t.Errorf("createVirtualPlayerUnsafe est appelée depuis %q : nouvelle voie de création de place, à décider (jeton à émettre, §4.2)", f)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("createVirtualPlayerUnsafe : %d appel(s) attendus 2 (CreateVirtualPlayer, reconnectOrCreateVirtualPlayer), got %v", len(got), got)
+	}
+	// L'enrôlement émet le jeton de la place créée (issueUnlessLegacyUnsafe / sessionIssueUnsafe après la création).
+	i := strings.Index(engine, "func (e *Engine) reconnectOrCreateVirtualPlayer(")
+	if i < 0 {
+		t.Fatal("reconnectOrCreateVirtualPlayer introuvable")
+	}
+	body := engine[i:]
+	if end := strings.Index(body[10:], "\nfunc "); end > 0 {
+		body = body[:end+10]
+	}
+	create := strings.LastIndex(body, "createVirtualPlayerUnsafe(")
+	issue := strings.LastIndex(body, "issueUnlessLegacyUnsafe(")
+	if create < 0 || issue < create {
+		t.Errorf("reconnectOrCreateVirtualPlayer doit émettre le jeton de la place qu'elle vient de créer (§4.2 ligne 4) : émission après la création attendue")
+	}
+	// La re-clé supprime l'ancienne empreinte (§7).
+	r := strings.Index(engine, "func (e *Engine) rekeyBumperUnsafe(")
+	if r < 0 || !strings.Contains(engine[r:r+1500], "sessionRemoveUnsafe(oldID)") {
+		t.Errorf("rekeyBumperUnsafe doit retirer l'ancienne empreinte (§7)")
+	}
+}
+
+// Toute construction littérale d'une place de VJoueur en production est listée : une nouvelle doit être décidée ici.
+func TestVPlayerSession319_SeatConstructionSitesAreListed(t *testing.T) {
+	re := regexp.MustCompile(`IsVirtual:\s*true`)
+	// HandleVirtualPlayerConnect : ancienne entrée historique, aucun appelant (voir le test ci-dessus) — signalée à la revue.
+	allowed := map[string]bool{"createVirtualPlayerUnsafe": true, "HandleVirtualPlayerConnect": true}
+	for path, src := range productionGoFiles319(t) {
+		for _, f := range enclosingFuncs319(src, re) {
+			if !allowed[f] {
+				t.Errorf("%s : %s construit une place de VJoueur (IsVirtual: true) hors des chemins connus — jeton à émettre ?", path, f)
+			}
+		}
+	}
+}

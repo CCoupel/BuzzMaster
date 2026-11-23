@@ -63,6 +63,7 @@ describe('useWebSocket — jeton de session (#319)', () => {
     ls.setItem('vplayer_token', 'jeton-autre-onglet')
     await recv('PLAYER_CONNECTED', { ID: 'b1', NAME: 'Alice', TOKEN })
     expect(ls.getItem('vplayer_token')).toBe('jeton-autre-onglet')
+    expect(ls.getItem('vplayer_id')).toBe('b-autre-onglet') // la paire {ID, jeton} reste cohérente : jamais {ID neuf, jeton ancien} (revue M1)
   })
 
   it('PLAYER_CONNECTED sans TOKEN (serveur sans jeton) : le jeton stocké est conservé, aucune valeur « undefined » écrite', async () => {
