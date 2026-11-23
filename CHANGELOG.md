@@ -2,6 +2,24 @@
 
 Historique des versions du projet BuzzControl.
 
+## [13.0.0] - 2026-11-23 — Picto : type de question et éditeur (LOT-1, #191) — partiel
+
+Entrée **partielle** : le type Picto est en cours de livraison (milestone v13.0.0). Le déroulé de la manche
+(équipe, dessinateur, dessin) suivra dans les lots suivants.
+
+### Added
+
+- **Type de question « ✏️ Picto » (#191)** — nouveau type de question, à côté des autres types. Le nom affiché
+  est « Picto » : le produit ne reprend aucun nom de jeu commercial.
+- **Éditeur Picto (#191)** — saisie d'un mot par ligne (1 à 20 mots, 1 à 40 caractères, sans doublon à la casse
+  et aux accents près), durée de 30 à 300 secondes (90 par défaut), points et catégorie, avec un résumé avant
+  l'enregistrement. Le serveur refuse un mot ou une durée invalide ; l'enregistrement ne se fait alors pas.
+
+### Notes
+
+- Une question Picto est enregistrée et sauvegardée avec ses mots, mais la manche n'est pas encore jouable : elle
+  n'est pas lançable avant les lots suivants de v13.0.0.
+
 ## [12.2.0] - 2026-11-22 — Roue de la Fortune : BONUS sur case à points (#316, #317)
 
 La case BONUS ne prend plus sa propre place sur la roue : elle est posée sur une case à points, marquée 🎁. Arrêter la

@@ -1646,6 +1646,22 @@ amplitude nulle qui tournerait quand même. Le panneau reste fixe.
 Sous `prefers-reduced-motion: reduce`, animation neutralisée quelle que soit la 
 configuration (accessibilité, respect des préférences système).
 
+## Question (PICTO type) - v13.0.0, #191 (LOT-1)
+
+Hôte de question uniquement, jamais imbricable dans une carte. Référence : `contracts/picto.md` §3.1, §4.
+
+```go
+// TypedContent (server-go/internal/game/models.go)
+PictoWords []string `json:"PICTO_WORDS,omitempty"` // 1 à 20 mots, secret (retiré des messages TV / tablette)
+```
+
+- **Champs réutilisés** : `TIME` (durée, 30 à 300 s, pré-remplie à 90 par l'éditeur), `POINTS`, `CATEGORY`.
+- **`PICTO_WORDS`** : format d'un mot = espaces de début et de fin retirés, espaces internes compactés, 1 à 40 caractères
+  (lettres accentuées, chiffres, espace, apostrophe, tiret). Aucun doublon de clé repliée dans une même question
+  (« Éléphant » et « elephant » sont un doublon). Une seule implémentation, côté serveur (`server-go/internal/game/picto_words.go`).
+- **Registre** : `OwnedFields` = `PICTO_WORDS`, `MediaSlots` = aucun, `NestableInMotionCard` = `false`, `HasPlayerInput` = `true`.
+- **Enregistrement** (`POST /questions`) : un refus renvoie HTTP 400 préfixé par son code (`PICTO_WORDS_INVALID`, `PICTO_TIME_INVALID`) ; rien n'est écrit.
+
 ## Question (RAFALE type) - v8.0.0, #16
 
 ### Modèle RafaleQuestion — Élément du réservoir

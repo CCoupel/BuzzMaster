@@ -1241,6 +1241,26 @@ Le champ SSID2/Mot de passe 2 permet de configurer un reseau WiFi de secours :
 
 ---
 
+## Question Picto (v13.0.0, #191)
+
+Le type **✏️ Picto** dessine un mot sur une tablette, pour que l'équipe le devine à l'oral. Cette section décrit
+l'**éditeur** de la question, livré dans le LOT-1 de v13.0.0. Le déroulé de la manche (choix de l'équipe et du
+dessinateur, tirage du mot, dessin en direct) arrive avec les lots suivants.
+
+### Créer une question Picto
+
+1. Page **Questions** → nouvelle question → type **✏️ Picto**.
+2. **Mots** : saisir un mot par ligne (1 à 20 mots). Un mot doit faire 1 à 40 caractères : lettres (accents compris),
+   chiffres, espace, apostrophe ou tiret. Deux mots identiques, accents et majuscules ignorés, sont refusés
+   (« Éléphant » et « elephant » font un doublon). Les mots refusés sont signalés dans l'éditeur ; le serveur a le
+   dernier mot.
+3. **Durée** : de 30 à 300 secondes, 90 par défaut.
+4. **Points** : points attribués à l'équipe qui trouve le mot, comme pour les autres types.
+5. **Catégorie** : une seule, affichée en indice sur la TV.
+6. Vérifier le résumé, puis enregistrer.
+
+> Les mots sont enregistrés avec la question et sauvegardés avec elle.
+
 ## Roue de la Fortune (v12.0.0, #144, #145)
 
 > Fonctionnalité livrée dans la v12.0.0.
