@@ -1,0 +1,129 @@
+<!--
+mockup:
+  composant: admin_game_picto
+  feature: conduct
+  version: 13.0.0
+  type: ui
+  issue: "#192 #194"
+  validee_le: 2026-11-23
+  proposition_retenue: "A — Organisation de la page Jeu des autres types"
+  complete: []
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%A8%3C/text%3E%3C/svg%3E">
+<title>v13.0.0 · Admin Picto — page Jeu</title>
+<style>
+:root{--g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g300:#d1d5db;--g400:#9ca3af;--g500:#6b7280;--g600:#4b5563;--g700:#374151;--g900:#111827;--pri:#4f46e5;--pri100:#e0e7ff;--ok:#16a34a;--okbg:#dcfce7;--err:#dc2626;--warn:#d97706;--warnbg:#fef3c7;--picto:#0891b2;--team:#2563eb;--team2:#dc2626;--team3:#16a34a;--type:#2f6fed}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:#111827;color:var(--g900);border-top:6px solid var(--type)}
+.mock-head{max-width:1100px;margin:0 auto;padding:.8rem 1rem .2rem;color:#e5e7eb}
+.mock-head h1{font-size:1.05rem;margin:0 0 .3rem}
+.mock-head p{font-size:.82rem;color:#9ca3af;margin:.2rem 0;line-height:1.45}
+.mock-head b{color:#e5e7eb}
+.tabs{position:sticky;top:0;z-index:300;background:#000;padding:.5rem 1rem;display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center;font-size:.8rem;color:#9ca3af}
+.tabs .grp{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center}
+.tabs .grp span{color:#e5e7eb;font-weight:600;margin-right:.2rem}
+.tabs button{font:inherit;font-size:.78rem;padding:.3rem .7rem;border-radius:.4rem;border:1px solid #4b5563;background:#1f2937;color:#fff;cursor:pointer}
+.tabs button.on{background:var(--pri);border-color:#818cf8}
+.stance{max-width:1100px;margin:.5rem auto;padding:.45rem 1rem;font-size:.82rem;color:#e5e7eb;background:#1f2937;border-radius:.4rem}
+section[data-proposition]{display:none;max-width:1180px;margin:0 auto;padding:0 1rem 2rem}
+section[data-proposition].on{display:block}
+.state{color:#e5e7eb;font-size:.85rem;font-weight:600;margin:1.1rem 0 .3rem}
+.state small{font-weight:400;color:#9ca3af}
+.row{display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-start}
+/* frames */
+.tablet{width:900px;max-width:100%;height:560px;border:8px solid #374151;border-radius:1.3rem;background:var(--g100);overflow:hidden;display:flex;flex-direction:column;padding:12px;gap:10px}
+.tv{width:960px;max-width:100%;aspect-ratio:16/9;border:10px solid #000;border-radius:.4rem;background:radial-gradient(circle at 50% 30%,#1e3a8a,#0b1020 70%);color:#fff;overflow:hidden;display:flex;flex-direction:column;padding:1.2%;gap:1.2%}
+.phone{width:300px;height:600px;border:8px solid #374151;border-radius:2rem;background:#fff;overflow:hidden;display:flex;flex-direction:column}
+.phone.land{width:600px;height:300px}
+.admin{width:1080px;max-width:100%;border:1px solid var(--g300);border-radius:.5rem;background:#fff;overflow:hidden}
+.admin .top{background:var(--g900);color:#fff;padding:.45rem .8rem;font-size:.8rem;display:flex;gap:1rem;align-items:center}
+.admin .body{padding:.8rem;display:flex;gap:.8rem}
+/* atoms */
+.chip{display:inline-flex;align-items:center;gap:.3rem;background:#fff;border-radius:999px;padding:.2rem .65rem;color:var(--g700);border:1px solid var(--g200);font-size:.78rem;white-space:nowrap}
+.chip.on{background:var(--pri100);border-color:var(--pri);color:var(--pri);font-weight:600}
+.chip.off{opacity:.45}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;border:0;border-radius:.6rem;padding:.7rem 1rem;font:inherit;font-weight:700;font-size:.95rem;color:#fff;background:var(--pri);cursor:default}
+.btn.big{font-size:1.2rem;padding:1rem 1.2rem}
+.btn.ok{background:var(--ok)}.btn.warn{background:var(--warn)}.btn.ghost{background:#fff;color:var(--g700);border:1px solid var(--g300)}.btn.dis{background:var(--g300);color:var(--g500)}
+.card{background:#fff;border:1px solid var(--g200);border-radius:.7rem;padding:.7rem}
+.muted{color:var(--g500);font-size:.8rem}
+.lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--g500);font-weight:700}
+.word{font-weight:800;letter-spacing:.02em}
+.sheet{background:#fff;border:2px solid var(--g300);border-radius:.3rem;aspect-ratio:1/1;position:relative;overflow:hidden}
+.sheet svg{width:100%;height:100%;display:block}
+.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%}
+.pill{display:inline-block;border-radius:.35rem;padding:.1rem .45rem;font-size:.72rem;font-weight:700}
+.note{font-size:.78rem;color:#9ca3af;margin:.3rem 0 0;max-width:1100px;line-height:1.45}
+.note b{color:#e5e7eb}
+table.t{border-collapse:collapse;width:100%;font-size:.8rem}
+table.t th,table.t td{border-bottom:1px solid var(--g200);padding:.35rem .45rem;text-align:left}
+table.t th{font-size:.7rem;text-transform:uppercase;color:var(--g500)}
+.field{display:flex;flex-direction:column;gap:.25rem;font-size:.82rem}
+.input{border:1px solid var(--g300);border-radius:.4rem;padding:.4rem .55rem;background:#fff;font-size:.85rem;min-height:2rem}
+.switch{display:inline-block;width:2.2rem;height:1.2rem;border-radius:999px;background:var(--g300);position:relative;vertical-align:middle}
+.switch::after{content:"";position:absolute;top:.15rem;left:.15rem;width:.9rem;height:.9rem;border-radius:50%;background:#fff}
+.switch.on{background:var(--pri)}.switch.on::after{left:1.15rem}
+.seg{display:inline-flex;border:1px solid var(--g300);border-radius:.45rem;overflow:hidden}
+.seg span{padding:.35rem .7rem;font-size:.8rem;border-right:1px solid var(--g300);background:#fff}
+.seg span:last-child{border-right:0}.seg span.on{background:var(--pri);color:#fff;font-weight:600}
+.diagram{background:#fff;border-radius:.5rem;padding:.6rem;overflow:auto}
+.diagram svg{display:block;max-width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="mock-head"><h1>v13.0.0 · Admin Picto — page Jeu</h1><p>Refaite au GATE 2 (« la page d'admin doit rester cohérente avec l'organisation des autres types de questions ») : la page Jeu garde ses trois colonnes. À gauche, les commandes (Temps, Points, Start / Pause / Stop / Reveal) et la liste des questions. Au centre, le chronomètre, l'aperçu TV et le <b>panneau du type</b>, ici PictoPanel à la place de RouePanel. À droite, les équipes et l'attribution. Une seule proposition : la contrainte fixe l'organisation.</p></div>
+<div class="stance">Seule proposition : même organisation que la page Jeu des autres types, avec PictoPanel au centre.</div>
+<section data-proposition="A" class="on">
+<div class="state">Préparation <small>— colonne gauche : commandes et questions ; centre : chronomètre, aperçu TV, panneau du type (comme RouePanel) ; droite : équipes</small></div><div class="admin" style="background:#1f2937"><div class="top">BuzzControl · Jeu <span class="chip" style="background:#374151;color:#fff;border-color:#4b5563">READY</span></div><div class="body"><div style="flex:0 0 250px;display:flex;flex-direction:column;gap:.5rem">
+<div class="card"><div style="display:flex;gap:.4rem"><div class="field"><span class="lbl">Temps (sec)</span><div class="input">90</div></div><div class="field"><span class="lbl">Points</span><div class="input">10</div></div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;margin-top:.5rem"><span class="btn ok" style="padding:.45rem">▶ Start</span><span class="btn dis" style="padding:.45rem">⏸ Pause</span><span class="btn dis" style="padding:.45rem">⏹ Stop</span><span class="btn dis" style="padding:.45rem">👁 Reveal</span></div></div>
+<div class="lbl" style="color:#fff">Questions</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;">🎡 Roue — chanson</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;border:2px solid var(--pri);background:var(--pri100)">✏️ Picto — à la maison</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;">⚡ Speedy — capitales</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;">🌀 Rafale — sport</div>
+<div class="muted" style="color:var(--g400)">Sélectionner de nouveau la question en cours = relance (retour en PREPARE, nouveau tirage au lancement).</div></div><div style="flex:1;display:flex;flex-direction:column;gap:.5rem"><div class="card" style="text-align:center;font-weight:800;font-size:1.4rem">⏱ 1:12</div><div class="card" style="padding:.4rem"><div class="lbl">Aperçu TV</div><div style="background:#0b1020;border-radius:.3rem;aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:.4rem;color:#fff;font-size:.6rem">
+<div>1:12</div><div>Vie quotidienne · ✏️ Alice dessine pour l'Équipe Bleue</div><div style="height:55%"><div class="sheet" style="height:100%"><svg viewBox="0 0 100 100" aria-label="dessin en cours"><g fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<polyline points="22,52 50,26 79,51"/><polyline points="27,48 27,82 74,83 74,47"/><polyline points="44,83 44,70"/></g></svg></div></div><div style="font-weight:800;color:#fde68a">&nbsp;</div></div></div><div class="card"><div class="lbl">✏️ Picto — préparation</div>
+<div class="muted" style="margin:.2rem 0 .4rem">✍️ <b>3 mots</b> dans la question · Vie quotidienne · un mot tiré au lancement</div>
+<div class="field"><span class="lbl">Équipe qui dessine</span><div style="display:flex;gap:.5rem;flex-wrap:wrap">
+<span class="chip on"><span class="dot" style="background:var(--team)"></span>Équipe Bleue</span>
+<span class="chip"><span class="dot" style="background:var(--team2)"></span>Équipe Rouge</span>
+<span class="chip"><span class="dot" style="background:var(--team3)"></span>Équipe Verte</span></div></div><div class="field" style="margin-top:.5rem"><span class="lbl">Dessinateur</span><div style="display:flex;gap:.5rem;align-items:stretch"><div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem">
+<div class="card" style="padding:.6rem;border:2px solid var(--pri);background:var(--pri100)"><b>✏️ Alice</b><div class="muted">📱 connectée · dessinatrice</div></div>
+<div class="card" style="padding:.6rem"><b>Bruno</b><div class="muted">📱 connecté</div></div>
+<div class="card" style="padding:.6rem;opacity:.45"><b>Chloé</b><div class="muted">📱 hors ligne — non sélectionnable</div></div></div>
+<span class="btn ghost" style="flex:0 0 auto;flex-direction:column;gap:.1rem;font-size:.9rem"><span style="font-size:1.4rem">🎲</span>Au hasard</span></div>
+<div class="muted" style="margin-top:.3rem">« Au hasard » tire parmi les joueurs connectés (rejouable tant que la manche n'a pas démarré). Les buzzers physiques ne sont pas listés : il faut un écran pour dessiner.</div></div></div></div><div style="flex:0 0 220px;display:flex;flex-direction:column;gap:.4rem"><div class="lbl">Équipes</div>
+<div class="card" style="border-left:6px solid var(--team);display:flex;align-items:center;gap:.4rem"><b>Équipe Bleue</b><span class="muted">42</span><span style="margin-left:auto"></span></div>
+<div class="card" style="border-left:6px solid var(--team2)"><b>Équipe Rouge</b> <span class="muted">37</span></div>
+<div class="card" style="border-left:6px solid var(--team3)"><b>Équipe Verte</b> <span class="muted">29</span></div></div></div></div><div class="state">Manche en cours <small>— STARTED</small></div><div class="admin" style="background:#1f2937"><div class="top">BuzzControl · Jeu <span class="chip" style="background:#374151;color:#fff;border-color:#4b5563">STARTED</span></div><div class="body"><div style="flex:0 0 250px;display:flex;flex-direction:column;gap:.5rem">
+<div class="card"><div style="display:flex;gap:.4rem"><div class="field"><span class="lbl">Temps (sec)</span><div class="input">90</div></div><div class="field"><span class="lbl">Points</span><div class="input">10</div></div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;margin-top:.5rem"><span class="btn dis" style="padding:.45rem">▶ Start</span><span class="btn warn" style="padding:.45rem">⏸ Pause</span><span class="btn ghost" style="padding:.45rem">⏹ Stop</span><span class="btn dis" style="padding:.45rem">👁 Reveal</span></div></div>
+<div class="lbl" style="color:#fff">Questions</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;">🎡 Roue — chanson</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;border:2px solid var(--pri);background:var(--pri100)">✏️ Picto — à la maison</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;">⚡ Speedy — capitales</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;">🌀 Rafale — sport</div>
+<div class="muted" style="color:var(--g400)">Sélectionner de nouveau la question en cours = relance (retour en PREPARE, nouveau tirage au lancement).</div></div><div style="flex:1;display:flex;flex-direction:column;gap:.5rem"><div class="card" style="text-align:center;font-weight:800;font-size:1.4rem">⏱ 1:12</div><div class="card" style="padding:.4rem"><div class="lbl">Aperçu TV</div><div style="background:#0b1020;border-radius:.3rem;aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:.4rem;color:#fff;font-size:.6rem">
+<div>1:12</div><div>Vie quotidienne · ✏️ Alice dessine pour l'Équipe Bleue</div><div style="height:55%"><div class="sheet" style="height:100%"><svg viewBox="0 0 100 100" aria-label="dessin en cours"><g fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<polyline points="22,52 50,26 79,51"/><polyline points="27,48 27,82 74,83 74,47"/><polyline points="44,83 44,70"/></g></svg></div></div><div style="font-weight:800;color:#fde68a">&nbsp;</div></div></div><div class="card"><div class="lbl">✏️ Picto — manche en cours</div>
+<div style="display:flex;gap:.8rem;align-items:center;margin-top:.3rem"><div><div class="lbl">Mot · secret (admin, animateur, dessinateur)</div><div class="word" style="font-size:1.8rem">MAISON</div><div class="muted">Vie quotidienne · tiré parmi les 3 mots de la question</div></div>
+<div style="margin-left:auto;text-align:right"><div class="muted">✏️ Alice · Équipe Bleue</div><span class="btn ok" style="margin-top:.3rem">✅ Trouvé !</span></div></div>
+<div class="card" style="background:var(--warnbg);margin-top:.5rem;font-size:.82rem"><b>⚠ Alice est déconnectée</b> — la manche continue ; elle retrouve sa feuille en revenant. Sinon, relancez la question (nouveau tirage, feuille vierge).</div></div></div><div style="flex:0 0 220px;display:flex;flex-direction:column;gap:.4rem"><div class="lbl">Équipes</div>
+<div class="card" style="border-left:6px solid var(--team);display:flex;align-items:center;gap:.4rem"><b>Équipe Bleue</b><span class="muted">42</span><span style="margin-left:auto"></span></div>
+<div class="card" style="border-left:6px solid var(--team2)"><b>Équipe Rouge</b> <span class="muted">37</span></div>
+<div class="card" style="border-left:6px solid var(--team3)"><b>Équipe Verte</b> <span class="muted">29</span></div></div></div></div><div class="state">Révélation <small>— REVEALED</small></div><div class="admin" style="background:#1f2937"><div class="top">BuzzControl · Jeu <span class="chip" style="background:#374151;color:#fff;border-color:#4b5563">REVEALED</span></div><div class="body"><div style="flex:0 0 250px;display:flex;flex-direction:column;gap:.5rem">
+<div class="card"><div style="display:flex;gap:.4rem"><div class="field"><span class="lbl">Temps (sec)</span><div class="input">90</div></div><div class="field"><span class="lbl">Points</span><div class="input">10</div></div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;margin-top:.5rem"><span class="btn dis" style="padding:.45rem">▶ Start</span><span class="btn dis" style="padding:.45rem">⏸ Pause</span><span class="btn dis" style="padding:.45rem">⏹ Stop</span><span class="btn ghost" style="padding:.45rem">👁 Reveal</span></div></div>
+<div class="lbl" style="color:#fff">Questions</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;">🎡 Roue — chanson</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;border:2px solid var(--pri);background:var(--pri100)">✏️ Picto — à la maison</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;">⚡ Speedy — capitales</div><div class="card" style="padding:.35rem .5rem;font-size:.78rem;">🌀 Rafale — sport</div>
+<div class="muted" style="color:var(--g400)">Sélectionner de nouveau la question en cours = relance (retour en PREPARE, nouveau tirage au lancement).</div></div><div style="flex:1;display:flex;flex-direction:column;gap:.5rem"><div class="card" style="text-align:center;font-weight:800;font-size:1.4rem">⏱ 1:12</div><div class="card" style="padding:.4rem"><div class="lbl">Aperçu TV</div><div style="background:#0b1020;border-radius:.3rem;aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:.4rem;color:#fff;font-size:.6rem">
+<div>1:12</div><div>Vie quotidienne · ✏️ Alice dessine pour l'Équipe Bleue</div><div style="height:55%"><div class="sheet" style="height:100%"><svg viewBox="0 0 100 100" aria-label="dessin en cours : une maison"><g fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<polyline points="22,52 50,26 79,51"/><polyline points="27,48 27,82 74,83 74,47"/><polyline points="44,83 44,64 56,64 56,83"/>
+<polyline points="33,56 41,56 41,63 33,63 33,56"/><polyline points="61,55 69,55 69,62 61,62 61,55"/><polyline points="63,37 63,27 69,27 69,42"/>
+<path d="M66,22 q3,-4 0,-8 q-3,-4 1,-8"/></g></svg></div></div><div style="font-weight:800;color:#fde68a">MAISON</div></div></div><div class="card" style="background:var(--okbg)"><div class="lbl">✏️ Picto — révélé · trouvé par l'Équipe Bleue</div><div class="word" style="font-size:1.8rem">MAISON</div>
+<div class="muted">Crédit par la colonne Équipes (champ Points pré-rempli à 10), comme pour les autres types.</div></div></div><div style="flex:0 0 220px;display:flex;flex-direction:column;gap:.4rem"><div class="lbl">Équipes</div>
+<div class="card" style="border-left:6px solid var(--team);display:flex;align-items:center;gap:.4rem"><b>Équipe Bleue</b><span class="muted">42</span><span style="margin-left:auto"><span class="btn ok" style="padding:.2rem .5rem;font-size:.75rem">+10</span></span></div>
+<div class="card" style="border-left:6px solid var(--team2)"><b>Équipe Rouge</b> <span class="muted">37</span></div>
+<div class="card" style="border-left:6px solid var(--team3)"><b>Équipe Verte</b> <span class="muted">29</span></div></div></div></div>
+</section>
+</body>
+</html>

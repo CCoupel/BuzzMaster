@@ -1,6 +1,48 @@
 # Changelog des Contrats API
 
 ---
+## [20261123] — v13.0.0 — Type de jeu PICTO (#191 à #194)
+
+`picto.md` révision 6 (nouveau). Décisions utilisateur du 2026-11-23 :
+- un seul mot par manche, sans passe ;
+- mot(s) saisi(s) dans la question, **tirage libre** à chaque lancement ou relance ;
+- dessinateur choisi en `READY` ou tiré au hasard parmi les joueurs connectés ; relance de la question comme recours ;
+- réservoir, génération IA et catégorie « Pools » reportés en v13.1.0 (#48 / #318).
+
+Ordres : `_work/tasks/planner-20261123-plan-picto*.md`, `planner-20261123-gate2-corrections.md`,
+`planner-20261123-scope-reduction.md`.
+
+**Aucun BREAKING** : tout est additif ; aucun champ, aucune action, aucun fichier existant ne change de sens.
+
+- **[NEW]** `QuestionType` `PICTO` (libellé « Picto ») :
+  - registre, `AllQuestionTypes()`, `questionTypeMeta.js` ;
+  - champ de question `PICTO_WORDS` (1 à 20 mots, `omitempty`), sans doublon replié dans une question ;
+  - `TIME` (30 à 300), `POINTS` et `CATEGORY` réutilisés (§4).
+- **[NEW]** `POST /questions` : champ de formulaire `picto_words`, refus `PICTO_WORDS_INVALID` / `PICTO_TIME_INVALID`
+  (§11). Aucun autre endpoint.
+- **[NEW]** `GameState` : 11 champs `PICTO_*`, sans `omitempty`, jamais persistés (§5).
+- **[NEW]** WebSocket entrant :
+  - `PICTO_SET_TEAM`, `PICTO_SET_DRAWER` et `PICTO_DRAW_DRAWER` (tirage au hasard) — admin, anim ; préparation
+    seulement ;
+  - `PICTO_FOUND` (admin, anim) ;
+  - `PICTO_STROKES` (vplayer dessinateur) ;
+  - `PICTO_CANVAS_SYNC` (tv, admin, anim, vplayer).
+
+  C'est le premier élargissement de la liste blanche `vplayer` depuis #246 (§8.6, §9.1).
+- **[NEW]** WebSocket sortant :
+  - `PICTO_WORD` (dessinateur seul + admin / anim, jamais dans `GameState`) ;
+  - `PICTO_STROKES` (relais vers tv / admin / anim) ;
+  - `PICTO_CANVAS` ;
+  - `PICTO_ERROR` (§9.2).
+- **[CHANGED]** Filtres de sérialisation TV et tablette : `QUESTION.PICTO_WORDS` est retiré, comme `ROUE_PHRASE`
+  (§10). Aucun effet sur les autres types.
+- **[NEW]** Hub : `TrySendToTypes`, un envoi non bloquant qui **abandonne la trame** au lieu de déconnecter un client
+  dont le tampon est plein. Il sert **uniquement** au relais `PICTO_STROKES` ; `BroadcastToTypes` est inchangé
+  (§8.5).
+- **Reporté en v13.1.0** (non implémenté, §12) : `PICTO_SOURCE` (absent = `WORDS`), réservoir `/api/picto/*`,
+  marquages persistants `picto_marks.json`, génération IA, catégorie « Pools » de la sauvegarde.
+
+---
 ## [20261122-b] — v12.2.0 — ROUE : BONUS posé sur une case à points (#316) et BONUS éphémère (#317)
 
 `roue.md` révision 9.1, **§17** (nouveau, prime sur §15.2 et §16 pour le nombre de cases et le BONUS ; §10.1
