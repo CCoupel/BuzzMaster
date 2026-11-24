@@ -498,3 +498,16 @@ consommé par la validation (contrat §2 : `GET /models`, pas un appel de géné
 - Attendre un état par une **barrière positive** (ex. `settle_barrier_291_test.go`) plutôt qu'une fenêtre « aucun message » ; marge de 250 ms après une action client (HELLO / PLAYER_CONNECT).
 - Les cadences de test restent **> 2 × le pacing du writer lumière** (`MinInterval` 100 ms) ; ne pas comparer deux `Last()` successifs (cause des 2 CI rouges du LOT-4 v11.7.0, corrigées `465a8590` et `0d2ca78b`).
 - Les cadences de production sont verrouillées par `TestFlashCadenceConstants_291`.
+
+## Tests sensibles au temps (v13.0.0 RETEX)
+
+- Un test qui bloque un client WebSocket se heurte à `CLIENT_WRITE_TIMEOUT` (3 s) sur un runner lent. **Borner le scénario
+  au cas testé** (par exemple la file pleine), pas à un volume arbitraire.
+- Un `t.Skip` n'est admis **que si le cas testé n'a pas pu être atteint**. Jamais un skip quand le cas a été atteint : il
+  masquerait une régression (revue ba4befbe / d81619f7 ; la règle est appliquée par 02767d26 aux tests de relais PICTO).
+
+## Plan de test HTML à chaque GATE (v13.0.0 RETEX)
+
+- À chaque GATE LOT, GATE 4 **et** retest QUALIF, le plan de test est généré en HTML depuis `tests/procedures/`.
+- Le servir depuis `_work/mockup/` : le launcher ne sert pas les nouveaux sous-dossiers de `_work/`. Vérifier qu'il se charge
+  avant de le présenter.

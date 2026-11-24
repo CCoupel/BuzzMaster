@@ -13,7 +13,7 @@
   ],
   "status": "in_progress",
   "started_at": "2026-11-23T13:50:00Z",
-  "updated_at": "2026-11-24T10:20:00Z",
+  "updated_at": "2026-11-24T15:20:00Z",
   "intensite_depart": "complet",
   "cycles": 1,
   "plan": ".claude/workflow/plan-13.0.0.md",
@@ -72,6 +72,17 @@
         "status": "validated",
         "parent": "LOT-2",
         "qa": "_work/reports/qa-20261124-095500.md"
+      },
+      "LOT-2": {
+        "status": "validated",
+        "closed": [
+          192,
+          193,
+          319,
+          194,
+          320
+        ],
+        "ci_run": "45380755436"
       }
     }
   },
@@ -136,15 +147,14 @@
     },
     "review": {
       "status": "completed",
-      "lot": "LOT-2.3",
-      "cycle": 1,
-      "verdict": "APPROUVE AVEC RESERVES (C1 libellés)",
-      "report": "_work/reports/code-review-20261124-084500.md"
+      "scope": "correctif CI",
+      "verdict": "APPROUVE code ; doc À CORRIGER D1-D3",
+      "report": "_work/reports/code-review-20261124-121500.md"
     },
     "qa": {
-      "status": "completed",
-      "lot": "LOT-2.3",
-      "verdict": "VALIDATED"
+      "status": "validated",
+      "report": "_work/reports/qa-20261124-145500.md",
+      "perf": "p95 nominal 0,24 ms (0,28 avant)"
     },
     "review_fixes": {
       "status": "completed",
@@ -172,17 +182,16 @@
     },
     "deploy-qualif": {
       "status": "completed",
-      "lot": "LOT-2",
-      "version": "13.0.0.25",
-      "sha": "a0847e8f",
-      "pushed": "f4a4e906"
+      "version": "13.0.0.30",
+      "sha": "f9679c6e",
+      "binary": "build/qualif_v13.0.0/buzzcontrol-qualif-13.0.0.30-windows-amd64.exe"
     },
     "r1_fix": {
       "status": "completed",
       "sha": "c775a6be"
     },
     "gate_lot": {
-      "status": "validated",
+      "status": "validated, closure blocked by CI",
       "lot": "LOT-2",
       "at": "2026-11-24",
       "version": "13.0.0.25",
@@ -244,14 +253,47 @@
       "status": "VALIDATED avec risque accepté",
       "report": "_work/reports/qa-20261124-102500.md",
       "coverage": "75,6 %",
-      "audit": "GO-2026-6278 gorilla/websocket v1.5.3 — accepté par l utilisateur 2026-11-24, issue séparée",
+      "audit": "GO-2026-6278 : acceptation remplacée par mise à jour (CI bloquante)",
       "notes": "firmware/ci.sh non joué (collision BUILD)"
     },
     "marketing": {
       "status": "PRET",
       "report": "_work/reports/marketing-20261124-1.md",
       "artifact": "https://claude.ai/artifact/FiULjuFPL76m949p9Cot24"
+    },
+    "ci": {
+      "status": "green",
+      "run": "45380755436",
+      "sha": "02767d26"
+    },
+    "dep_fix": {
+      "status": "completed",
+      "what": "gorilla/websocket → pseudo-version corrigée (#320)",
+      "decided": "utilisateur 2026-11-24",
+      "sha": "09fa5bd3",
+      "version": "13.0.0.28",
+      "note": "x/net v0.60.0 : GO-2026-6866/6860 non appelées, non bloquantes"
+    },
+    "retest": {
+      "status": "validated",
+      "version": "13.0.0.30",
+      "at": "2026-11-24"
+    },
+    "gate4": {
+      "status": "validated",
+      "at": "2026-11-24",
+      "qualif": "13.0.0.30"
+    },
+    "gate4d": {
+      "status": "validated",
+      "at": "2026-11-24",
+      "artifact": "v4"
+    },
+    "retex": {
+      "status": "in_progress",
+      "task": "_work/tasks/doc-updater-20261124-retex.md"
     }
   },
-  "frozen": true
+  "frozen": false,
+  "issue_v13_1_0": "#321"
 }

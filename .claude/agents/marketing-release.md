@@ -26,3 +26,8 @@ Des badges « Nouveau » ont deja ete poses sur des versions x.y (v5.5.1, v5.9.0
 retrait a ete manuel et parfois tardif (les badges v6.x ont survecu a v7, v8 et v9 avant d'etre retires a l'arrivee
 de v10 ; v8.0.0 et v10.0.0 retires/retrogrades a l'arrivee de v11). La regle ci-dessus est la reference : ne pas la
 deduire de cet historique.
+
+## Cartes du site (retour GATE 4d, v13.0.0 RETEX)
+
+- Une carte fait **1 à 2 phrases** : un visuel, puis le gameplay.
+- Les mots clés sont en `<strong>`.
