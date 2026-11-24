@@ -548,6 +548,70 @@ existante : aucun changement de protocole BuzzClick.
 - `internal/game/roue_wheel.go` : construction de la roue (§10.1 du contrat), correction du pas.
 - `cmd/server/roue.go` : `handleRoueAction`, rappels LED, ambiance et sons (hors `main.go`).
 
+## Type de jeu PICTO — manche en préparation et dessin (v13.0.0, #192, #193)
+
+Référence : `contracts/picto.md` §5, §6.1 à §6.3, §8, §9. Le type réutilise les phases existantes ; il n'en ajoute aucune.
+
+### Préparation — `PREPARE` / `READY`
+
+- Choisir l'équipe (`PICTO_SET_TEAM`) puis le dessinateur, par choix direct ou tirage (`PICTO_SET_DRAWER`, `PICTO_DRAW_DRAWER`),
+  depuis l'admin ou l'animateur. Le dessinateur doit être un VJoueur connecté de l'équipe.
+- `PREPARE → READY` exige une équipe, une durée de 30 à 300 s et au moins un mot. Le dessinateur n'est **pas** exigé à ce stade.
+- `START` est **refusé** sans dessinateur connecté (`PICTO_ERROR NO_DRAWER`) : la phase ne change pas.
+- Le mot n'est remis à personne pendant la préparation.
+
+### Lancement — `COUNTDOWN` → `STARTED`
+
+Au passage en `STARTED`, sous le verrou du moteur :
+1. `PICTO_CANVAS_EPOCH` +1, et le journal de feuille est vidé.
+2. Tirage libre du mot parmi les mots de la question (aucune mémoire entre manches). Sans mot (question modifiée à la main entre `READY` et `START`) : la manche reçoit l'issue `NO_WORD` et s'arrête aussitôt (`STOPPED`), sans mot envoyé.
+3. `PICTO_WORD` est envoyé au seul dessinateur et à l'admin / animateur. Le mot n'entre pas dans `GameState`.
+
+### Dessin — `STARTED`
+
+- Seul le VJoueur dessinateur émet `PICTO_STROKES`. Le serveur vérifie l'émetteur, l'époque et la forme, puis ajoute la
+  trame au journal et la relaie à la TV, à l'admin et à l'animateur. **Aucun `UPDATE` n'est émis pour un trait** et le moteur
+  ne voit que l'époque.
+- Les appuis `BUTTON` sont ignorés pendant la manche (buzzers et tablettes).
+- En `PAUSED`, la feuille est verrouillée : `PICTO_STROKES` est refusé.
+
+### Fin de manche — issues `PICTO_OUTCOME`
+
+| Issue | Déclencheur | Transition | Crédit proposé |
+|---|---|---|---|
+| `FOUND` | `PICTO_FOUND` (admin, anim) en `STARTED` ou `PAUSED`, ou en `STOPPED` après `TIMEOUT` (réponse sur le gong) | arrêt puis révélation dans **la même action** : `REVEALED` | ligne de crédit à l'équipe, pré-remplie aux points de la question |
+| `TIMEOUT` | fin du chronomètre global | `STOPPED`, mot **pas encore affiché** | « 0 pt » seulement, sauf si « Trouvé » suit |
+| `STOPPED` | arrêt de la manche par `STOP` | `STOPPED`, puis révélation | « 0 pt » seulement |
+| `NO_WORD` | aucun mot au `START` | `STOPPED` immédiat, puis révélation sans mot | aucun |
+
+- Une issue posée n'est jamais remplacée, sauf `TIMEOUT` → `FOUND` (la réponse arrive sur le gong).
+- `PICTO_FOUND` est refusé (`WRONG_PHASE`) hors de ces cas. Deux « Trouvé » simultanés (admin et anim) ne créent qu'une seule issue.
+
+### Révélation — `REVEALED`
+
+- `PICTO_REVEALED_WORD` et `PICTO_REVEALED_CATEGORY` sont posés en `REVEALED`, quelle que soit l'issue. C'est le **seul**
+  moment où le mot entre dans `GameState`.
+- La feuille reste affichée jusqu'au changement de question. Le dessinateur garde sa feuille, verrouillée.
+- La TV et les tablettes affichent le **mot seul**. Le crédit se voit par l'animation de points commune, sans « Trouvé par »
+  propre à Picto.
+
+### Relance de la question
+
+- L'admin sélectionne de nouveau la question : retour en `PREPARE`. L'équipe et le dessinateur sont conservés (changeables),
+  l'issue, le mot révélé et le journal sont vidés.
+- Au `START` suivant, un nouveau tirage libre a lieu et la feuille repart vierge (nouvelle époque). La tablette du
+  dessinateur revient à l'écran de préparation, puis reçoit le mot au `START`.
+
+### LED de l'équipe qui dessine
+
+- Pendant la préparation et la manche, les buzzers de l'équipe qui dessine sont allumés en fixe à leur couleur ; les autres
+  équipes sont en veille (atténuées). En pause, tous sont atténués. Hors manche PICTO, la couleur habituelle est utilisée.
+- Un appui sur un buzzer est ignoré pendant la manche, quelle que soit la LED.
+
+### Champs `GameState` PICTO (tous présents, aucun `omitempty`, jamais persistés)
+
+Liste complète et règles de remise à vide : `docs/DATA_MODELS.md`, section « GameState PICTO_* ».
+
 ## Chronomètre de Réponse Configurable (v11.1.0, #219)
 
 ### Vue d'ensemble

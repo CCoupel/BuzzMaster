@@ -5,7 +5,7 @@ go 1.26.11
 require (
 	github.com/anthropics/anthropic-sdk-go v1.61.0
 	github.com/ebitengine/oto/v3 v3.5.1
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/miekg/dns v1.1.69
 	go.yaml.in/yaml/v4 v4.0.0-rc.2

@@ -572,6 +572,46 @@ func (c *Controller) sendLEDSetForBuzzerRoue(mac string, bumper *game.Bumper, ph
 	}
 }
 
+// sendLEDSetForBuzzerPicto drives the buzzers of a PICTO question (contracts/picto.md §15): as soon as the
+// drawing team is chosen, and during the round, its buzzers are SOLID at the team colour and every other team's
+// DIM. Pause: DIM. Stopped, revealed, no team chosen: the usual team colour. Pressing a buzzer is ignored by the
+// engine whatever is lit.
+func (c *Controller) sendLEDSetForBuzzerPicto(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
+	rgb := c.TeamColor(bumper)
+	switch phase {
+	case game.PhasePaused:
+		c.Send(mac, protocol.LEDSetPayload{Color: rgb, Intensity: colors.DimIntensityFor(rgb), Effect: "DIM"})
+	case game.PhasePrepare, game.PhaseReady, game.PhaseCountdown, game.PhaseStarted:
+		if state.PictoTeam == "" || bumper.Team == state.PictoTeam {
+			c.Send(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+			return
+		}
+		c.Send(mac, protocol.LEDSetPayload{Color: rgb, Intensity: colors.DimIntensityFor(rgb), Effect: "DIM"})
+	default:
+		c.Send(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	}
+}
+
+// PictoTeams refreshes the buzzer LEDs of a PICTO question (wired to Engine.OnPictoChange): the drawing team lit,
+// the others dimmed, from the moment the team is chosen.
+func (c *Controller) PictoTeams() {
+	state := c.h.Engine().GetState()
+	if state.Question == nil || state.Question.Type != game.QuestionTypePicto {
+		return
+	}
+	tb := c.h.Engine().GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		c.sendLEDSetForBuzzerPicto(mac, bumper, state.Phase, state)
+	}
+	c.h.BroadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
+}
+
 // RoueTeams refreshes the buzzer LEDs of the active ROUE round (wired to
 // Engine.OnRoueChange): the team that has the hand lit, the others dimmed.
 func (c *Controller) RoueTeams() {
@@ -659,6 +699,8 @@ func (c *Controller) AllBuzzers() {
 			c.sendLEDSetForBuzzerRafale(mac, bumper, phase, state)
 		case state.Question != nil && state.Question.Type == game.QuestionTypeRoue:
 			c.sendLEDSetForBuzzerRoue(mac, bumper, phase, state) // v12.0.0, #144
+		case state.Question != nil && state.Question.Type == game.QuestionTypePicto:
+			c.sendLEDSetForBuzzerPicto(mac, bumper, phase, state) // v13.0.0, #194
 		case state.Question != nil && state.Question.Type == game.QuestionTypeMemotion:
 			// MEMOTION: buzzers display team color (same as NORMAL)
 			c.sendLEDSetForBuzzerNormal(mac, bumper, phase)

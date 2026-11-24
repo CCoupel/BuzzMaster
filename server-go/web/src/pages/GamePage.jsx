@@ -51,6 +51,8 @@ import AnimRafaleActions from '../components/AnimRafaleActions'
 import AnimSoundActions from '../components/AnimSoundActions'
 import RouePanel from '../components/roue/RouePanel'
 import { makeRoueActions } from '../components/roue/roueState'
+import PictoPanel from '../components/picto/PictoPanel'
+import { makePictoActions, pictoLaunchBlocked, pictoLaunchReason } from '../components/picto/pictoState'
 import './GamePage.css'
 import '../styles/entracte.css'
 
@@ -107,6 +109,9 @@ export default function GamePage() {
     questionSound,
     // ROUE (v12.0.0, #144) — refus serveur d'une action ROUE_* (contrat roue.md §8.3)
     roueError,
+    // PICTO (v13.0.0, #192) — refus serveur d'une action PICTO_* et mot de la manche (admin seulement, contrat picto.md §9.2)
+    pictoError,
+    pictoWord,
   } = useGame()
   // #253 — popup « Lancer la partie » ouverte sur un AUTRE poste : le serveur suspend les actions de
   // jeu ; on désactive les commandes ici avec le motif (bandeau global sous la barre de navigation).
@@ -115,6 +120,22 @@ export default function GamePage() {
 
   const [timeInput, setTimeInput] = useState(30)
   const [pointsInput, setPointsInput] = useState(1)
+
+  // Temps et points suivent la question courante, quelle que soit la façon dont elle a été choisie (liste de cette page,
+  // anim, « question suivante », relance, rechargement) : sinon START envoyait un Delay périmé (30 s au lieu de la durée
+  // de la question). Une seule reprise par question (`syncedQuestionId`) : une saisie faite ensuite n'est pas écrasée.
+  // Seulement en préparation (PREPARE / READY), là où ces champs servent au prochain START : jamais pendant une manche
+  // (champs figés), ni après coup (le montant de crédit d'une question jouée reste celui affiché).
+  const syncedQuestionId = useRef(null)
+  useEffect(() => {
+    const q = gameState.question
+    if (!q || q.ID === undefined || q.ID === null) return
+    if (gameState.phase !== 'PREPARE' && gameState.phase !== 'READY') return
+    if (syncedQuestionId.current === q.ID) return
+    syncedQuestionId.current = q.ID
+    setTimeInput(parseInt(q.TIME) || 30)
+    setPointsInput(parseInt(q.POINTS) || 1)
+  }, [gameState.question, gameState.phase])
 
   // MAJEUR-1 (revue de code #155/#156) — pointsInput est un état React
   // local, dont le serveur n'avait connaissance d'aucune façon avant ce
@@ -1226,6 +1247,21 @@ export default function GamePage() {
           )
         })()}
 
+        {/* PICTO (v13.0.0, #192/#193, maquette M2) — équipe + dessinateur (PREPARE/READY), puis mot secret et alerte de déconnexion */}
+        {gameState.question?.TYPE === 'PICTO' && (() => {
+          const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+          return (
+            <PictoPanel
+              gameState={gameState}
+              actions={makePictoActions(sendMessage)}
+              error={pictoError}
+              pictoWord={pictoWord}
+              teamList={teamsWithBuzzers.map(t => ({ name: t.name, color: getRgbColor(t.COLOR) }))}
+              customCategories={apiCategories}
+            />
+          )
+        })()}
+
         {/* ARDOISE — zone réponses équipes (pattern Memory team zone) */}
         {gameState.question?.TYPE === 'ARDOISE' &&
          ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase) && (
@@ -1737,13 +1773,15 @@ export default function GamePage() {
                 title={
                   launchLocked
                     ? LAUNCH_LOCK_REASON
+                    : (!isPlaying && gameState.phase === 'READY' && pictoLaunchBlocked(gameState))
+                    ? `Picto : ${pictoLaunchReason(gameState)} avant de lancer — contrat picto.md §6.1`
                     : rafaleTeamsBlocked && !isPlaying
                     ? 'Selectionnez au moins une equipe participante avant de demarrer — contrat §5.1'
                     : rafaleBlocked && !isPlaying
                       ? 'Selectionnez une categorie et verifiez le pool RAFALE (disponibilite) avant de demarrer — contrat §7.2'
                       : undefined
                 }
-                disabled={launchLocked || (!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked))}
+                disabled={launchLocked || (!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked || (gameState.phase === 'READY' && pictoLaunchBlocked(gameState))))}
               >
                 {isPlaying ? 'STOP' : 'START'}
               </Button>

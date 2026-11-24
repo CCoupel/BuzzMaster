@@ -183,6 +183,13 @@ type Engine struct {
 	roueParams RoueWheelParams
 	roueSeq    int
 
+	// PICTO (v13.0.0, #192, contracts/picto.md §3.2/§10): the SECRET word of the round (never in GameState
+	// before REVEALED) — drawn at START, kept until the next Ready / NEW_GAME.
+	pictoWord string
+
+	// sessions holds the fingerprints of the VJoueur session tokens (v13.0.0, vplayer_sessions.go).
+	sessions *vplayerSessionStore
+
 	// rafaleAlpha (#282, contracts/rafale.md §15.4) is the alphabetical draw
 	// queue of the current classic round; nil ⇔ option off. Ephemeral like
 	// rafaleDraw, but explicitly released by stopUnsafe/Ready/InitGame.
@@ -407,6 +414,14 @@ type Engine struct {
 	// read at each START; called under the engine lock, it must not call back
 	// into the Engine.
 	RoueWheelParamsFn func() RoueWheelParams
+	// PICTO callbacks (v13.0.0, #192, contracts/picto.md §6, §10), all fired OUTSIDE the engine lock.
+	// OnPictoChange: a preparation action changed the state — broadcast UPDATE, refresh LED / ambiance.
+	// OnPictoCanvasReset(epoch): the sheet journal must restart empty for this epoch (START: epoch+1;
+	// question change, relaunch, NEW_GAME: current epoch). OnPictoWord: the word of the round was drawn
+	// at START — send PICTO_WORD to the drawer and to admin / anim ONLY, never through GameState.
+	OnPictoChange      func()
+	OnPictoCanvasReset func(epoch int)
+	OnPictoWord        func(PictoWordInfo)
 	// OnRafaleInvalid (v11.0/#227, contracts/sound.md §2.1's CuePerdu) fires
 	// on a classic RAFALE round's RAFALE_INVALIDATE (RafaleInvalidate,
 	// below) or its question-timer expiry — "identique à réponse invalide"
@@ -459,6 +474,7 @@ type Engine struct {
 // NewEngine creates a new game engine
 func NewEngine() *Engine {
 	return &Engine{
+		sessions: &vplayerSessionStore{tokens: map[string]string{}}, // v13.0.0 session tokens: in memory, persisted once a path is set
 		state: GameState{
 			Phase:              PhaseStopped,
 			Delay:              30,
@@ -495,6 +511,8 @@ func NewEngine() *Engine {
 			RoueTeams: []string{}, RoueCurrentTeamColor: []int{}, RoueTeamBank: map[string]int{},
 			RoueBoard: RoueBoard{Cols: RoueBoardCols, Rows: []string{}}, RoueLetters: []RoueLetter{},
 			RoueWheel: RoueWheel{Segments: []RoueSegment{}, Current: -1}, RoueAwards: map[string]int{},
+			// PICTO (v13.0.0, #192): never nil.
+			PictoTeamColor: []int{}, PictoCandidates: []PictoCandidate{},
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
 			// empty (not nil) so JSON serializes [] (not null) before the
 			// first UPDATE_QUIZ_META (contract game-state.md §"Aucun omitempty").
@@ -1128,6 +1146,7 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 		e.purgeInactiveParticipantUnsafe(teamLostLastBumper)
 		newPhase = e.reevaluatePrepareReadyUnsafe()
 	}
+	e.pictoRefreshUnsafe() // PICTO (#192): candidates / drawer connection follow the roster
 	callback := e.OnStateChange
 	e.mu.Unlock()
 
@@ -1212,6 +1231,7 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 	// silently satisfying participantsConform).
 	oldActiveTeams := teamsWithBumpers(oldBumpers)
 	e.data.Bumpers = bumpers
+	e.sessionPruneUnsafe() // vplayer-session.md §7: no fingerprint for a seat that is gone
 	newActiveTeams := teamsWithBumpers(bumpers)
 	teamsLostLastBumper := false
 	for teamID := range oldActiveTeams {
@@ -1269,6 +1289,7 @@ func (e *Engine) DeleteBumper(id string) *Bumper {
 	}
 	deletedTeam := deleted.Team
 	delete(e.data.Bumpers, id)
+	e.sessionRemoveUnsafe(id) // vplayer-session.md §7
 	delete(e.flipMemo, id) // #248: the bumper's FLIP_ID memory goes with it
 	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
 
@@ -1277,6 +1298,7 @@ func (e *Engine) DeleteBumper(id string) *Bumper {
 		e.purgeInactiveParticipantUnsafe(deletedTeam)
 		newPhase = e.reevaluatePrepareReadyUnsafe()
 	}
+	e.pictoRefreshUnsafe() // PICTO (#192, §6.7): a deleted drawer is purged
 
 	callback := e.OnStateChange
 	e.mu.Unlock()
@@ -1509,6 +1531,15 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	if isNewQuestion || roueRoundLeft {
 		e.resetRoueStateUnsafe() // ROUE (#144, contract §4)
 	}
+	// PICTO (#192, contracts/picto.md §5, §6.6): a new question clears the preparation; a relaunch of the same
+	// question keeps team and drawer. Outcome, revealed word and secret word are always cleared.
+	if isNewQuestion {
+		e.resetPictoPrepUnsafe()
+	}
+	e.resetPictoRoundUnsafe()
+	e.pictoRefreshUnsafe()
+	pictoSheetReset := isNewQuestion || e.isPictoQuestionUnsafe()
+	pictoEpoch := e.state.PictoCanvasEpoch
 	rafaleNextReleased := false
 	if isNewQuestion || rafaleRoundAlreadyPlayed {
 		rafaleNextReleased = e.releaseRafaleNextUnsafe()
@@ -1537,6 +1568,10 @@ func (e *Engine) Ready(questionID string, question *Question) {
 
 	if rafaleNextReleased {
 		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
+
+	if pictoSheetReset {
+		e.firePictoCanvasReset(pictoEpoch) // PICTO (#192): the journal restarts empty
 	}
 
 	if callback != nil {
@@ -1653,6 +1688,12 @@ func (e *Engine) purgeInactiveParticipantUnsafe(teamID string) {
 			e.state.RafaleCurrentTeam = ""
 			e.state.RafaleCurrentTeamColor = []int{}
 		}
+	}
+
+	if e.state.PictoTeam == teamID {
+		e.state.PictoTeam, e.state.PictoDrawer = "", ""
+		e.pictoRefreshUnsafe()
+		removed = true
 	}
 
 	if removed {
@@ -1870,6 +1911,10 @@ func participantsConform(question *Question, state *GameState) bool {
 		// PREPARE->READY gate: SOLO now needs an explicit "who is playing"
 		// selection, same UX as MEMORY SOLO, before START).
 		return participantsCountConform(question.RafaleMode, len(state.RafaleParticipatingTeams))
+	case QuestionTypePicto:
+		// v13.0.0 (#192, contracts/picto.md §6.1): a team chosen, TIME in 30–300 s, at least one word.
+		// The drawer is not required for READY; START requires it (PictoStartCheck).
+		return pictoParticipantsConform(question, state)
 	case QuestionTypeRoue:
 		// v12.0.0 (#144, contracts/roue.md §13 item 4): ROUE_TEAMS conform to
 		// ROUE_MODE (SOLO = 1 team, otherwise >= 2) and a non-empty phrase.
@@ -1969,6 +2014,12 @@ func (e *Engine) Start(delay int) {
 	// SetMotionParticipatingTeams), and READY is only reached when conform.
 	if e.state.Phase != PhaseReady {
 		log.Printf("[Engine] Cannot start game from phase %s (must be READY)", e.state.Phase)
+		e.mu.Unlock()
+		return
+	}
+	// PICTO (#192, §6.1): START refused without a designated, connected drawer (state unchanged).
+	if perr := e.pictoStartCheckUnsafe(); perr != nil {
+		log.Printf("[Engine] Cannot start PICTO round: %s", perr.Code)
 		e.mu.Unlock()
 		return
 	}
@@ -2367,6 +2418,7 @@ func (e *Engine) actualStart() {
 	// not skip it the way MEMOTION does.
 	rafaleStart := e.startRafaleRoundUnsafe()
 	e.startRoueRoundUnsafe() // ROUE (#144): board, wheel, pots, first team — no-op for any other type
+	pictoStart := e.startPictoRoundUnsafe() // PICTO (#192): epoch + free draw of the word — nil for any other type
 
 	// ENTRACTE (#214, v9.0.0): raise the pause flag from this question's own
 	// config — see startEntracteQuestionUnsafe's own doc comment. A no-op
@@ -2382,13 +2434,16 @@ func (e *Engine) actualStart() {
 	if e.state.Question == nil || (e.state.Question.Type != QuestionTypeMemotion && e.state.Question.Type != QuestionTypeEntracte && e.state.Question.Type != QuestionTypeRoue) {
 		e.maybeStartDeferredTimerUnsafe() // v11.1/#219, contract §10.7 — see its own doc comment
 	}
+	startPhase := e.pictoNoWordStopUnsafe(pictoStart) // PICTO (#194, §6.2): no word at START → NO_WORD, stopped at once
 
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
 	e.mu.Unlock()
 
+	e.finishPictoRoundStart(pictoStart) // PICTO (#192): sheet reset then PICTO_WORD, before the UPDATE
+
 	if callback != nil {
-		callback(PhaseStarted)
+		callback(startPhase)
 	}
 
 	// Start MEMORIZE timer after broadcast — must be called after unlock to avoid deadlock
@@ -2450,6 +2505,7 @@ func (e *Engine) StartImmediate(delay int) {
 	// actualStart entirely (used by tests), so it needs the same init call.
 	rafaleStart := e.startRafaleRoundUnsafe()
 	e.startRoueRoundUnsafe() // ROUE (#144) — mirrors actualStart()
+	pictoStart := e.startPictoRoundUnsafe() // PICTO (#192) — mirrors actualStart()
 
 	// ENTRACTE (#214, v9.0.0) — mirrors actualStart(), same reasoning.
 	e.startEntracteQuestionUnsafe()
@@ -2466,13 +2522,16 @@ func (e *Engine) StartImmediate(delay int) {
 	if e.state.Question == nil || (e.state.Question.Type != QuestionTypeEntracte && e.state.Question.Type != QuestionTypeRoue) {
 		e.maybeStartDeferredTimerUnsafe()
 	}
+	startPhase := e.pictoNoWordStopUnsafe(pictoStart) // PICTO (#194, §6.2) — mirrors actualStart()
 
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
 	e.mu.Unlock()
 
+	e.finishPictoRoundStart(pictoStart) // PICTO (#192): sheet reset then PICTO_WORD, before the UPDATE
+
 	if callback != nil {
-		callback(PhaseStarted)
+		callback(startPhase)
 	}
 
 	e.finishRafaleRoundStart(rafaleStart)
@@ -2604,6 +2663,11 @@ func (e *Engine) stopIfCurrent(ticker *time.Ticker) {
 	if e.timer != ticker || e.state.Phase != PhaseStarted {
 		e.mu.Unlock()
 		return
+	}
+	// PICTO (#194, contracts/picto.md §6.4): the global chrono's end is TIMEOUT, posed BEFORE the stop, at the
+	// only point that still knows this stop is a timeout (like OnTimeUp). "Trouvé" may still follow.
+	if e.isPictoQuestionUnsafe() && e.state.PictoOutcome == "" {
+		e.state.PictoOutcome = PictoOutcomeTimeout
 	}
 	released := e.stopUnsafe()
 	callback := e.OnStateChange
@@ -2839,6 +2903,7 @@ func (e *Engine) Stop() {
 // rafaleUsed via safeGo("SaveRafaleUsed", ...) AFTER its own e.mu.Unlock()
 // when this is true.
 func (e *Engine) stopUnsafe() bool {
+	prevPhase := e.state.Phase // PICTO (#194): tells an abandonment (STOP) from a round that never started
 	// Signal countdown timer goroutine to stop (if running)
 	if e.countdownStopCh != nil {
 		select {
@@ -2873,6 +2938,11 @@ func (e *Engine) stopUnsafe() bool {
 	e.state.Phase = PhaseStopped
 	e.state.CurrentTime = 0
 	e.state.CountdownTime = 0
+	// PICTO (#194, contracts/picto.md §6.4): a STOP during the round is an abandonment. An outcome already posed
+	// (TIMEOUT by the chrono, FOUND, NO_WORD) is never replaced; the word stays secret until REVEALED.
+	if e.isPictoQuestionUnsafe() && e.state.PictoOutcome == "" && (prevPhase == PhaseStarted || prevPhase == PhasePaused) {
+		e.state.PictoOutcome = PictoOutcomeStopped
+	}
 
 	// v11.1/#219, contract §10.7 — a STOP ends the question's active life
 	// before any pending deferred timer ever resolves; see
@@ -3729,10 +3799,7 @@ func (e *Engine) Reveal() string {
 	// active life before any pending deferred timer ever resolves, same
 	// reasoning as stopUnsafe()/Ready(); see resetDeferredTimerUnsafe's own
 	// doc comment.
-	e.resetDeferredTimerUnsafe()
-
-	e.state.Phase = PhaseRevealed
-	e.state.TeamsLocked = false // #249
+	e.enterRevealedUnsafe() // resets the deferred timer, sets REVEALED, PICTO §6.5 (picto.go)
 
 	var answer string
 	if e.state.Question != nil {
@@ -3802,6 +3869,13 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		if changed {
 			e.fireRoueChange()
 		}
+		return false
+	}
+
+	// Ignore buzz for PICTO questions (v13.0.0, #192, contracts/picto.md §2.10, §6.3): the guessing is oral.
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypePicto {
+		log.Printf("[Engine] Ignoring buzz for PICTO question from %s", bumperID)
+		e.mu.Unlock()
 		return false
 	}
 
@@ -4197,6 +4271,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 				res.PurgedPlayerIDs = append(res.PurgedPlayerIDs, id)
 			}
 		}
+		e.sessionPruneUnsafe() // vplayer-session.md §7: NEW_GAME purge — ONE write for all the purged seats
 		if len(res.PurgedPlayerIDs) > 0 {
 			e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
 			log.Printf("[Engine] InitGame: purged %d virtual player(s)", len(res.PurgedPlayerIDs))
@@ -4272,10 +4347,15 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	e.state.RafaleExhausted = false
 	e.resetRafaleAlphaUnsafe() // #282
 	e.resetRoueStateUnsafe()   // ROUE (#144, contract §4)
+	e.resetPictoPrepUnsafe()   // PICTO (#192, §5)
+	e.resetPictoRoundUnsafe()
 
 	log.Printf("[Engine] Game initialized (scores=%v players=%v teams=%v questions=%v)",
 		opts.PurgeScores, opts.PurgePlayers, opts.PurgeTeams, opts.ResetQuestions)
+	pictoEpoch := e.state.PictoCanvasEpoch
 	e.mu.Unlock()
+
+	e.firePictoCanvasReset(pictoEpoch) // PICTO (#193, §8.3): NEW_GAME empties the sheet journal
 
 	safeGo("SaveHistory", e.SaveHistory)
 	safeGo("SaveTeams", e.SaveTeams)
@@ -4397,6 +4477,7 @@ func (e *Engine) RAZScores() {
 func (e *Engine) ClearBumpers() {
 	e.mu.Lock()
 	e.data.Bumpers = make(map[string]*Bumper)
+	e.sessionPruneUnsafe()
 
 	// Reset team references to bumpers
 	for _, team := range e.data.Teams {
@@ -4418,6 +4499,7 @@ func (e *Engine) ClearBumpers() {
 func (e *Engine) ClearAll() {
 	e.mu.Lock()
 	e.data.Bumpers = make(map[string]*Bumper)
+	e.sessionPruneUnsafe()
 	e.data.Teams = make(map[string]*Team)
 	log.Printf("[Engine] All teams and bumpers cleared")
 	e.mu.Unlock()
@@ -6520,7 +6602,12 @@ func (e *Engine) createVirtualPlayerUnsafe(name string) (string, *Bumper, error)
 	return id, bumper, nil
 }
 
-// ReconnectOrCreateVirtualPlayer resolves a PLAYER_CONNECT request per the
+// ReconnectOrCreateVirtualPlayer — RESERVED FOR TESTS AND TOOLS: no production path may call it. It takes no
+// session token, so it verifies no proof of possession and leaves new seats without fingerprint (v13.0.0,
+// contracts/vplayer-session.md). Every real PLAYER_CONNECT goes through
+// ReconnectOrCreateVirtualPlayerWithToken (architecture guard: vplayer_session_callers_319_test.go).
+//
+// It resolves a PLAYER_CONNECT request per the
 // backend-ID decision matrix (fix R1, code-review CRITICAL —
 // _work/reports/planner-20260725-143029-r1-fix.md §3.3). The bumper ID
 // (already generated and returned to the client at enrollment, in
@@ -6552,18 +6639,50 @@ func (e *Engine) createVirtualPlayerUnsafe(name string) (string, *Bumper, error)
 // Returns (id, bumper, reconnected, err). reconnected is false only when a
 // brand-new bumper was created.
 func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumper, bool, error) {
+	id, b, reconnected, _, err := e.reconnectOrCreateVirtualPlayer(id, name, "", false)
+	return id, b, reconnected, err
+}
+
+// ReconnectOrCreateVirtualPlayerWithToken is ReconnectOrCreateVirtualPlayer with the session token of the
+// connecting tablet (contracts/vplayer-session.md §4.2). The extra result is the token the bound tablet must
+// keep and resend: the presented one for a valid reconnection (1a), a freshly issued one for a seat without
+// fingerprint (1c, migration), a new enrolment or a re-keyed seat. When the feature is off it is "".
+// A seat that has a token and receives none or a wrong one is refused with EnrollmentError{INVALID_SESSION}
+// BEFORE any state change (1b): nothing is bound, nobody is evicted.
+func (e *Engine) ReconnectOrCreateVirtualPlayerWithToken(id, name, token string) (string, *Bumper, bool, string, error) {
+	return e.reconnectOrCreateVirtualPlayer(id, name, token, true)
+}
+
+// reconnectOrCreateVirtualPlayer is the shared body; enforce=false skips the 1b refusal (legacy entry point
+// kept for tests and tools, see vplayer_sessions.go).
+func (e *Engine) reconnectOrCreateVirtualPlayer(id, name, token string, enforce bool) (string, *Bumper, bool, string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	normalized := strings.TrimSpace(name)
 
-	// Case 1: a resolvable ID is unambiguous — always a genuine reconnection.
+	// Case 1: a resolvable ID is a reconnection — provided the tablet proves it owns the seat (token).
 	if id != "" {
 		if bumper, ok := e.data.Bumpers[id]; ok && bumper != nil && bumper.IsVirtual {
+			sessionToken := ""
+			if e.sessions != nil { // always true for an engine built by NewEngine; nil only for a zero Engine
+				has, valid := e.sessions.verify(id, token)
+				switch {
+				case has && !valid && !enforce:
+					sessionToken = ""
+				case has && !valid: // 1b: no binding, no eviction, no side effect
+					return "", nil, false, "", &EnrollmentError{Reason: ErrInvalidSession}
+				case has: // 1a
+					sessionToken = token
+				default: // 1c: seat created before v13.0.0, first to arrive gets its token
+					sessionToken = e.sessionIssueUnsafe(id)
+				}
+			}
 			// #246: the client-sent name never renames the bumper (a stale tab used
 			// to rename the current player). The server-side name is authoritative.
 			bumper.Connected = true
 			applyConnEventUnsafe(bumper, ConnEventReconnect)
+			e.pictoRefreshUnsafe() // PICTO (#192): drawer reconnected
 			// #122 B2/B3 — the player found their way back on their own: any
 			// pending "place demandée" signal or reclaim authorization for this
 			// bumper is now moot.
@@ -6571,7 +6690,7 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 			bumper.reclaimAuthorizedUntil = time.Time{}
 			log.Printf("[Engine] Virtual player reconnected by ID: id=%s, name=%s", id, bumper.Name)
 			safeGo("SaveBumpers", e.SaveBumpers)
-			return id, bumper, true, nil
+			return id, bumper, true, sessionToken, nil
 		}
 		// Case 2: stale/unknown ID — fall through as if none was provided.
 	}
@@ -6597,7 +6716,7 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 
 			newID := e.reattachVirtualPlayerUnsafe(oldID, cand, normalized)
 			log.Printf("[Engine] Virtual player reclaimed: old_id=%s, new_id=%s, name=%s", oldID, newID, normalized)
-			return newID, cand, true, nil
+			return newID, cand, true, e.issueUnlessLegacyUnsafe(newID, "reclaim", enforce), nil
 		}
 	}
 
@@ -6620,15 +6739,35 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 				// card for the animateur right now, not after some delay.
 				cand.ReclaimRequested = true
 				safeGo("SaveBumpers", e.SaveBumpers)
-				return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN_OFFLINE"}
+				return "", nil, false, "", &EnrollmentError{Reason: "NAME_TAKEN_OFFLINE"}
 			}
-			return "", nil, false, &EnrollmentError{Reason: "NAME_TAKEN"}
+			return "", nil, false, "", &EnrollmentError{Reason: "NAME_TAKEN"}
 		}
 	}
 
 	// Case 4/5: no usable id, name free -> new enrollment.
 	newID, newBumper, err := e.createVirtualPlayerUnsafe(normalized)
-	return newID, newBumper, false, err
+	if err != nil {
+		return "", nil, false, "", err
+	}
+	return newID, newBumper, false, e.issueUnlessLegacyUnsafe(newID, "enrol", enforce), nil
+}
+
+// issueUnlessLegacyUnsafe issues a token for a new or re-keyed seat, except through the legacy entry point
+// (enforce=false: tests and tools), whose seats stay without fingerprint like a seat created before v13.0.0
+// (matrix case 1c: the first tablet to arrive gets its token).
+func (e *Engine) issueUnlessLegacyUnsafe(id, reason string, enforce bool) string {
+	if !enforce {
+		return ""
+	}
+	return e.issueAndLogUnsafe(id, reason)
+}
+
+// issueAndLogUnsafe issues a token for a new or re-keyed seat and logs the event (never the token).
+func (e *Engine) issueAndLogUnsafe(id, reason string) string {
+	// The journal line (VPLAYER_TOKEN_ISSUED id=… reason=…, never the token) is written by the application
+	// layer, which knows the outcome of the connection (cmd/server handlePlayerConnect).
+	return e.sessionIssueUnsafe(id)
 }
 
 // rekeyBumperUnsafe moves bumper from oldID to a freshly generated ID —
@@ -6645,6 +6784,7 @@ func (e *Engine) rekeyBumperUnsafe(oldID string, bumper *Bumper, name string) st
 	delete(e.data.Bumpers, oldID)
 	e.data.Bumpers[newID] = bumper
 	bumper.Name = name
+	e.sessionRemoveUnsafe(oldID) // vplayer-session.md §7: the re-keyed seat gets a NEW token under its new ID
 
 	return newID
 }
@@ -6662,6 +6802,7 @@ func (e *Engine) reattachVirtualPlayerUnsafe(oldID string, bumper *Bumper, name 
 	bumper.ReclaimRequested = false
 	bumper.reclaimAuthorizedUntil = time.Time{} // consumed — single use
 	applyConnEventUnsafe(bumper, ConnEventReconnect)
+	e.pictoRefreshUnsafe() // PICTO (#192): the seat is re-keyed
 
 	safeGo("SaveBumpers", e.SaveBumpers)
 	return newID
@@ -6750,8 +6891,11 @@ func (e *Engine) ReleaseSeat(id string) (newID string, wasConnected bool, ok boo
 	// site flipping CONNECTED fires the matching event (see UpdateBumper's
 	// CONNECTED handling a few hundred lines up).
 	newID = e.rekeyBumperUnsafe(id, bumper, bumper.Name)
+	// vplayer-session.md §7: the released seat gets a fresh token nobody holds — it can only be reclaimed by name (#122).
+	e.issueAndLogUnsafe(newID, "release")
 	bumper.Connected = false
 	applyConnEventUnsafe(bumper, ConnEventDisconnect)
+	e.pictoRefreshUnsafe() // PICTO (#192): the evicted seat is re-keyed, a stale drawer ID is purged
 	bumper.ReclaimRequested = false
 	bumper.reclaimAuthorizedUntil = time.Now().Add(reclaimAuthorizationTTL)
 
@@ -6839,58 +6983,6 @@ func (e *Engine) StopEnrollment() {
 	e.state.EnrollmentActive = false
 	e.state.ShowQRCode = false
 	log.Printf("[Engine] Enrollment stopped")
-}
-
-// HandleVirtualPlayerConnect handles a virtual player connection request
-// Returns (bumperID, bumper, error)
-func (e *Engine) HandleVirtualPlayerConnect(name, sessionID string) (string, *Bumper, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	// Check if enrollment is active
-	if !e.state.EnrollmentActive {
-		return "", nil, &EnrollmentError{Reason: "ENROLLMENT_CLOSED"}
-	}
-
-	// Check if limit is reached
-	virtualCount := e.countVirtualPlayersUnsafe()
-	if virtualCount >= e.state.VirtualPlayerLimit {
-		return "", nil, &EnrollmentError{Reason: "ENROLLMENT_FULL"}
-	}
-
-	// Validate name (2-20 characters, alphanumeric + spaces)
-	if len(name) < 2 || len(name) > 20 {
-		return "", nil, &EnrollmentError{Reason: "INVALID_NAME"}
-	}
-
-	// Check if name is already taken
-	for _, bumper := range e.data.Bumpers {
-		if bumper.Name == name && bumper.IsVirtual {
-			return "", nil, &EnrollmentError{Reason: "PSEUDO_TAKEN"}
-		}
-	}
-
-	// Generate unique ID using sessionID
-	id := sessionID
-	if id == "" {
-		id = "vplayer_" + name + "_" + time.Now().Format("20060102_150405")
-	}
-
-	// Create virtual bumper (VPlayer = true for virtual players, allows all QCM colors)
-	bumper := &Bumper{
-		Name:      name,
-		Team:      "",
-		Score:     0,
-		IsVirtual: true,
-		IsVPlayer: true, // VPlayer can answer all QCM colors
-		Status:    "READY",
-	}
-
-	e.data.Bumpers[id] = bumper
-	e.state.VirtualPlayerCount++
-
-	log.Printf("[Engine] Virtual player connected: id=%s, name=%s, sessionID=%s", id, name, sessionID)
-	return id, bumper, nil
 }
 
 // reconnectVPlayer reconnects an existing virtual player
@@ -8556,6 +8648,7 @@ func (e *Engine) RenameTeamState(oldName, newName string) []string {
 	note(moveKey(st.RoueTeamBank, oldName, newName), "ROUE_TEAM_BANK")
 	note(moveKey(st.RoueAwards, oldName, newName), "ROUE_AWARDS")
 	note(replaceInList(st.RoueTeams, oldName, newName), "ROUE_TEAMS")
+	note(e.pictoRenameTeamUnsafe(oldName, newName), "PICTO_TEAM")
 	for i := range st.RoueLetters {
 		if st.RoueLetters[i].Team == oldName {
 			st.RoueLetters[i].Team = newName
@@ -8650,6 +8743,7 @@ func (e *Engine) purgeTeamStateUnsafe(name string) {
 	st.MotionParticipatingTeams = drop(st.MotionParticipatingTeams)
 	st.RafaleParticipatingTeams = drop(st.RafaleParticipatingTeams)
 	st.RoueTeams = drop(st.RoueTeams)
+	e.pictoPurgeTeamUnsafe(name)
 	delete(st.RoueTeamBank, name)
 	delete(st.RoueAwards, name)
 	for _, f := range []*string{&st.RoueCurrentTeam, &st.RoueNextTeam, &st.RoueWinner} {

@@ -590,3 +590,9 @@ ls -lh releases/
 - Sur Raspberry Pi, donner les droits d'exécution : `chmod +x buzzcontrol-linux-arm64`
 - Le workflow CI utilise la version de Go de `server-go/go.mod` (directive `go`) et Node.js 22 ; la chaîne d'outils est détaillée dans [GO_SERVER.md](GO_SERVER.md), section « Chaîne d'outils CI (#276) »
 - Le firmware compilé (`buzzclick-vX.Y.Z-merged.bin`) est automatiquement embarqué dans le serveur pour les mises à jour OTA
+
+## BUILD pendant une QA (v13.0.0 RETEX)
+
+- Si la QA lance `go test` ou `scripts/ci.sh` **dans le dépôt principal**, prévenir le deployer avant de lancer un BUILD :
+  collision vécue sur la NR v13.0.0. Les deux ne doivent pas partager le dépôt principal en même temps.
+- Une modification de dépôt pendant une QA passe par un worktree jetable (voir `CLAUDE.md`, « Branche courante et worktrees »).

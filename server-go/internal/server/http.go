@@ -1523,6 +1523,17 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	// PICTO (v13.0.0, #191, contracts/picto.md §11): TIME 30–300 and the words
+	// (one per line) are re-read at each save — handleUploadQuestion rebuilds the
+	// question from scratch, a field not read here would be destroyed (RAFALE
+	// bugfix 2026-08-31). A refusal answers 400 prefixed by its code, nothing written.
+	if questionType == string(game.QuestionTypePicto) {
+		if status, msg := applyPictoFields(r, question); status != 0 {
+			http.Error(w, msg, status)
+			return
+		}
+	}
+
 	// Handle RAFALE specific fields (v8.0.0, #107, contract §3.3) — round
 	// configuration: difficulty/mode/seconds-per-question/max-questions.
 	// CATEGORY is already handled generically above (shared field, contract
@@ -3240,6 +3251,12 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		if _, err := os.Stat(bumpersPath); err == nil {
 			h.addFileToTAR(tw, bumpersPath, "config/bumpers.json")
 		}
+		// v13.0.0 (vplayer-session.md §7): the session fingerprints travel with the players, so a seat stays
+		// valid after a restoration.
+		sessionsPath := filepath.Join(configDir, "vplayer_sessions.json")
+		if _, err := os.Stat(sessionsPath); err == nil {
+			h.addFileToTAR(tw, sessionsPath, "config/vplayer_sessions.json")
+		}
 	}
 
 	// Add history.json
@@ -3519,6 +3536,7 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		h.engine.SetBumpers(make(map[string]*game.Bumper))
 		bumpersPath := filepath.Join(configDir, "bumpers.json")
 		os.Remove(bumpersPath)
+		os.Remove(filepath.Join(configDir, "vplayer_sessions.json")) // v13.0.0: fingerprints go with the players (SetBumpers pruned the store)
 		result["bumpers"] = true
 		log.Printf("[HTTP] Reset: Bumpers cleared")
 	}
@@ -3821,6 +3839,11 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(configDir, "bumpers.json")
 				allowed = true
 			}
+		case tarPath == "config/vplayer_sessions.json": // v13.0.0: same flag as the players
+			if detected["bumpers"] {
+				targetPath = filepath.Join(configDir, "vplayer_sessions.json")
+				allowed = true
+			}
 		case tarPath == "config/history.json":
 			if detected["history"] {
 				targetPath = filepath.Join(configDir, "history.json")
@@ -3900,6 +3923,9 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 
 	if detected["bumpers"] {
 		if err := h.engine.LoadBumpers(); err == nil {
+			loadErr := h.engine.LoadVPlayerSessions() // v13.0.0: the session fingerprints come back with the players
+			// vplayer-session.md §6: same WARN rule as the startup (shared), count only, never an ID or a token.
+			LogVPlayerSessionsWarn(game.LogComponentHTTP, "restauration", h.engine.VPlayerSeatsWithoutFingerprint(), loadErr, "sauvegarde d'avant v13.0.0 ou sans vplayer_sessions.json")
 			restoredMap["bumpers"] = true
 			log.Printf("[HTTP] Restore: Bumpers loaded into engine")
 		}
@@ -4068,7 +4094,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["effects"] = true
 		case tarPath == "config/teams.json" || tarPath == "teams.json":
 			detected["teams"] = true
-		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json":
+		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json", tarPath == "config/vplayer_sessions.json":
 			detected["bumpers"] = true
 		case tarPath == "config/history.json" || tarPath == "history.json":
 			detected["history"] = true

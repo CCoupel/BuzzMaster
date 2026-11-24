@@ -1532,6 +1532,31 @@ Une seule carte MEMOTION est jouable à la fois. Son état vivant (réponses inv
 
 **Note** : `MEMOTION_SUBPHASE` décrit l'état de la session (GRID/SELECTED/QUESTION/REVEAL) — toujours sérialisé sans `omitempty`. `MEMOTION_CARD_STATES` décrit l'état d'exécution de chaque carte.
 
+## Empreintes de session VPlayer — `vplayer_sessions.json` (v13.0.0, #319)
+
+Référence : `contracts/vplayer-session.md` §3 et §7. Fichier dédié, **distinct de `Bumper`** : la structure `Bumper` est
+sérialisée vers tous les clients, un fichier séparé ne peut donc pas fuiter par un sérialiseur oublié.
+
+```json
+{ "TOKENS": { "<bumperID>": "<sha256 hex du jeton>" } }
+```
+
+- **Seule l'empreinte SHA-256 est stockée**, jamais le jeton en clair. Le jeton fait 32 octets (`crypto/rand`), en base64url.
+- Écriture atomique ; comparaison en temps constant (`crypto/subtle`).
+- **Écriture synchrone** à chaque changement (émission, retrait, purge), sous le verrou du moteur, jamais différée : une
+  sauvegarde en retard ne peut pas recréer un fichier supprimé par une réinitialisation.
+- **Store vide = pas de fichier** : un fichier absent est lu comme un store vide. Un store vide supprime le fichier.
+- Le fichier persiste au redémarrage. Il voyage avec `bumpers.json` dans les sauvegardes « Joueurs » et est retiré avec
+  les joueurs (`NEW_GAME` purge, suppression d'un bumper, re-clé #122/#134).
+- Un fichier **absent** ou **illisible** est traité comme vide : toutes les places repassent en « premier arrivé »
+  (cas 1c). Au démarrage, après le chargement des joueurs, et à la restauration d'une sauvegarde, un WARN est
+  journalisé s'il y a un fichier illisible ou corrompu **ou** au moins une place VJoueur sans empreinte. Il donne le
+  **nombre** de places concernées et la cause (fichier absent, illisible ou corrompu, ou empreintes chargées). Il ne
+  contient jamais d'ID, de jeton ni d'empreinte. Un fichier absent seul ne produit pas de WARN (installation neuve).
+  La même règle s'applique au démarrage et à la restauration d'une sauvegarde (`LogVPlayerSessionsWarn`,
+  `internal/server/vplayer_sessions_warn.go`) : absent et 0 place → silence ; chargé et 0 place → silence ;
+  illisible ou corrompu → WARN, même à 0 place ; au moins une place sans empreinte → WARN.
+
 ## Bumper enrichi (v3.1.0+)
 
 ```json
@@ -1645,6 +1670,47 @@ amplitude nulle qui tournerait quand même. Le panneau reste fixe.
 
 Sous `prefers-reduced-motion: reduce`, animation neutralisée quelle que soit la 
 configuration (accessibilité, respect des préférences système).
+
+## Question (PICTO type) - v13.0.0, #191 (LOT-1)
+
+Hôte de question uniquement, jamais imbricable dans une carte. Référence : `contracts/picto.md` §3.1, §4.
+
+```go
+// TypedContent (server-go/internal/game/models.go)
+PictoWords []string `json:"PICTO_WORDS,omitempty"` // 1 à 20 mots, secret (retiré des messages TV / tablette)
+```
+
+- **Champs réutilisés** : `TIME` (durée, 30 à 300 s, pré-remplie à 90 par l'éditeur), `POINTS`, `CATEGORY`.
+- **`PICTO_WORDS`** : format d'un mot = espaces de début et de fin retirés, espaces internes compactés, 1 à 40 caractères
+  (lettres accentuées, chiffres, espace, apostrophe, tiret). Aucun doublon de clé repliée dans une même question
+  (« Éléphant » et « elephant » sont un doublon). Une seule implémentation, côté serveur (`server-go/internal/game/picto_words.go`).
+- **Registre** : `OwnedFields` = `PICTO_WORDS`, `MediaSlots` = aucun, `NestableInMotionCard` = `false`, `HasPlayerInput` = `true`.
+- **Enregistrement** (`POST /questions`) : un refus renvoie HTTP 400 préfixé par son code (`PICTO_WORDS_INVALID`, `PICTO_TIME_INVALID`) ; rien n'est écrit.
+
+### GameState PICTO_* — v13.0.0, #192 (contracts/picto.md §5)
+
+Tous présents dans chaque `UPDATE`, **sans `omitempty`**, tableaux jamais `null`. **Jamais persistés** (`state_persistence.go`).
+Diffusés aux clients web (admin, anim, TV, tablettes) ; jamais aux buzzers.
+
+| Champ JSON | Type | Contenu |
+|---|---|---|
+| `PICTO_TEAM` | string | Équipe qui dessine (`""` tant qu'elle n'est pas choisie) |
+| `PICTO_TEAM_COLOR` | `[r,g,b]` | Accent de l'équipe |
+| `PICTO_DRAWER` | string | ID du bumper VJoueur dessinateur (`""` sinon) |
+| `PICTO_DRAWER_NAME` | string | Nom affiché du dessinateur |
+| `PICTO_DRAWER_CONNECTED` | bool | Le dessinateur a une connexion `/ws/player` liée |
+| `PICTO_CANDIDATES` | `{ID, NAME, CONNECTED}[]` | VJoueurs de l'équipe ; seuls les connectés sont désignables |
+| `PICTO_WORDS_COUNT` | int | Nombre de mots de la question (affiché en préparation) |
+| `PICTO_CANVAS_EPOCH` | int | Époque de la feuille : +1 à chaque `START` d'une manche PICTO ; 0 avant la première |
+| `PICTO_OUTCOME` | string | `""` \| `FOUND` \| `TIMEOUT` \| `STOPPED` \| `NO_WORD` (issues de fin de manche, voir GAME_STATE_MACHINE « Fin de manche ») |
+| `PICTO_REVEALED_WORD` | string | Mot de la manche, **seulement en `REVEALED`** ; `""` sinon |
+| `PICTO_REVEALED_CATEGORY` | string | Catégorie du crédit, en `REVEALED` ; `""` sinon |
+
+- **Remise à vide** : la préparation (`PICTO_TEAM`, `PICTO_DRAWER`, `PICTO_CANDIDATES`) au changement de question, à
+  `InitGameWith` et à `NEW_GAME`. Elle est conservée entre `PREPARE` et `READY`, et à la relance de la même question.
+- `PICTO_OUTCOME`, `PICTO_REVEALED_WORD` et `PICTO_REVEALED_CATEGORY` sont remis à vide au changement de question, à la
+  relance, à `InitGameWith` et à `NEW_GAME`.
+- Le mot de la manche n'est **jamais** dans `GameState` avant `REVEALED`.
 
 ## Question (RAFALE type) - v8.0.0, #16
 

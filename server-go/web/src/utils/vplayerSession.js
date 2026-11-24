@@ -5,7 +5,9 @@
 // qui pouvait renvoyer un ID orphelin lors d'une tentative ultérieure et
 // contribuait à la cascade "NAME_TAKEN sur son propre pseudo" (#120, cause
 // racine E). Un point d'entrée unique élimine ce risque de divergence.
-const VPLAYER_SESSION_KEYS = ['vplayer_name', 'vplayer_session', 'vplayer_id']
+// #319 (v13.0.0, contrat vplayer-session.md §5) — `vplayer_token` : jeton de session remis par le serveur
+// (PLAYER_CONNECTED.TOKEN), preuve de possession de la place ; effacé avec la session, par ce seul point d'entrée.
+const VPLAYER_SESSION_KEYS = ['vplayer_name', 'vplayer_session', 'vplayer_id', 'vplayer_token']
 
 export function clearVPlayerSession() {
   VPLAYER_SESSION_KEYS.forEach((key) => localStorage.removeItem(key))
@@ -56,6 +58,24 @@ export function getStoredVPlayerId() {
   } catch {
     return null
   }
+}
+
+// #319 — jeton de session de la place `ownId`, à envoyer dans PLAYER_CONNECT. Même règle d'onglet que l'ID (#246 F-ID) :
+// le localStorage est partagé, le jeton stocké n'est celui de CET onglet que si l'ID stocké est le sien. '' = aucun
+// jeton (session ouverte avant la mise à jour : le serveur la migre au premier arrivé, cas 1c).
+export function getStoredVPlayerToken(ownId) {
+  try {
+    if (!ownId || getStoredVPlayerId() !== ownId) return ''
+    return localStorage.getItem('vplayer_token') || ''
+  } catch {
+    return ''
+  }
+}
+
+// Charge de PLAYER_CONNECT pour une session déjà enrôlée : `TOKEN` seulement s'il existe (absent sinon, contrat §4.1).
+export function playerConnectPayload(name, ownId) {
+  const token = getStoredVPlayerToken(ownId)
+  return token ? { NAME: name, ID: ownId, TOKEN: token } : { NAME: name, ID: ownId }
 }
 
 // Onglet périmé : un autre onglet a enregistré une session différente

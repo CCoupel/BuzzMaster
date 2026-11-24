@@ -584,6 +584,7 @@ type TypeDescriptor struct {
 | `RAFALE` | — (texte seul, `contracts/rafale.md` §2.4/D3, exemption déclarée §7.6) | ✅ **(#217, v9.0.0)** — voir §7.6 | ❌ — jugé par admin/anim |
 | `ENTRACTE` | — | ❌ — décision utilisateur, voir §7.4 | ❌ — aucune interaction |
 | `ROUE` **(#144/#145, v12.0.0)** | — (texte seul, `contracts/roue.md` §3) | ❌ — hors périmètre v12.0 | ❌ — arrêt de la roue par l'action `BUTTON` existante ; lettres et réponse jugées par l'admin |
+| `PICTO` **(#191, v13.0.0, LOT-1)** | — (texte seul, `contracts/picto.md` §4 ; `OwnedFields` = `PICTO_WORDS`) | ❌ — une manche demande un dessinateur et un relais | ✅ — `PICTO_STROKES` (VJoueur dessinateur) |
 
 Un registre **en dur et exhaustif**. Pas de DSL, pas d'architecture à plugins — décision explicite
 de #184 (hors portée : « toute abstraction spéculative pour des types qui n'existent pas encore »).

@@ -40,6 +40,14 @@ export const REDIRECT_MESSAGES = {
   // seat-release.md §2/§3). Texte validé au GATE 2 (#134) — voir
   // _work/mockups/134-seat-release.md.
   SEAT_RELEASED: 'Ta place a été libérée par l’animateur. Réinscris-toi avec le même pseudo : tu retrouveras ton score et ton équipe.',
+  // #319 (v13.0.0, contrat vplayer-session.md §4.4) — la place existe mais cette tablette n'en a pas le jeton de session
+  // (usurpation refusée, ou stockage effacé / autre appareil) : reprise par la libération de place (#134) puis le même pseudo.
+  INVALID_SESSION: 'Cette place est déjà liée à un autre appareil. Demandez à l’animateur de libérer la place, puis reconnectez-vous avec votre nom.',
 }
 
 export const DEFAULT_REDIRECT_MESSAGE = 'Tu as été renvoyé à l’inscription. Réinscris-toi pour continuer.'
+
+// #319 (v13.0.0, revue C1/C4) — inscription refusée côté client : un joueur est déjà inscrit dans ce navigateur (ID stocké dont la
+// place existe). Rien n'est envoyé au serveur : s'inscrire ici ferait perdre à ce joueur son identité (l'ID et le jeton
+// stockés sont uniques par navigateur, #246 F-ID).
+export const ENROLL_BLOCKED_LIVE_PLAYER = 'Un joueur est déjà inscrit sur ce navigateur. Faites libérer sa place par l’animateur pour inscrire un autre joueur.'

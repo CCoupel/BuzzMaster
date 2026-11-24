@@ -2,6 +2,57 @@
 
 Historique des versions du projet BuzzControl.
 
+## [13.0.0] - 2026-11-24 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191, #192, #193, #319, #194)
+
+Nouveau type de jeu **Picto** (✏️) : un dessinateur dessine un mot secret sur sa tablette, l'équipe le devine à l'oral.
+Ce milestone ajoute aussi le jeton de session des tablettes joueurs, et corrige le temps et les points de la page Jeu.
+
+### Added
+
+- **Type de question « ✏️ Picto » (#191)** — nouveau type de question. Le nom affiché est « Picto » : le produit ne
+  reprend aucun nom de jeu commercial.
+- **Éditeur Picto (#191)** — saisie d'un mot par ligne (1 à 20 mots, 1 à 40 caractères, sans doublon à la casse
+  et aux accents près), durée de 30 à 300 secondes (90 par défaut), points et catégorie, avec un résumé avant
+  l'enregistrement. Le serveur refuse un mot ou une durée invalide ; l'enregistrement ne se fait alors pas.
+- **Préparation d'une manche Picto (#192)** — choix de l'équipe qui dessine, puis du dessinateur : choix direct
+  parmi les joueurs connectés de l'équipe, ou tirage au hasard, rejouable tant que la manche n'a pas démarré. Le
+  lancement exige un dessinateur connecté.
+- **Mot secret et tirage au lancement (#192)** — le mot est tiré au hasard parmi ceux de la question à chaque
+  lancement, et envoyé seulement au dessinateur, à l'admin et à l'animateur. Il n'apparaît ni sur la TV ni sur les
+  tablettes, et les autres mots de la question sont retirés des messages TV et tablette.
+- **Dessin en direct (#193)** — le dessinateur trace sur sa tablette ; les traits sont relayés à la TV, à l'admin
+  et à l'animateur, sans passer par l'état du jeu. Une feuille est bornée (6 000 traits, 60 000 points), et un client
+  qui perd une trame redemande la feuille entière.
+- **Fin de manche Picto (#194)** — « Trouvé ! » arrête et révèle la manche en une seule action, y compris sur le gong
+  (après « Temps écoulé »). Issues : trouvé, temps écoulé, arrêt, sans mot. La révélation montre le mot seul sur la TV et
+  les tablettes. Le crédit va à l'équipe seule, par la ligne de crédit commune, pré-remplie aux points de la question
+  (crédit manuel, ajustable). La relance de la question remet la manche en préparation. Les LED des buzzers allument
+  l'équipe qui dessine.
+
+### Changed
+
+- **Page Jeu (#192)** — le temps et les points affichés en préparation sont repris de la question, pour tous les types.
+- **Relais du dessin Picto sérialisé une seule fois (#193)** — `PICTO_STROKES` est encodé une seule fois pour tous les écrans
+  (TV, admin, animateur), au lieu d'une fois par type de client. Même contenu relayé, charge CPU réduite.
+
+### Security
+
+- **Dépendance WebSocket mise à jour (#320)** — `gorilla/websocket` passe de v1.5.3 à la pseudo-version `v1.5.4-0.20240701034025-d67f41855da4`,
+  qui contient le correctif de GO-2026-6278. Aucun tag publié ne contient ce correctif : la pseudo-version pointe le commit
+  d67f41855da4 (2024-07-01). `govulncheck` ne signale plus la faille.
+- **Jeton de session des tablettes joueurs (#319)** — une tablette ne peut plus reprendre une place avec son seul ID.
+  Un jeton aléatoire est remis à l'enrôlement et à chaque reconnexion ; le serveur ne garde que son empreinte. Une
+  reconnexion sans le bon jeton est refusée (`INVALID_SESSION`), sans éviction du joueur légitime. Les places créées
+  avant v13.0.0 n'ont pas de jeton : la première tablette qui s'y connecte la prend (voir ADMIN_GUIDE, « Tablette qui a
+  perdu son jeton »). Les buzzers physiques ne sont pas concernés. Un navigateur ne peut pas inscrire un second joueur
+  tant que la place mémorisée dans ce navigateur existe encore (onglet fermé compris).
+
+### Notes
+
+- **Sécurité** : les mots sont lisibles par qui peut ouvrir la liste des questions ou les pages admin et animateur, qui
+  ne demandent pas encore d'authentification. Les tablettes joueurs doivent rester sur un réseau isolé de
+  l'administration en attendant la correction prévue avec #259 (voir ADMIN_GUIDE, « Sécurité »).
+
 ## [12.2.0] - 2026-11-22 — Roue de la Fortune : BONUS sur case à points (#316, #317)
 
 La case BONUS ne prend plus sa propre place sur la roue : elle est posée sur une case à points, marquée 🎁. Arrêter la

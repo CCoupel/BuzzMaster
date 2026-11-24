@@ -24,6 +24,7 @@ import { QCM_COLORS } from '../constants/colors'
 import Timer from '../components/Timer'
 import AnimTeamCard from '../components/AnimTeamCard'
 import AnimConductPanel from '../components/AnimConductPanel'
+import { pictoLaunchBlocked, pictoLaunchReason } from '../components/picto/pictoState'
 import AnimAnswerZone from '../components/AnimAnswerZone'
 import AnimCreditControl from '../components/AnimCreditControl'
 import AnimArdoiseList from '../components/AnimArdoiseList'
@@ -886,6 +887,7 @@ export default function AnimPage() {
           onStop={stopGame}
           onReveal={() => revealAnswer()}
           launchLocked={launchLocked}
+          pictoLaunchReason={pictoLaunchBlocked(gameState) ? pictoLaunchReason(gameState) : null}
           ardoiseGate={{
             blocked: ardoiseBlocked,
             pending: ardoiseGatePending,
@@ -1064,7 +1066,9 @@ export default function AnimPage() {
           // (memoryParticipating) plutôt que canAwardPoints (basé sur les
           // bumpers, sans objet ici) : une équipe hors
           // MEMORY_PARTICIPATING_TEAMS ne se voit proposer que "0 pt".
-          const attempted = isMemoryQuestion ? memoryParticipating : isRafaleQuestion ? rafaleParticipating : canAwardPoints(question, bumpersByTeam[team.name])
+          // PICTO (#194, contrat picto.md §7) : « +N pts » seulement pour l'équipe qui a trouvé (issue FOUND), « 0 pt » pour toutes les autres
+          const isPictoQuestion = question?.TYPE === 'PICTO'
+          const attempted = isPictoQuestion ? (gameState.PICTO_OUTCOME === 'FOUND' && gameState.PICTO_TEAM === team.name) : isMemoryQuestion ? memoryParticipating : isRafaleQuestion ? rafaleParticipating : canAwardPoints(question, bumpersByTeam[team.name])
           const teamCreditAmount = attempted ? getTeamAward(team.name).amount : null
           const noAttemptLabel = question?.TYPE === 'QCM' ? 'pas de réponse' : 'pas de buzz'
           const hasExtra = reactionTime || qcmAnswer || creditEnabled || memoryStat || motionStat || rafaleStat
@@ -1146,7 +1150,7 @@ export default function AnimPage() {
                       {/* #159/F6 — pas de motif "pas de buzz/réponse" pour
                           MEMORY : memoryStat ("ne participe pas") le dit
                           déjà, pas la peine de le répéter à côté du crédit. */}
-                      {!attempted && !isMemoryQuestion && <span className="anim-team-no-attempt">{noAttemptLabel}</span>}
+                      {!attempted && !isMemoryQuestion && !isPictoQuestion && <span className="anim-team-no-attempt">{noAttemptLabel}</span>}
                       <AnimCreditControl
                         team={team.name}
                         amount={teamCreditAmount}

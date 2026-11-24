@@ -348,6 +348,28 @@ Rejet (nom pris) :
 
 ---
 
+### Jeton de session VPlayer — `TOKEN` (v13.0.0, #319)
+
+Référence : `contracts/vplayer-session.md` §4. Le jeton prouve la possession d'une place : connaître son ID ne suffit plus.
+
+- **`PLAYER_CONNECT`** : le champ `TOKEN` (chaîne, optionnel) est envoyé **avec** `ID` à chaque reconnexion. Absent au
+  premier enrôlement (`{ NAME }`).
+- **`PLAYER_CONNECTED`** : le serveur renvoie `TOKEN` (43 caractères, base64url) à **chaque** liaison (enrôlement,
+  reconnexion, reprise). Seul le client lié le reçoit, jamais un autre client, jamais un `UPDATE`.
+- **Matrice pour un `PLAYER_CONNECT` avec `ID`** :
+
+| Situation | Résultat |
+|---|---|
+| L'ID a un jeton enregistré et `TOKEN` est correct | Reconnexion normale |
+| L'ID a un jeton enregistré, `TOKEN` absent ou faux | `PLAYER_REJECTED { REASON: "INVALID_SESSION" }` au seul émetteur. Aucune liaison, aucune éviction, aucun `UPDATE` |
+| L'ID n'a pas de jeton (place créée avant v13.0.0) | Reconnexion acceptée, puis un jeton est émis (premier arrivé) |
+
+- **`INVALID_SESSION`** : motif de redirection côté tablette. Le front purge sa session locale et revient à l'inscription,
+  avec le message « Cette place est déjà liée à un autre appareil. Demandez à l'animateur de libérer la place, puis
+  reconnectez-vous avec votre nom. »
+- Les journaux ne contiennent que l'ID et l'issue (`VPLAYER_TOKEN_INVALID`, `VPLAYER_TOKEN_ISSUED`), jamais le jeton.
+- Les buzzers physiques (`/ws/buzzer`, identifiés par MAC) ne sont pas concernés.
+
 ### ARDOISE_INPUT (Saisie ARDOISE) — v5.6.0
 
 Envoye par un joueur virtuel (VPlayer) saisissant une réponse libre en ARDOISE.
@@ -2099,6 +2121,65 @@ L'élargissement de la liste blanche pour permettre l'entrée **directe** des jo
 **Invariant de sérialisation** : `RAFALE_ANSWER` n'est émise que par callback dédié, jamais incluse dans une diffusion globale `UPDATE`. Deux champs sensibles protégés : `ANSWER` et `NEXT.QUESTION` (jamais aux clients non-admin).
 
 ---
+
+## Actions WebSocket — Type PICTO (v13.0.0, #192, #193)
+
+Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une action PICTO.
+
+### Client → serveur
+
+| Action | Payload | Émetteurs | Phases |
+|---|---|---|---|
+| `PICTO_SET_TEAM` | `{ "TEAM": string }` | admin, anim | `PREPARE`, `READY` |
+| `PICTO_SET_DRAWER` | `{ "PLAYER": string }` (ID de bumper) | admin, anim | `PREPARE`, `READY` |
+| `PICTO_DRAW_DRAWER` | `{}` (tirage au hasard parmi les VJoueurs connectés de l'équipe) | admin, anim | `PREPARE`, `READY` |
+| `PICTO_FOUND` | `{}` (« Trouvé ! » : arrête la manche et la révèle dans la même action) | admin, anim | `STARTED`, `PAUSED`, et `STOPPED` après `TIMEOUT` |
+| `PICTO_STROKES` | `{ "EPOCH": int, "STROKES": [ { "ID": int, "PTS": [[x, y], ...], "END": bool } ] }` | VJoueur dessinateur | `STARTED` |
+| `PICTO_CANVAS_SYNC` | `{}` | tv, admin, anim ; VJoueur seulement s'il est le dessinateur | toutes |
+
+- `PICTO_STROKES` : 1 à 20 traits par trame, 1 à 200 points au total, coordonnées entières de 0 à 10 000, `ID` ≥ 1.
+  L'émetteur est identifié par sa connexion, jamais par le payload.
+- `PICTO_CANVAS_SYNC` : au plus 2 demandes par seconde et par connexion ; au-delà, la demande est refusée (`RATE_LIMITED`, une erreur au plus par seconde).
+
+### Serveur → client
+
+| Action | Destinataires | Payload |
+|---|---|---|
+| `UPDATE` (existant) | tous les clients web | `GameState` avec les champs `PICTO_*` (sans le mot) |
+| `PICTO_WORD` | dessinateur seul, admin, anim | `{ "WORD": string, "CATEGORY": string, "EPOCH": int }` |
+| `PICTO_STROKES` | tv, admin, anim (envoi non bloquant) | `{ "EPOCH": int, "SEQ": int, "STROKES": [...] }` |
+| `PICTO_CANVAS` | le demandeur seul | `{ "EPOCH": int, "SEQ": int, "STROKES": [...] }` (feuille entière de l'époque) |
+| `PICTO_ERROR` | l'émetteur seul | `{ "CODE": string, "MESSAGE": string }` |
+
+### Codes `PICTO_ERROR.CODE`
+
+| Code | Cas |
+|---|---|
+| `INVALID_TEAM` | équipe inconnue, ou pas d'équipe pour le tirage |
+| `NOT_A_CANDIDATE` | joueur absent de la liste des candidats de l'équipe |
+| `DRAWER_OFFLINE` | dessinateur choisi non connecté |
+| `NO_CONNECTED_PLAYER` | tirage impossible : aucun VJoueur connecté dans l'équipe |
+| `NO_DRAWER` | `START` sans dessinateur connecté |
+| `WRONG_PHASE` | action hors de ses phases |
+| `NOT_DRAWER` | trame ou synchronisation d'un VJoueur qui n'est pas le dessinateur |
+| `INVALID_STROKES` | forme de trame non valable |
+| `CANVAS_FULL` | journal plein (6 000 traits ou 60 000 points) : trame refusée, rien relayé |
+| `RATE_LIMITED` | débit dépassé : 40 trames/s pour `PICTO_STROKES`, 2/s pour `PICTO_CANVAS_SYNC` ; une erreur au plus par seconde |
+
+### Relais et rattrapage
+
+- Chaque trame relayée porte un `SEQ` croissant dans l'époque. Un client qui voit un trou de `SEQ`, ou qui se connecte,
+  envoie `PICTO_CANVAS_SYNC` et reçoit `PICTO_CANVAS` (la feuille entière).
+- Un client dont le tampon d'envoi est plein **perd la trame** sans être déconnecté. Seul `PICTO_STROKES` suit ce chemin.
+- Une trame d'une autre époque que `PICTO_CANVAS_EPOCH` est ignorée sans erreur.
+
+### Confidentialité
+
+- `QUESTION.PICTO_WORDS` est retiré des messages `/ws/tv` et `/ws/player` (les trois sites de sérialisation). Il reste
+  présent pour `/ws/admin` et `/ws/anim`.
+- Le mot de la manche n'est dans aucun `UPDATE` ni message à la TV ou à une tablette non dessinatrice ; il n'apparaît dans
+  `GameState` qu'en `REVEALED`, avec `PICTO_REVEALED_WORD` (et `PICTO_REVEALED_CATEGORY`). Les `UPDATE` de la TV et des
+  tablettes portent le mot seul, sans payload de « Trouvé par ».
 
 ## References
 

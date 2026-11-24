@@ -1,0 +1,23 @@
+/* PictoEditor — éditeur de question PICTO (#191, maquette M5 C). Couleur du type : utils/questionTypeMeta.js (#0891b2). */
+.picto-editor { display: flex; flex-direction: column; gap: var(--space-3, 0.8rem); }
+.picto-intro { display: flex; gap: 0.6rem; align-items: center; }
+.picto-pill { display: inline-block; border-radius: 0.35rem; padding: 0.1rem 0.45rem; font-size: 0.72rem; font-weight: 700; background: #cffafe; color: #0891b2; }
+.picto-muted { color: var(--gray-500, #6b7280); font-size: 0.8rem; font-weight: 400; }
+.picto-err { color: var(--error, #dc2626); font-weight: 600; }
+.picto-summary { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; background: #fff; border: 1px solid var(--gray-200, #e5e7eb); border-radius: 0.7rem; padding: 0.7rem; }
+.picto-chip { display: inline-flex; align-items: center; gap: 0.3rem; background: #fff; border: 1px solid var(--gray-200, #e5e7eb); border-radius: 999px; padding: 0.2rem 0.65rem; color: var(--gray-700, #374151); font-size: 0.78rem; white-space: nowrap; }
+.picto-chip-x { border: 0; background: none; cursor: pointer; color: var(--gray-500, #6b7280); padding: 0; font-size: 0.75rem; }
+.picto-chip-x:hover { color: var(--error, #dc2626); }
+.picto-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 0.7rem; }
+.picto-card { background: #fff; border: 1px solid var(--gray-200, #e5e7eb); border-radius: 0.7rem; padding: 0.7rem; min-width: 0; }
+.picto-lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gray-500, #6b7280); font-weight: 700; margin-bottom: 0.4rem; }
+.picto-words { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+.picto-word-input { flex: 1; min-width: 8rem; border: 1px dashed var(--gray-300, #d1d5db); border-radius: 999px; padding: 0.25rem 0.65rem; font-size: 0.8rem; background: #fff; }
+.picto-hint { font-size: 0.75rem; color: var(--gray-500, #6b7280); margin: 0.4rem 0 0; }
+.picto-hint.err { color: var(--error, #dc2626); font-weight: 600; }
+.picto-error { background: #fee2e2; border: 1px solid var(--error, #dc2626); border-radius: 0.7rem; padding: 0.6rem 0.7rem; margin-top: 0.4rem; font-size: 0.82rem; }
+.picto-numbers { display: flex; gap: 1rem; flex-wrap: wrap; }
+.picto-numbers input[type="number"] { width: 5rem; }
+.picto-inline { display: flex; gap: 0.4rem; align-items: center; }
+.picto-input-error { border-color: var(--error, #dc2626); background: #fee2e2; }
+@media (max-width: 760px) { .picto-grid { grid-template-columns: 1fr; } }

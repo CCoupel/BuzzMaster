@@ -134,14 +134,15 @@ func TestInstrumentation246_SeqStaleIsLoggedAndTheMessageIgnored(t *testing.T) {
 
 func TestInstrumentation246_SeqIsPerConnectionAndPerQuestionAndOptional(t *testing.T) {
 	e := newEnv246(t)
-	cid := e.boundPaul(t)
+	conn1, cid := e.dial(t, "/ws/player")
+	tok := e.connectGetToken319(t, conn1, cid, "Paul", e.paul) // #319 (contrat vplayer-session.md §6, rupture documentée) : la reconnexion par ID présente le jeton reçu au premier PLAYER_CONNECTED.
 	e.typeAs(t, cid, e.paul, "A", map[string]interface{}{"SEQ": 1})
 	e.typeAs(t, cid, e.paul, "AB", map[string]interface{}{"SEQ": 2})
 	e.typeAs(t, cid, e.paul, "ABC", nil) // SEQ absent : pas de contrôle
 
 	// nouvelle connexion (reconnexion) : le compteur repart à 1, ni gap ni stale
 	_, cid2 := e.dial(t, "/ws/player")
-	e.connect(t, cid2, "Paul", e.paul)
+	e.reconnectWithToken319(t, cid2, "Paul", e.paul, tok)
 	e.typeAs(t, cid2, e.paul, "ABCD", map[string]interface{}{"SEQ": 1})
 
 	// nouvelle question : compteur remis à 1 aussi

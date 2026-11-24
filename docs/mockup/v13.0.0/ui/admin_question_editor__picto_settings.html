@@ -1,0 +1,102 @@
+<!--
+mockup:
+  composant: admin_question_editor
+  feature: picto_settings
+  version: 13.0.0
+  type: ui
+  issue: "#191"
+  validee_le: 2026-11-23
+  proposition_retenue: "C — Grille compacte + résumé"
+  complete: ["v12.0.0/ui/admin_question_editor__roue_phrase.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%A8%3C/text%3E%3C/svg%3E">
+<title>v13.0.0 · Éditeur — question Picto (retenue)</title>
+<style>
+:root{--g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g300:#d1d5db;--g400:#9ca3af;--g500:#6b7280;--g600:#4b5563;--g700:#374151;--g900:#111827;--pri:#4f46e5;--pri100:#e0e7ff;--ok:#16a34a;--okbg:#dcfce7;--err:#dc2626;--warn:#d97706;--warnbg:#fef3c7;--picto:#0891b2;--team:#2563eb;--team2:#dc2626;--team3:#16a34a;--type:#2f6fed}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:#111827;color:var(--g900);border-top:6px solid var(--type)}
+.mock-head{max-width:1100px;margin:0 auto;padding:.8rem 1rem .2rem;color:#e5e7eb}
+.mock-head h1{font-size:1.05rem;margin:0 0 .3rem}
+.mock-head p{font-size:.82rem;color:#9ca3af;margin:.2rem 0;line-height:1.45}
+.mock-head b{color:#e5e7eb}
+.tabs{position:sticky;top:0;z-index:300;background:#000;padding:.5rem 1rem;display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center;font-size:.8rem;color:#9ca3af}
+.tabs .grp{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center}
+.tabs .grp span{color:#e5e7eb;font-weight:600;margin-right:.2rem}
+.tabs button{font:inherit;font-size:.78rem;padding:.3rem .7rem;border-radius:.4rem;border:1px solid #4b5563;background:#1f2937;color:#fff;cursor:pointer}
+.tabs button.on{background:var(--pri);border-color:#818cf8}
+.stance{max-width:1100px;margin:.5rem auto;padding:.45rem 1rem;font-size:.82rem;color:#e5e7eb;background:#1f2937;border-radius:.4rem}
+section[data-proposition]{display:none;max-width:1180px;margin:0 auto;padding:0 1rem 2rem}
+section[data-proposition].on{display:block}
+.state{color:#e5e7eb;font-size:.85rem;font-weight:600;margin:1.1rem 0 .3rem}
+.state small{font-weight:400;color:#9ca3af}
+.row{display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-start}
+/* frames */
+.tablet{width:900px;max-width:100%;height:560px;border:8px solid #374151;border-radius:1.3rem;background:var(--g100);overflow:hidden;display:flex;flex-direction:column;padding:12px;gap:10px}
+.tv{width:960px;max-width:100%;aspect-ratio:16/9;border:10px solid #000;border-radius:.4rem;background:radial-gradient(circle at 50% 30%,#1e3a8a,#0b1020 70%);color:#fff;overflow:hidden;display:flex;flex-direction:column;padding:1.2%;gap:1.2%}
+.phone{width:300px;height:600px;border:8px solid #374151;border-radius:2rem;background:#fff;overflow:hidden;display:flex;flex-direction:column}
+.phone.land{width:600px;height:300px}
+.admin{width:1080px;max-width:100%;border:1px solid var(--g300);border-radius:.5rem;background:#fff;overflow:hidden}
+.admin .top{background:var(--g900);color:#fff;padding:.45rem .8rem;font-size:.8rem;display:flex;gap:1rem;align-items:center}
+.admin .body{padding:.8rem;display:flex;gap:.8rem}
+/* atoms */
+.chip{display:inline-flex;align-items:center;gap:.3rem;background:#fff;border-radius:999px;padding:.2rem .65rem;color:var(--g700);border:1px solid var(--g200);font-size:.78rem;white-space:nowrap}
+.chip.on{background:var(--pri100);border-color:var(--pri);color:var(--pri);font-weight:600}
+.chip.off{opacity:.45}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;border:0;border-radius:.6rem;padding:.7rem 1rem;font:inherit;font-weight:700;font-size:.95rem;color:#fff;background:var(--pri);cursor:default}
+.btn.big{font-size:1.2rem;padding:1rem 1.2rem}
+.btn.ok{background:var(--ok)}.btn.warn{background:var(--warn)}.btn.ghost{background:#fff;color:var(--g700);border:1px solid var(--g300)}.btn.dis{background:var(--g300);color:var(--g500)}
+.card{background:#fff;border:1px solid var(--g200);border-radius:.7rem;padding:.7rem}
+.muted{color:var(--g500);font-size:.8rem}
+.lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--g500);font-weight:700}
+.word{font-weight:800;letter-spacing:.02em}
+.sheet{background:#fff;border:2px solid var(--g300);border-radius:.3rem;aspect-ratio:1/1;position:relative;overflow:hidden}
+.sheet svg{width:100%;height:100%;display:block}
+.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%}
+.pill{display:inline-block;border-radius:.35rem;padding:.1rem .45rem;font-size:.72rem;font-weight:700}
+.note{font-size:.78rem;color:#9ca3af;margin:.3rem 0 0;max-width:1100px;line-height:1.45}
+.note b{color:#e5e7eb}
+table.t{border-collapse:collapse;width:100%;font-size:.8rem}
+table.t th,table.t td{border-bottom:1px solid var(--g200);padding:.35rem .45rem;text-align:left}
+table.t th{font-size:.7rem;text-transform:uppercase;color:var(--g500)}
+.field{display:flex;flex-direction:column;gap:.25rem;font-size:.82rem}
+.input{border:1px solid var(--g300);border-radius:.4rem;padding:.4rem .55rem;background:#fff;font-size:.85rem;min-height:2rem}
+.switch{display:inline-block;width:2.2rem;height:1.2rem;border-radius:999px;background:var(--g300);position:relative;vertical-align:middle}
+.switch::after{content:"";position:absolute;top:.15rem;left:.15rem;width:.9rem;height:.9rem;border-radius:50%;background:#fff}
+.switch.on{background:var(--pri)}.switch.on::after{left:1.15rem}
+.seg{display:inline-flex;border:1px solid var(--g300);border-radius:.45rem;overflow:hidden}
+.seg span{padding:.35rem .7rem;font-size:.8rem;border-right:1px solid var(--g300);background:#fff}
+.seg span:last-child{border-right:0}.seg span.on{background:var(--pri);color:#fff;font-weight:600}
+.diagram{background:#fff;border-radius:.5rem;padding:.6rem;overflow:auto}
+.diagram svg{display:block;max-width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="mock-head"><h1>v13.0.0 · Éditeur — question Picto (retenue)</h1><p>Version retenue au GATE 2 (proposition C : grille compacte et résumé), allégée pour v13.0.0 : <b>pas de choix de source</b>, les mots sont saisis dans la question (1 à 20, dont un est tiré). Le réservoir arrive en v13.1.0. Un mot ne figure qu'une fois par question (accents et majuscules ignorés). Tout se règle dans la question.</p></div>
+<div class="stance">Proposition C retenue : compacte, avec un résumé en chips.</div>
+<section data-proposition="C" class="on">
+<div class="state">Question Picto <small>— mots saisis dans la question (seule source en v13.0.0)</small></div><div class="admin" style="width:900px"><div class="top">Éditer la question</div><div style="padding:1rem;display:flex;flex-direction:column;gap:.8rem"><div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.6rem"><span class="pill" style="background:#cffafe;color:var(--picto)">✏️ Picto</span>
+<span class="muted">Un mot à faire deviner par une équipe ; un joueur le dessine.</span></div>
+<div class="field"><span class="lbl">Titre (liste des questions)</span><div class="input">Picto — à la maison</div></div>
+<div class="card" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center"><span class="chip">⏱ 90 s</span><span class="chip">🏆 10 pts</span><span class="chip">✍️ 3 mots</span><span class="chip">🏠 Vie quotidienne</span></div>
+<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:.7rem"><div class="card"><div class="lbl">Mot à dessiner</div><div class="field"><span class="lbl">Mots de la question <span class="muted" style="text-transform:none">— 1 à 20, un par ligne</span></span>
+<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center"><span class="chip">Maison ✕</span><span class="chip">Parapluie ✕</span><span class="chip">Toboggan ✕</span><span class="chip" style="border-style:dashed">＋ mot…</span></div>
+<span class="muted">Un mot est tiré au hasard à chaque lancement ou relance, parmi tous les mots ; le même peut ressortir. Avec un seul mot, c'est toujours ce mot. Ces mots ne sont jamais montrés sur la TV ni sur les tablettes.</span></div><div class="field" style="margin-top:.5rem"><span class="lbl">Catégorie (une seule) — indice affiché sur la TV</span><div style="display:flex;gap:.35rem;flex-wrap:wrap"><span class="chip on">◉ 🏠 Vie quotidienne</span><span class="chip">🐾 Animaux</span><span class="chip">🎬 Cinéma</span><span class="chip">⚽ Sport</span></div></div></div>
+<div class="card"><div class="lbl">Temps et points</div><div style="display:flex;gap:1rem"><div class="field"><span class="lbl">Durée de dessin</span><div style="display:flex;gap:.4rem;align-items:center"><div class="input" style="width:5rem">90</div><span>secondes</span></div><span class="muted">30 à 300 s</span></div>
+<div class="field"><span class="lbl">Points du mot trouvé</span><div class="input" style="width:5rem">10</div><span class="muted">ajustables au crédit</span></div></div></div></div></div></div><div class="state">Doublon refusé</div><div class="admin" style="width:900px"><div class="top">Éditer la question</div><div style="padding:1rem;display:flex;flex-direction:column;gap:.8rem"><div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.6rem"><span class="pill" style="background:#cffafe;color:var(--picto)">✏️ Picto</span>
+<span class="muted">Un mot à faire deviner par une équipe ; un joueur le dessine.</span></div>
+<div class="field"><span class="lbl">Titre (liste des questions)</span><div class="input">Picto — à la maison</div></div>
+<div class="card" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center"><span class="chip">⏱ 90 s</span><span class="chip">🏆 10 pts</span><span class="chip">✍️ 3 mots</span><span class="chip">🏠 Vie quotidienne</span></div>
+<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:.7rem"><div class="card"><div class="lbl">Mot à dessiner</div><div class="field"><span class="lbl">Mots de la question <span class="muted" style="text-transform:none">— 1 à 20, un par ligne</span></span>
+<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center"><span class="chip">Maison ✕</span><span class="chip">Parapluie ✕</span><span class="chip">Toboggan ✕</span><span class="chip" style="border-style:dashed">＋ mot…</span></div>
+<span class="muted">Un mot est tiré au hasard à chaque lancement ou relance, parmi tous les mots ; le même peut ressortir. Avec un seul mot, c'est toujours ce mot. Ces mots ne sont jamais montrés sur la TV ni sur les tablettes.</span></div><div class="card" style="background:#fee2e2;border-color:var(--err);margin-top:.4rem;font-size:.82rem"><b>« maison » est déjà dans la liste</b> (accents et majuscules ignorés) : un mot ne figure qu'une fois par question.</div><div class="field" style="margin-top:.5rem"><span class="lbl">Catégorie (une seule) — indice affiché sur la TV</span><div style="display:flex;gap:.35rem;flex-wrap:wrap"><span class="chip on">◉ 🏠 Vie quotidienne</span><span class="chip">🐾 Animaux</span><span class="chip">🎬 Cinéma</span><span class="chip">⚽ Sport</span></div></div></div>
+<div class="card"><div class="lbl">Temps et points</div><div style="display:flex;gap:1rem"><div class="field"><span class="lbl">Durée de dessin</span><div style="display:flex;gap:.4rem;align-items:center"><div class="input" style="width:5rem">90</div><span>secondes</span></div><span class="muted">30 à 300 s</span></div>
+<div class="field"><span class="lbl">Points du mot trouvé</span><div class="input" style="width:5rem">10</div><span class="muted">ajustables au crédit</span></div></div></div></div></div></div>
+</section>
+</body>
+</html>

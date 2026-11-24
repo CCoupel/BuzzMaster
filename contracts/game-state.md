@@ -94,7 +94,7 @@ type Page =
   - **Maps dont la clé est l'équipe** : `ARDOISE_ANSWERS`, `MEMORY_TEAM_PAIRS`, `MEMORY_TEAM_ERRORS`, `RAFALE_TEAM_COUNTERS`, `RAFALE_TEAM_CATEGORY_COUNTERS`, `RAFALE_TEAM_BEST`, `RAFALE_TEAM_STREAK`, `RAFALE_TEAM_ERRORS`.
   - **Maps dont la valeur est l'équipe** : `MEMORY_PAIR_OWNERS` (paire → équipe), `MEMOTION_CARD_TEAMS` (carte → équipe gagnante).
   - **Listes d'équipes** : `MEMORY_PARTICIPATING_TEAMS`, `MEMOTION_PARTICIPATING_TEAMS`, `RAFALE_PARTICIPATING_TEAMS`.
-  - **Équipe courante** : `MEMORY_CURRENT_TEAM`, `MEMOTION_CURRENT_TEAM`, `RAFALE_CURRENT_TEAM` (les `*_CURRENT_TEAM_COLOR` ne changent pas).
+  - **Équipe courante** : `MEMORY_CURRENT_TEAM`, `MEMOTION_CURRENT_TEAM`, `RAFALE_CURRENT_TEAM`, `PICTO_TEAM` (les `*_CURRENT_TEAM_COLOR` ne changent pas ; `PICTO_TEAM_COLOR` non plus). `PICTO_TEAM` suit un renommage permis ; à la suppression de l'équipe, il est vidé avec `PICTO_DRAWER` (`picto.md` §6.7, §13).
   - **Historique des points** (`GameEvent.TEAM_NAME`, toutes les entrées) : source d'`AWARDED_TEAMS`, ce qui conserve le verrou « déjà créditée » de la question révélée. **Exception — suppression d'équipe** : l'historique n'est ni effacé ni reporté ; un événement `TEAM_DELETED` y est ajouté et `AWARDED_TEAMS` ne compte pour une équipe que les points postérieurs à son dernier `TEAM_DELETED` (`websocket-actions.md` §UPDATE).
   - Les joueurs (`bumpers[*].TEAM`) sont déplacés par le message de renommage lui-même. `MEMOTION_ACTIVE.STATE` ne contient aucune clé d'équipe : rien à reporter.
   - Tout nouveau champ indexé par équipe ajouté à `GameState` **doit** rejoindre cette liste (revue).

@@ -13,7 +13,7 @@
 - [ ] Données : pont Hue associé, au moins 8 ampoules dont **2 de rôle équipe** ; équipes « Rouges » et « Bleus » créées ;
       un quiz avec une question chronométrée
 - [ ] Accès : page Ambiance › Lumière (étape 3, pont associé)
-- [ ] Config QUALIF copiée depuis `build/qualif_v11.6.0/config.json` (appairage Hue conservé) — fait par `deployer`
+- [ ] Config QUALIF copiée depuis `PRIVATE/QUALIF/hue-pairing/qualif_v11.6.0.config.json` (appairage Hue conservé) — fait par `deployer`
 
 ## Scenarios
 

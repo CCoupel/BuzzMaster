@@ -176,6 +176,9 @@ const (
 	// guess letter by letter, a wheel drawing the value of each consonant —
 	// contracts/roue.md.
 	QuestionTypeRoue QuestionType = "ROUE"
+	// QuestionTypePicto (v13.0.0, #191): "Picto" — one team's drawer draws a
+	// secret word on a tablet, the team guesses it orally — contracts/picto.md.
+	QuestionTypePicto QuestionType = "PICTO"
 )
 
 // KeyboardType represents the virtual keyboard layout for ARDOISE questions
@@ -417,6 +420,11 @@ type TypedContent struct {
 	RoueBonusCount         *int `json:"ROUE_BONUS_COUNT,omitempty"` // BONUS marks laid on points cases (v12.2.0 #316; v12.1.0 #308: added cases), 0 (absent) to 4
 	// v12.2.0 #317 (contract §17.5): EPHEMERAL | PERMANENT, present = customised for this question, absent = global.
 	RoueBonusMode string `json:"ROUE_BONUS_MODE,omitempty"`
+
+	// PICTO (v13.0.0, #191, contracts/picto.md §4) — question host only, never
+	// nestable. 1 to 20 words (rules §3.1, see picto_words.go), one of which is
+	// drawn at each START. SECRET: stripped from TV / tablet messages (§10).
+	PictoWords []string `json:"PICTO_WORDS,omitempty"`
 }
 
 // Effective vowel settings (contract §15.1.1: absent = default).
@@ -649,6 +657,7 @@ func AllQuestionTypes() []QuestionType {
 		QuestionTypeRafale,
 		QuestionTypeEntracte,
 		QuestionTypeRoue,
+		QuestionTypePicto,
 	}
 }
 
@@ -1073,6 +1082,20 @@ type GameState struct {
 	RoueWinner    string         `json:"ROUE_WINNER"`
 	RoueAwards    map[string]int `json:"ROUE_AWARDS"`
 
+	// PICTO (v13.0.0, #192, contracts/picto.md §5) — NO omitempty, arrays never null, never persisted,
+	// never sent to the buzzers. The secret word of the round is NEVER here (only PictoRevealedWord, in REVEALED).
+	PictoTeam             string           `json:"PICTO_TEAM"`
+	PictoTeamColor        []int            `json:"PICTO_TEAM_COLOR"`
+	PictoDrawer           string           `json:"PICTO_DRAWER"`
+	PictoDrawerName       string           `json:"PICTO_DRAWER_NAME"`
+	PictoDrawerConnected  bool             `json:"PICTO_DRAWER_CONNECTED"`
+	PictoCandidates       []PictoCandidate `json:"PICTO_CANDIDATES"`
+	PictoWordsCount       int              `json:"PICTO_WORDS_COUNT"`
+	PictoCanvasEpoch      int              `json:"PICTO_CANVAS_EPOCH"`
+	PictoOutcome          string           `json:"PICTO_OUTCOME"`
+	PictoRevealedWord     string           `json:"PICTO_REVEALED_WORD"`
+	PictoRevealedCategory string           `json:"PICTO_REVEALED_CATEGORY"`
+
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero
 	// values (IDLE/false), so a client resets cleanly between questions
@@ -1340,11 +1363,11 @@ func ParseQCMWrongPenaltyRaw(raw []byte) int {
 }
 
 // DefaultPointsTarget returns the default POINTS_TARGET for a question type when
-// the stored question has none (#254): TEAM for QCM, ARDOISE, MEMORY, MEMOTION and
-// RAFALE, PLAYER for SPEEDY (and legacy NORMAL / unknown).
+// the stored question has none (#254): TEAM for QCM, ARDOISE, MEMORY, MEMOTION, RAFALE and
+// PICTO, PLAYER for SPEEDY (and legacy NORMAL / unknown).
 func DefaultPointsTarget(t string) PointsTarget {
 	switch t {
-	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE":
+	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE", "PICTO": // PICTO (v13.0.0, contracts/picto.md §7): team only
 		return PointsTargetTeam
 	}
 	return PointsTargetPlayer

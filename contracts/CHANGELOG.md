@@ -1,6 +1,126 @@
 # Changelog des Contrats API
 
 ---
+## [20261124-c] — v13.0.0 — Jeton de session : redémarrage sans élagage (revue D1, D2)
+
+`vplayer-session.md` §3 et §7, correction de texte alignée sur le code, sans BREAKING.
+- **[CHANGED — précision]** Au redémarrage, les empreintes sont rechargées **sans élagage ni écriture** (`LoadBumpers`
+  ne passe pas par `SetBumpers`). L'élagage n'a lieu qu'à la restauration, au remplacement de la liste des joueurs
+  (`SetBumpers`), à la purge `NEW_GAME` et aux effacements. Une empreinte orpheline reste sans effet jusque-là.
+- Mise en forme : « Jamais dans `Bumper` » sur sa propre ligne au §3.
+
+---
+## [20261124-b] — v13.0.0 — Jeton de session : écriture synchrone, store vide sans fichier (correctif CI 4541fc0a)
+
+`vplayer-session.md` §3 et §7, précision alignée sur le code, sans BREAKING.
+- **[CHANGED — précision]** Les empreintes sont écrites de façon **synchrone** à chaque mutation (émission,
+  suppression, élagage), de façon atomique et avec les droits `0600`. Plus aucune sauvegarde différée.
+- **[CHANGED — précision]** Un store vide n'a **pas de fichier** : `vplayer_sessions.json` est supprimé quand la
+  dernière empreinte disparaît (par exemple après un `NEW_GAME` qui retire toutes les tablettes). Un fichier absent au
+  démarrage avec 0 place sans empreinte reste silencieux ; les règles de `WARN` du §6 sont inchangées.
+
+---
+## [20261124] — v13.0.0 — PICTO : révélation sans « Trouvé par », crédit par l'animation commune (revue LOT-2.3)
+
+`picto.md` révision 8 (§6.5, §15). Décision de l'utilisateur du 2026-11-24. Interface seulement : **aucun champ,
+aucune action, aucun payload ne change. Aucun BREAKING.**
+- **[CHANGED]** TV et tablettes : plus de « Trouvé par … » ni de « +N pts » propres à Picto à la révélation. La TV
+  montre le mot seul dans la zone réponse, et les tablettes « Mot révélé » et le mot.
+- **[CHANGED]** Le crédit (manuel, `TEAM_POINTS`) se voit par l'animation commune des points (`SCORE_CHANGE.GAINS`,
+  #265), avec le montant réellement crédité ; « 0 pt » ne déclenche aucune animation. L'issue « ✅ Trouvé » (sans
+  « par … ») reste sur l'admin et l'anim.
+
+---
+## [20261123-d] — v13.0.0 — Jeton de session : journaux alignés sur le code (revue LOT-2.2)
+
+`vplayer-session.md` §3, précision sans BREAKING.
+- **[CHANGED — précision]** Le journal `VPLAYER_TOKEN_OK`, jamais écrit, est retiré : une reconnexion réussie n'a pas
+  de journal propre. Les journaux réels sont `VPLAYER_TOKEN_INVALID` (WARN, ID assaini),
+  `VPLAYER_TOKEN_ISSUED reason=enrol|legacy|reclaim` et `VPLAYER_TOKEN_ISSUE_FAILED`. Aucun ne contient le jeton.
+
+---
+## [20261123-c] — v13.0.0 — Jeton de session : cas de la fenêtre « premier arrivé » (revue LOT-2.2 M3, audit n2 / n3)
+
+`vplayer-session.md` §6, précision sans BREAKING.
+- **[CHANGED — précision]** Trois situations rouvrent la fenêtre « premier arrivé » (cas 1c) pour les places sans
+  empreinte : la restauration d'une sauvegarde d'avant v13.0.0 (ou sans `vplayer_sessions.json`), et le fichier
+  `vplayer_sessions.json` absent, ou illisible, au démarrage. Le serveur émet alors un journal `WARN` avec le nombre de
+  places concernées. Le risque est accepté, comme pour la migration.
+- **[CHANGED — précision]** Comportement préexistant documenté : pendant une autorisation de reprise #122 / #134
+  (5 minutes), quiconque connaît le nom peut reprendre la place sans ID ; il reçoit un jeton neuf. Seule protection :
+  la décision de l'animateur. Durcissement éventuel renvoyé à #259.
+
+---
+## [20261123-b] — v13.0.0 — Jeton de session des tablettes (audit `security` LOT-2.1, M1) et durcissements PICTO (m1, m2)
+
+`vplayer-session.md` révision 1 (nouveau) ; `websocket-actions.md` (`PLAYER_CONNECT`, `PLAYER_CONNECTED`, `PLAYER_REJECTED`) ;
+`seat-release.md` §5 ; `picto.md` révision 7 (§8.6, §9.1). Décision de l'utilisateur du 2026-11-23
+(`_work/tasks/planner-20261123-security-m1.md`).
+
+- **[BREAKING — interne]** `PLAYER_CONNECT` avec un `ID` dont la place a un jeton **exige** `TOKEN`. Sinon, le serveur
+  répond `PLAYER_REJECTED { INVALID_SESSION }`, sans liaison ni éviction.
+  - Seul client concerné : le front VJoueur embarqué, mis à jour dans le même binaire.
+  - Buzzers physiques (`/ws/buzzer`) non concernés.
+  - Les places existantes reçoivent leur jeton à leur première reconnexion (migration en premier arrivé,
+    `vplayer-session.md` §6).
+- **[NEW]** `PLAYER_CONNECT.TOKEN` et `PLAYER_CONNECTED.TOKEN` (jeton de 32 octets aléatoires en base64url) ; motif
+  `PLAYER_REJECTED.REASON = INVALID_SESSION` (redirection vers l'inscription).
+- **[NEW]** Fichier `data/config/vplayer_sessions.json` (empreintes SHA-256 seulement). Il voyage avec les joueurs
+  dans la sauvegarde et la réinitialisation sélectives.
+- **[CHANGED]** Reprise de place #122 / libération #134 : la re-clé émet un nouveau jeton.
+- **[CHANGED]** `PICTO_CANVAS_SYNC` : refusé à une tablette autre que celle du dessinateur (`NOT_DRAWER`) ; au plus
+  2 demandes/s par connexion. Au-delà, la demande est ignorée et `RATE_LIMITED` est émise au plus une fois par seconde,
+  puis plus rien, comme pour `PICTO_STROKES`. L'état de débit de `PICTO_STROKES` et de `PICTO_CANVAS_SYNC` est purgé
+  à la fermeture de la connexion. Aucun client légitime n'est touché : la TV, l'admin, l'anim et le dessinateur
+  restent servis.
+- **[CHANGED — précision, sans effet sur le code]** `picto.md` §8.3 / §8.5 : la borne de 60 000 points par époque est
+  confirmée, et `CANVAS_FULL` est un comportement contractuel. Le débit de référence d'un dessinateur est d'environ
+  128 points/s (16 trames × 8 points) ; les 200 points par trame sont un plafond de taille, pas un débit. Arbitrage de
+  la mesure de charge du LOT-2.1.
+
+---
+## [20261123] — v13.0.0 — Type de jeu PICTO (#191 à #194)
+
+`picto.md` révision 6 (nouveau). Décisions utilisateur du 2026-11-23 :
+- un seul mot par manche, sans passe ;
+- mot(s) saisi(s) dans la question, **tirage libre** à chaque lancement ou relance ;
+- dessinateur choisi en `READY` ou tiré au hasard parmi les joueurs connectés ; relance de la question comme recours ;
+- réservoir, génération IA et catégorie « Pools » reportés en v13.1.0 (#48 / #318).
+
+Ordres : `_work/tasks/planner-20261123-plan-picto*.md`, `planner-20261123-gate2-corrections.md`,
+`planner-20261123-scope-reduction.md`.
+
+**Aucun BREAKING** : tout est additif ; aucun champ, aucune action, aucun fichier existant ne change de sens.
+
+- **[NEW]** `QuestionType` `PICTO` (libellé « Picto ») :
+  - registre, `AllQuestionTypes()`, `questionTypeMeta.js` ;
+  - champ de question `PICTO_WORDS` (1 à 20 mots, `omitempty`), sans doublon replié dans une question ;
+  - `TIME` (30 à 300), `POINTS` et `CATEGORY` réutilisés (§4).
+- **[NEW]** `POST /questions` : champ de formulaire `picto_words`, refus `PICTO_WORDS_INVALID` / `PICTO_TIME_INVALID`
+  (§11). Aucun autre endpoint.
+- **[NEW]** `GameState` : 11 champs `PICTO_*`, sans `omitempty`, jamais persistés (§5).
+- **[NEW]** WebSocket entrant :
+  - `PICTO_SET_TEAM`, `PICTO_SET_DRAWER` et `PICTO_DRAW_DRAWER` (tirage au hasard) — admin, anim ; préparation
+    seulement ;
+  - `PICTO_FOUND` (admin, anim) ;
+  - `PICTO_STROKES` (vplayer dessinateur) ;
+  - `PICTO_CANVAS_SYNC` (tv, admin, anim, vplayer).
+
+  C'est le premier élargissement de la liste blanche `vplayer` depuis #246 (§8.6, §9.1).
+- **[NEW]** WebSocket sortant :
+  - `PICTO_WORD` (dessinateur seul + admin / anim, jamais dans `GameState`) ;
+  - `PICTO_STROKES` (relais vers tv / admin / anim) ;
+  - `PICTO_CANVAS` ;
+  - `PICTO_ERROR` (§9.2).
+- **[CHANGED]** Filtres de sérialisation TV et tablette : `QUESTION.PICTO_WORDS` est retiré, comme `ROUE_PHRASE`
+  (§10). Aucun effet sur les autres types.
+- **[NEW]** Hub : `TrySendToTypes`, un envoi non bloquant qui **abandonne la trame** au lieu de déconnecter un client
+  dont le tampon est plein. Il sert **uniquement** au relais `PICTO_STROKES` ; `BroadcastToTypes` est inchangé
+  (§8.5).
+- **Reporté en v13.1.0** (non implémenté, §12) : `PICTO_SOURCE` (absent = `WORDS`), réservoir `/api/picto/*`,
+  marquages persistants `picto_marks.json`, génération IA, catégorie « Pools » de la sauvegarde.
+
+---
 ## [20261122-b] — v12.2.0 — ROUE : BONUS posé sur une case à points (#316) et BONUS éphémère (#317)
 
 `roue.md` révision 9.1, **§17** (nouveau, prime sur §15.2 et §16 pour le nombre de cases et le BONUS ; §10.1

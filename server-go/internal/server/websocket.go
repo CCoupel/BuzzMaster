@@ -675,6 +675,58 @@ func (h *WebSocketHub) BroadcastToTypes(msg *protocol.Message, types ...ClientTy
 	h.mu.Unlock()
 }
 
+// TrySendToTypes sends msg to every connected client of the given types WITHOUT ever evicting one: a client
+// whose Send buffer is full simply does not receive this message and stays connected (best-effort relay of
+// PICTO_STROKES, contracts/picto.md §2.6, §8.5 — the client detects the gap by SEQ and asks for the whole
+// sheet). BroadcastToTypes is unchanged for every other message (eviction of a slow client, #127).
+func (h *WebSocketHub) TrySendToTypes(msg *protocol.Message, types ...ClientType) {
+	if len(types) == 0 {
+		return
+	}
+	dataByType := make(map[ClientType][]byte, len(types))
+	var shared []byte // PICTO_STROKES carries nothing type-specific: one marshal for every recipient
+	for _, t := range types {
+		if _, done := dataByType[t]; done {
+			continue
+		}
+		if msg.Action == protocol.ActionPictoStrokes {
+			if shared == nil {
+				data, err := msg.SerializeForWebSocket()
+				if err != nil {
+					LogError(game.LogComponentWebSocket, "TrySendToTypes: failed to serialize %s: %v", msg.Action, err)
+					return
+				}
+				shared = data
+			}
+			dataByType[t] = shared
+			continue
+		}
+		data, err := serializeForClientType(msg, t)
+		if err != nil {
+			LogError(game.LogComponentWebSocket, "TrySendToTypes: failed to serialize message for type %s: %v", t, err)
+			continue
+		}
+		dataByType[t] = data
+	}
+	dropped := 0
+	h.mu.RLock()
+	for client := range h.clients {
+		data, ok := dataByType[client.Type]
+		if !ok {
+			continue
+		}
+		select {
+		case client.Send <- data:
+		default:
+			dropped++ // buffer full: this frame is lost, the connection is kept (no close, no delete)
+		}
+	}
+	h.mu.RUnlock()
+	if dropped > 0 { // one aggregated line, outside the lock (catch-up by SEQ)
+		LogDebug(game.LogComponentWebSocket, "TrySendToTypes: frame dropped for %d client(s) with a full buffer (catch-up by SEQ)", dropped)
+	}
+}
+
 // serializeForClientType picks the same per-type serializer the rest of the
 // codebase already uses for broadcasts (broadcastUpdateTo, buildVPlayerPayloads)
 // — Admin gets the full/unfiltered payload, TV and VPlayer share the

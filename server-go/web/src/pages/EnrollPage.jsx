@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
-import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
+import { clearVPlayerSession } from '../utils/vplayerSession'
+import { ENROLL_BLOCKED_LIVE_PLAYER, REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
 import './EnrollPage.css'
 
 // #120 (F3) — présentation du bandeau de motif selon la catégorie du renvoi.
@@ -170,6 +171,19 @@ export default function EnrollPage() {
     if (!gameState.enrollmentActive) {
       setError('Les inscriptions ne sont pas ouvertes')
       return
+    }
+
+    // #319 — un seul joueur par navigateur (ID et jeton stockés, règle #246 F-ID) :
+    //  - ID stocké dont la place existe = joueur vivant (autre onglet) : inscription REFUSÉE, rien n'est envoyé (revue C1) ;
+    //  - ID stocké dont la place n'existe plus = session périmée : purgée juste avant l'envoi de { NAME }, pour que
+    //    PLAYER_CONNECTED trouve un stockage vide et écrive la paire {ID, jeton}.
+    const storedId = localStorage.getItem('vplayer_id')
+    if (storedId) {
+      if (bumpers?.[storedId]?.IS_VIRTUAL) {
+        setError(ENROLL_BLOCKED_LIVE_PLAYER)
+        return
+      }
+      clearVPlayerSession()
     }
 
     // Clear previous errors

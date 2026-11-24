@@ -63,10 +63,21 @@
 | admin_question_editor | #316 #317 roue_bonus_mode | `v12.2.0/ui/admin_question_editor__roue_bonus_mode.html` | v12.2.0 | Éditeur ROUE : mode du BONUS en option du compteur (« une seule fois par manche », 🔗/✏️), aperçu d'un tirage + « 🎲 Autre tirage », refus « trop de BONUS » (validée 2026-11-22) ; complète `v12.1.0/ui/admin_question_editor__roue_wheel_fields.html` |
 | admin_settings | #316 #317 roue_bonus_mode | `v12.2.0/ui/admin_question_editor__roue_bonus_mode.html` | v12.2.0 | Carte « Roue » des Paramètres : même option du compteur BONUS, défaut global éphémère (validée 2026-11-22) ; complète `v12.1.0/ui/admin_settings__wheel_bonus.html` |
 | game_state_roue | #316 #317 bonus_on_value | `v12.2.0/conception/game_state_roue__bonus_on_value.html` | v12.2.0 | Conception : couloirs Serveur / Écrans / Roue — arrêt sur une case marquée → événement BONUS → LETTER (sans relance), consommation éphémère à la lettre (validée 2026-11-22) ; complète `v12.1.0/conception/game_state_roue__vowels_bonus.html` |
+| anim_picto | #194 found_credit | `v13.0.0/ui/anim_picto__found_credit.html` | v13.0.0 | Tablette animateur Picto, reprise entière : préparation, dessin (sans chip « Gain »), dessinateur déconnecté, temps écoulé, issue « ✅ Trouvé » sans « par … », ligne de crédit pré-remplie puis verrouillée (validée 2026-11-24) ; remplace `v13.0.0/ui/anim_picto__conduct_panel.html` |
+| admin_game_picto | #194 found_credit | `v13.0.0/ui/admin_game_picto__found_credit.html` | v13.0.0 | Page Jeu admin Picto, reprise entière : 3 colonnes, `PictoPanel` ; révélé « ✅ Trouvé » sans « par … », crédit par la colonne Équipes, animation commune des points (validée 2026-11-24) ; remplace `v13.0.0/ui/admin_game_picto__conduct.html` |
+| tv_picto_started | #193 #194 word_only | `v13.0.0/ui/tv_picto_started__word_only.html` | v13.0.0 | TV Picto dans les zones communes : chronomètre commun, indice, feuille ; à la révélation, le mot seul en zone réponse, sans « Trouvé par » ni points ; au crédit, animation commune `TvPointsAward` (validée 2026-11-24) ; remplace `v13.0.0/ui/tv_picto_started__zones.html` |
+| vplayer_picto | #192 #193 #194 word_only | `v13.0.0/ui/vplayer_picto__word_only.html` | v13.0.0 | Tablettes Picto, reprise entière : dessinateur, équipe qui devine, autres équipes ; révélation « Mot révélé » et le mot (feuille finale chez le dessinateur) ; au crédit, animation commune sur l'équipe créditée seulement (validée 2026-11-24) ; remplace `v13.0.0/ui/vplayer_picto__drawer_guessers.html` |
+| admin_question_editor | #191 picto_settings | `v13.0.0/ui/admin_question_editor__picto_settings.html` | v13.0.0 | Éditeur de question Picto : mots saisis (1 à 20, un tiré au hasard), catégorie unique, durée, points, résumé en chips, refus d'un doublon (validée 2026-11-23, proposition C) ; complète `v12.0.0/ui/admin_question_editor__roue_phrase.html` |
+| game_state_picto | #192 #194 manche | `v13.0.0/conception/game_state_picto__manche.html` | v13.0.0 | Conception : couloirs par acteur d'une manche Picto, avec relance de la question (nouveau tirage libre, feuille vierge) et quatre issues (validée 2026-11-23, proposition B) |
+| picto_draw_relay | #193 strokes | `v13.0.0/architecture/picto_draw_relay__strokes.html` | v13.0.0 | Architecture : relais du dessin tablette → serveur → TV / admin / anim, envoi qui perd la trame (`TrySendToTypes`) et rattrapage par `PICTO_CANVAS` (validée 2026-11-23, proposition B) |
 
 ## Obsolètes
 | Fichier | Remplacée par | Version |
 |---------|---------------|---------|
+| `v13.0.0/ui/anim_picto__conduct_panel.html` | `v13.0.0/ui/anim_picto__found_credit.html` | v13.0.0 |
+| `v13.0.0/ui/admin_game_picto__conduct.html` | `v13.0.0/ui/admin_game_picto__found_credit.html` | v13.0.0 |
+| `v13.0.0/ui/tv_picto_started__zones.html` | `v13.0.0/ui/tv_picto_started__word_only.html` | v13.0.0 |
+| `v13.0.0/ui/vplayer_picto__drawer_guessers.html` | `v13.0.0/ui/vplayer_picto__word_only.html` | v13.0.0 |
 | `v11.7.0/ui/ambiance_page__light_groups_numbered.html` | `v11.7.0/ui/ambiance_page__light_groups_zones.html` | v11.7.0 |
 | `v11.7.0/ui/ambiance_settings_panel__light_effects_numbered.html` | `v11.7.0/ui/ambiance_settings_panel__light_effects_zones.html` | v11.7.0 |
 | `v11.7.0/ui/ambiance_page__effects_catalogue.html` | `v11.7.0/ui/ambiance_page__effects_catalogue_zones.html` | v11.7.0 |

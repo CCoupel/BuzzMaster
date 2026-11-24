@@ -1,0 +1,15 @@
+{
+  "ANSWER": "",
+  "CATEGORY": "ANIMALS",
+  "ID": "t-picto",
+  "ORDER": 10,
+  "PICTO_WORDS": [
+    "Éléphant",
+    "Chat",
+    "Pont-levis"
+  ],
+  "POINTS": "20",
+  "QUESTION": "Picto",
+  "TIME": "90",
+  "TYPE": "PICTO"
+}

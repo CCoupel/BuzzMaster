@@ -365,6 +365,8 @@ func ActiveTeam(state game.GameState) string {
 		return state.RafaleCurrentTeam
 	case game.QuestionTypeRoue:
 		return state.RoueCurrentTeam // v12.0.0, #144: the team that has the hand
+	case game.QuestionTypePicto:
+		return state.PictoTeam // v13.0.0, #194: the team that draws
 	}
 	return ""
 }

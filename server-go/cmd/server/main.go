@@ -56,6 +56,10 @@ type App struct {
 	dnsServer   *server.DNSServer
 	logger      *server.BroadcastLogger
 	ackManager  *server.AckManager // ACK tracking for priority buzzer messages (v3.8.0)
+	// sessionsLoadErr is the result of loading vplayer_sessions.json at startup (nil = loaded), journalled once the players are loaded.
+	sessionsLoadErr error
+	// pictoCanvas is the PICTO sheet journal (v13.0.0, #193): outside the engine, behind its own lock.
+	pictoCanvas *server.PictoCanvas
 	// soundEngine is the sound-bruitage engine (#227, contracts/sound.md),
 	// read through a.sound(). No real Output exists before #228, so it is
 	// always constructed disabled (see setupSound) — every notifySound()
@@ -235,6 +239,7 @@ func main() {
 	// Try to load saved teams and bumpers from disk
 	teamsLoaded := app.engine.LoadTeams() == nil && len(app.engine.GetTeamsAndBumpers().Teams) > 0
 	bumpersLoaded := app.engine.LoadBumpers() == nil && len(app.engine.GetTeamsAndBumpers().Bumpers) > 0
+	app.warnSeatsWithoutFingerprint("démarrage", app.sessionsLoadErr) // vplayer-session.md §6
 
 	// Only initialize test data if no saved data exists
 	if !teamsLoaded && !bumpersLoaded {
@@ -384,6 +389,7 @@ func (a *App) init() {
 	a.engine.SetHistoryPath(filepath.Join(configDir, "history.json"))
 	a.engine.SetTeamsPath(filepath.Join(configDir, "teams.json"))
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
+	a.sessionsLoadErr = a.engine.SetVPlayerSessionsPath(filepath.Join(configDir, "vplayer_sessions.json")) // v13.0.0 session tokens (fingerprints only); WARN written after the players are loaded
 	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
 	a.engine.SetStatePath(filepath.Join(configDir, "game_state.json")) // #141
 
@@ -659,7 +665,8 @@ func (a *App) setupCallbacks() {
 		a.ambiance().NotifyState()
 	}
 
-	a.setupRoueCallbacks() // ROUE (v12.0.0, #144) — cmd/server/roue.go
+	a.setupRoueCallbacks()  // ROUE (v12.0.0, #144) — cmd/server/roue.go
+	a.setupPictoCallbacks() // PICTO (v13.0.0, #192) — cmd/server/picto.go
 
 	// RAFALE invalid answer / timeout, classic round only (v11.0/#227,
 	// contracts/sound.md §2.1's CuePerdu) — sound-only, no lighting
@@ -1538,6 +1545,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handleReady(msg)
 
 	case protocol.ActionStart:
+		if a.pictoStartRefused(incoming.ClientID) { // PICTO (#192, §6.1): NO_DRAWER, state unchanged
+			break
+		}
 		a.handleStart(msg)
 
 	case protocol.ActionStop:
@@ -1715,6 +1725,18 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		protocol.ActionRoueFlip, protocol.ActionRoueAnswer, protocol.ActionRoueNext, protocol.ActionRouePass,
 		protocol.ActionRoueReveal, protocol.ActionRoueBuyVowel:
 		a.handleRoueAction(incoming.ClientID, msg)
+
+	case protocol.ActionPictoSetTeam, protocol.ActionPictoSetDrawer, protocol.ActionPictoDrawDrawer:
+		a.handlePictoPrepAction(incoming.ClientID, msg)
+
+	case protocol.ActionPictoFound:
+		a.handlePictoFound(incoming.ClientID)
+
+	case protocol.ActionPictoStrokes:
+		a.handlePictoStrokes(incoming)
+
+	case protocol.ActionPictoCanvasSync:
+		a.handlePictoCanvasSync(incoming)
 
 	case protocol.ActionQuestionSound:
 		a.handleQuestionSound(msg)
@@ -4192,12 +4214,15 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_NAME_MISMATCH id=%s server_name=%q client_name=%q client=%s", payload.ID, existing.Name, playerName, clientID)
 		}
 	}
-	bumperID, bumper, reconnected, err := a.engine.ReconnectOrCreateVirtualPlayer(payload.ID, playerName)
+	bumperID, bumper, reconnected, sessionToken, err := a.engine.ReconnectOrCreateVirtualPlayerWithToken(payload.ID, playerName, payload.Token)
 	if err != nil {
 		// Send rejection to this client only
 		reason := "ENROLLMENT_CLOSED"
 		if enrollErr, ok := err.(*game.EnrollmentError); ok {
 			reason = enrollErr.Reason
+		}
+		if reason == game.ErrInvalidSession { // vplayer-session.md §3, §4.2 1b: the ID only, NEVER a token
+			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_TOKEN_INVALID id=%s client=%s", diag.LogToken(payload.ID), clientID)
 		}
 
 		rejectPayload := protocol.PlayerRejectedPayload{
@@ -4211,11 +4236,24 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		return
 	}
 
+	// vplayer-session.md §3: journal the issuance of a token (ID and cause only, never the token).
+	if sessionToken != "" && sessionToken != payload.Token {
+		cause := "enrol"
+		switch {
+		case reconnected && bumperID == payload.ID:
+			cause = "legacy"
+		case reconnected:
+			cause = "reclaim"
+		}
+		server.LogInfo(game.LogComponentWebSocket, "VPLAYER_TOKEN_ISSUED id=%s reason=%s", bumperID, cause)
+	}
+
 	// Send confirmation to this client
 	connectedPayload := protocol.PlayerConnectedPayload{
-		ID:   bumperID,
-		Name: bumper.Name,
-		Team: bumper.Team,
+		ID:    bumperID,
+		Name:  bumper.Name,
+		Team:  bumper.Team,
+		Token: sessionToken, // vplayer-session.md §4.3: to the bound tablet only, never logged
 	}
 	connectedMsg, _ := protocol.NewMessage(protocol.ActionPlayerConnected, connectedPayload)
 	a.wsHub.SendToClient(clientID, connectedMsg)
@@ -4231,6 +4269,8 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 		evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, protocol.PlayerEvictedPayload{Reason: "DUPLICATE_SESSION"})
 		a.wsHub.SendToClient(oldClient, evictedMsg)
 	}
+
+	a.sendPictoToPlayer(bumperID) // PICTO (#192/#193, §6.7): the drawer picks its word and its sheet back up
 
 	if reconnected {
 		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", bumperID, bumper.Name)
@@ -4518,6 +4558,9 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 // and releases the "Lancer la partie" lock if this connection owned it (#253).
 func (a *App) onClientClosed(clientID string) {
 	a.forgetClientDiag(clientID)
+	if a.pictoCanvas != nil {
+		a.pictoCanvas.ForgetClient(clientID) // PICTO (#193): rate-limit state of the closed connection
+	}
 	if rel, ok := a.engine.CloseLaunchLock(clientID, "disconnect"); ok {
 		a.logLaunchLockReleased(clientID, rel)
 		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
@@ -4546,6 +4589,8 @@ var suspendedDuringLaunch = map[string]bool{
 	protocol.ActionRoueSetTeams: true, protocol.ActionRoueSpin: true, protocol.ActionRoueStop: true,
 	protocol.ActionRoueLetter: true, protocol.ActionRoueBuyVowel: true, protocol.ActionRoueFlip: true, protocol.ActionRoueAnswer: true,
 	protocol.ActionRoueNext: true, protocol.ActionRouePass: true, protocol.ActionRoueReveal: true,
+	protocol.ActionPictoSetTeam: true, protocol.ActionPictoSetDrawer: true, protocol.ActionPictoDrawDrawer: true,
+	protocol.ActionPictoFound: true,
 	// points
 	protocol.ActionTeamPoints: true, protocol.ActionBumperPoints: true, protocol.ActionTeamPointsBatch: true,
 	protocol.ActionBumperPointsBatch: true, protocol.ActionSetCreditPoints: true,
@@ -5609,6 +5654,10 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 	} else {
 		a.wsHub.SendRawToClient(clientID, updateData)
 	}
+
+	// PICTO (v13.0.0, #193, contracts/picto.md §6.7): sheet (and word for admin / anim) of a round in progress,
+	// right after the state — before the admin / TV extras below, which must not be able to starve it.
+	a.sendPictoToClient(clientID, clientType)
 
 	// v11.2 (#244/#251): the admin learns the already-credited teams at HELLO
 	// (sent early: the rest of the admin block depends on more wiring).

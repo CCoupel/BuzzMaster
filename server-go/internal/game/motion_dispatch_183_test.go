@@ -40,8 +40,10 @@ func TestAllQuestionTypes_183(t *testing.T) {
 	// v9.0.0 (#214): ENTRACTE added as the 7th type — contracts/game-state.md
 	// §"Second déclencheur — entracte programmée".
 	// v12.0.0 (#145): ROUE added as the 8th type — contracts/roue.md §13.
+	// v13.0.0 (#191): PICTO added as the 9th type — contracts/picto.md §4.
 	want := map[QuestionType]bool{
 		QuestionTypeRoue:     true,
+		QuestionTypePicto:    true,
 		QuestionTypeSpeedy:   true,
 		QuestionTypeQCM:      true,
 		QuestionTypeMemory:   true,
@@ -52,7 +54,7 @@ func TestAllQuestionTypes_183(t *testing.T) {
 	}
 
 	if len(got) != len(want) {
-		t.Fatalf("AllQuestionTypes() a %d entrées, attendu %d (8 types connus) — got=%v", len(got), len(want), got)
+		t.Fatalf("AllQuestionTypes() a %d entrées, attendu %d (9 types connus) — got=%v", len(got), len(want), got)
 	}
 
 	seen := map[QuestionType]bool{}
@@ -62,7 +64,7 @@ func TestAllQuestionTypes_183(t *testing.T) {
 		}
 		seen[qt] = true
 		if !want[qt] {
-			t.Errorf("AllQuestionTypes() contient %q, absent des 8 types connus (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE/RAFALE/ENTRACTE/ROUE)", qt)
+			t.Errorf("AllQuestionTypes() contient %q, absent des 9 types connus (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE/RAFALE/ENTRACTE/ROUE/PICTO)", qt)
 		}
 	}
 	for qt := range want {

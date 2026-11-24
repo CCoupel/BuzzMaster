@@ -523,6 +523,38 @@ Les joueurs virtuels apparaissent dans la colonne "Joueurs non assignés" :
 - Utiliser le drag & drop pour assigner à une équipe
 - Les joueurs assignés peuvent buzzer normalement
 
+#### Tablette qui a perdu son jeton (v13.0.0, #319)
+
+Chaque tablette reçoit un jeton de session à son enrôlement. Elle doit le présenter pour reprendre sa place. Une tablette
+qui a perdu son jeton (stockage du navigateur effacé, autre appareil) est refusée avec le message « Cette place est déjà
+liée à un autre appareil ».
+
+Pour la débloquer :
+1. L'animateur libère la place (#134).
+2. Le joueur se reconnecte avec son **nom** : sa place et son score sont conservés.
+
+**Première connexion après la mise à jour** : les places créées avant v13.0.0 n'ont pas de jeton. Elles sont reprises par
+la **première tablette qui se connecte** avec leur ID. Le serveur redémarre à la mise à jour : relancer les tablettes
+rapidement pour que chaque joueur retrouve sa place avant un inconnu.
+
+**Reprise par le nom pendant l'autorisation** : après une libération ou une demande de reprise, la reprise par le nom reste
+possible pendant 5 minutes. Quiconque connaît le nom affiché sur la TV peut alors prendre la place. Ne libérer une place
+que lorsque son propriétaire est prêt à se reconnecter.
+
+**Restauration d'une sauvegarde** : une sauvegarde faite avant v13.0.0, ou une sauvegarde sans le fichier des empreintes
+(`vplayer_sessions.json`), remet toutes les places en « premier arrivé ». Le journal affiche alors un avertissement. Après
+une restauration, laisser les tablettes se reconnecter rapidement.
+
+Le même avertissement apparaît au démarrage du serveur si le fichier est illisible ou corrompu, ou s'il reste des places
+sans empreinte. Il indique le **nombre** de places concernées, sans jamais afficher d'ID ni de jeton. Un fichier absent
+seul ne produit pas d'avertissement : sur une installation neuve, il n'y a pas de place à avertir.
+
+**Deux joueurs sur le même navigateur** : l'inscription d'un second joueur est refusée tant que la place du premier est
+mémorisée dans ce navigateur, que son onglet soit ouvert ou fermé, et que la place existe encore. Le message est « Un joueur
+est déjà inscrit sur ce navigateur. Faites libérer sa place par l’animateur pour inscrire un autre joueur. » Pour inscrire
+un autre joueur, l'animateur libère la place. Un second onglet du même navigateur peut en revanche reprendre la place du
+premier avec « Reprendre ici » : c'est voulu.
+
 #### Suppression d'un joueur
 
 Pour supprimer un joueur virtuel :
@@ -1240,6 +1272,70 @@ Le champ SSID2/Mot de passe 2 permet de configurer un reseau WiFi de secours :
 | POST | `/api/buzzer/wifi-config` | Broadcast config WiFi aux buzzers (v3.1.0) |
 
 ---
+
+## Question Picto (v13.0.0, #191)
+
+Le type **✏️ Picto** dessine un mot sur une tablette, pour que l'équipe le devine à l'oral. Cette section décrit
+l'éditeur de la question, la préparation, le dessin, puis la fin de manche et la révélation.
+
+### Créer une question Picto
+
+1. Page **Questions** → nouvelle question → type **✏️ Picto**.
+2. **Titre** (liste des questions) : obligatoire.
+3. **Mots** : saisir un mot par ligne (1 à 20 mots). Un mot doit faire 1 à 40 caractères : lettres (accents compris),
+   chiffres, espace, apostrophe ou tiret. Deux mots identiques, accents et majuscules ignorés, sont refusés
+   (« Éléphant » et « elephant » font un doublon). Les mots refusés sont signalés dans l'éditeur ; le serveur a le
+   dernier mot.
+4. **Durée** : de 30 à 300 secondes, 90 par défaut.
+5. **Points** : points proposés au crédit de l'équipe quand le mot est trouvé, ajustables (crédit manuel).
+6. **Catégorie** : une seule ; elle est affichée en indice sur la TV pendant la manche.
+7. Vérifier le résumé, puis enregistrer.
+
+> Les mots sont enregistrés avec la question et sauvegardés avec elle.
+
+### Préparer une manche Picto
+
+1. Sélectionner la question Picto. La manche passe en préparation.
+2. **Équipe** : choisir l'équipe qui dessine. Changer d'équipe efface le dessinateur s'il n'en fait pas partie.
+3. **Dessinateur** : choisir un joueur connecté de l'équipe dans la liste, ou cliquer sur **🎲 Au hasard**. Le tirage peut
+   être refait tant que la manche n'a pas démarré. Seul un joueur qui a une tablette (VJoueur) connectée peut dessiner.
+4. **START** (admin) / **Lancer** (animateur) reste grisé tant que le dessinateur n'est pas désigné et connecté. Le mot est tiré au lancement, parmi les
+   mots de la question, et il est envoyé seulement au dessinateur, à l'admin et à l'animateur.
+5. Pendant la manche, le dessin apparaît en direct sur la TV, sur cet écran et sur l'écran de l'animateur. La tablette
+   du dessinateur retrouve sa feuille et son mot à la reconnexion.
+
+### Terminer une manche Picto
+
+- **« Trouvé ! »** (admin ou animateur) : l'équipe a trouvé le mot. La manche s'arrête et le mot est révélé. Une ligne de crédit
+  est proposée à l'équipe, pré-remplie aux points de la question. Ajustez-la si besoin, puis validez : c'est un crédit manuel.
+  Sur l'animateur, le bouton est « ✅ Trouvé ! » ; si la réponse arrive sur le gong, « ✅ Trouvé (sur le gong) ».
+- **Temps écoulé** : la manche s'arrête, et le mot n'est **pas** encore affiché. La tablette du dessinateur affiche
+  « ⏰ Temps écoulé » sur sa feuille verrouillée. L'animateur voit « ⏰ Temps écoulé — le mot n'est pas encore affiché ».
+  Si la réponse arrive sur le gong, « Trouvé (sur le gong) » crédite encore l'équipe. Sinon, « 👁 Révéler le mot » (animateur)
+  montre le mot à tous, sans points.
+- **Arrêt** (STOP) : la manche s'arrête. La tablette du dessinateur affiche « ⏹ Manche arrêtée » sur sa feuille verrouillée.
+  Le mot se révèle ensuite avec « 👁 Révéler le mot » (animateur), sans points.
+- **Sans mot** : si la question n'a plus de mot au lancement, la manche s'arrête aussitôt, sans rien envoyer au dessinateur.
+- **Révélation** : le titre reprend l'issue réelle de la manche. Exemple après « Trouvé » : sur l'animateur,
+  « ✅ Trouvé — le mot est affiché sur la TV » ; sur l'admin, « ✏️ Picto — révélé · ✅ Trouvé ». Après « Temps écoulé » ou
+  un arrêt, le titre affiche l'issue correspondante, par exemple « ⏰ Temps écoulé — le mot est affiché sur la TV ». La TV et les
+  tablettes n'affichent que le **mot**. Le crédit de l'équipe se voit par l'animation de points commune, sans mention « Trouvé par ».
+- **Bouton de révélation** : sur l'admin, le bouton **REPONSE** de la page Jeu (le même que pour les autres types) ; sur
+  l'animateur, « 👁 Révéler le mot ».
+
+**Relancer la question** : si le dessinateur décroche ou si la manche est mal partie, sélectionnez de nouveau la question.
+Elle revient en préparation, avec la même équipe et le même dessinateur (modifiables), et une feuille vierge au lancement
+suivant. Le mot est tiré à nouveau au lancement, et il peut ressortir.
+
+**Dessinateur déconnecté** : la manche continue, le chronomètre ne s'arrête pas. Une alerte s'affiche sur l'admin et l'animateur.
+Si le dessinateur revient avec sa tablette, il retrouve sa feuille et son mot.
+
+### Sécurité — à lire avant un événement
+
+- Les mots sont **lisibles** par toute personne qui peut ouvrir la liste des questions ou les pages admin et animateur,
+  qui ne demandent pas encore d'authentification.
+- **Conseil** : isoler les tablettes joueurs du réseau d'administration, et ne pas exposer la page de l'animateur ou de
+  l'admin hors du réseau de confiance. La correction est prévue avec #259.
 
 ## Roue de la Fortune (v12.0.0, #144, #145)
 
