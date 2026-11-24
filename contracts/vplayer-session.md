@@ -40,7 +40,15 @@ N'importe quel client qui rejoue cet ID :
   `math/rand`.
 - **Stockage serveur** : seulement l'**empreinte** SHA-256 du jeton, dans un fichier dédié
   `data/config/vplayer_sessions.json` de la forme `{"TOKENS": {"<bumperID>": "<sha256 hex>"}}`, avec une écriture
-  atomique. **Jamais dans `Bumper`** **[planner]** : la structure `Bumper` est sérialisée vers tous les clients, et
+  atomique (fichier temporaire puis `Rename`, droits `0600`).
+  - **Écriture synchrone** à **chaque mutation** (émission, suppression, élagage) : le fichier est écrit **avant** le
+    retour de la mutation, jamais par une sauvegarde différée. Ainsi, aucune sauvegarde tardive ne peut recréer le
+    fichier après une réinitialisation, ni écraser une restauration.
+  - **Store vide = pas de fichier** : quand la dernière empreinte disparaît, `vplayer_sessions.json` est **supprimé**
+    (un fichier déjà absent n'est pas une erreur).
+  - **Au démarrage**, le chargement n'écrit rien. Un fichier illisible est conservé tel quel jusqu'à la première
+    mutation. Un fichier absent avec **0 place sans empreinte** ne produit aucun journal. Les règles de `WARN` du §6
+    sont inchangées. **Jamais dans `Bumper`** **[planner]** : la structure `Bumper` est sérialisée vers tous les clients, et
   un fichier séparé ne peut pas fuiter par un sérialiseur oublié.
 - **Comparaison** : empreinte du jeton reçu comparée à l'empreinte stockée en **temps constant**
   (`crypto/subtle.ConstantTimeCompare`).
@@ -168,7 +176,11 @@ après une reconnexion légitime de le retrouver. Cela ne crée aucune fuite : s
 | Suppression d'un bumper (`DELETE` admin, purge) | Empreinte supprimée |
 | `NEW_GAME` qui purge les joueurs des tablettes | Toutes les empreintes des bumpers supprimés sont retirées |
 | Sauvegarde sélective « Joueurs » / restauration | `vplayer_sessions.json` voyage avec `bumpers.json` : les mêmes drapeaux dans `handleBackupSelect`, `handleResetSelect`, `detectTARContents` et `handleRestore` |
-| Redémarrage du serveur | Empreintes rechargées depuis le fichier |
+| Redémarrage du serveur | Empreintes rechargées depuis le fichier, puis élagage des ID inconnus (écrit de façon synchrone). Fichier absent : store vide |
+
+Chaque ligne de ce tableau qui modifie les empreintes **écrit le fichier de façon synchrone**, et le **supprime** si plus
+aucune empreinte ne reste (§3). Après un `NEW_GAME` qui retire toutes les places des tablettes, il n'y a donc plus de
+`vplayer_sessions.json`.
 
 ## 8. Effet sur les autres types de jeu
 

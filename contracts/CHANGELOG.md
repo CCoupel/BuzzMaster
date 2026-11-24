@@ -1,6 +1,16 @@
 # Changelog des Contrats API
 
 ---
+## [20261124-b] — v13.0.0 — Jeton de session : écriture synchrone, store vide sans fichier (correctif CI 4541fc0a)
+
+`vplayer-session.md` §3 et §7, précision alignée sur le code, sans BREAKING.
+- **[CHANGED — précision]** Les empreintes sont écrites de façon **synchrone** à chaque mutation (émission,
+  suppression, élagage), de façon atomique et avec les droits `0600`. Plus aucune sauvegarde différée.
+- **[CHANGED — précision]** Un store vide n'a **pas de fichier** : `vplayer_sessions.json` est supprimé quand la
+  dernière empreinte disparaît (par exemple après un `NEW_GAME` qui retire toutes les tablettes). Un fichier absent au
+  démarrage avec 0 place sans empreinte reste silencieux ; les règles de `WARN` du §6 sont inchangées.
+
+---
 ## [20261124] — v13.0.0 — PICTO : révélation sans « Trouvé par », crédit par l'animation commune (revue LOT-2.3)
 
 `picto.md` révision 8 (§6.5, §15). Décision de l'utilisateur du 2026-11-24. Interface seulement : **aucun champ,
