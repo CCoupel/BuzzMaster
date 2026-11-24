@@ -2,7 +2,7 @@
   "type": "FEATURE",
   "version": "13.0.0",
   "description": "PICTIONARY — nouveau type de jeu : un joueur tiré au sort dessine un mot sur son VPlayer, dessin en direct sur la TV, ses coéquipiers devinent à l'oral, l'animateur crédite. Cadrage approfondi du déroulé de jeu et de la configuration demandé par l'utilisateur.",
-  "branch": "milestone/v13.0.0",
+  "branch": "main",
   "milestone_num": 30,
   "issue_nums": [
     191,
@@ -11,9 +11,9 @@
     194,
     319
   ],
-  "status": "in_progress",
+  "status": "completed",
   "started_at": "2026-11-23T13:50:00Z",
-  "updated_at": "2026-11-24T15:35:00Z",
+  "updated_at": "2026-11-24T17:45:00Z",
   "intensite_depart": "complet",
   "cycles": 1,
   "plan": ".claude/workflow/plan-13.0.0.md",
@@ -257,9 +257,9 @@
       "notes": "firmware/ci.sh non joué (collision BUILD)"
     },
     "marketing": {
-      "status": "PRET",
-      "report": "_work/reports/marketing-20261124-1.md",
-      "artifact": "https://claude.ai/artifact/FiULjuFPL76m949p9Cot24"
+      "status": "completed",
+      "site": "4cf415fb",
+      "notes": "9d71028d"
     },
     "ci": {
       "status": "green",
@@ -297,7 +297,22 @@
       ]
     },
     "changelog_review": {
-      "status": "in_progress"
+      "status": "completed",
+      "verdict": "APPROUVE",
+      "report": "_work/reports/code-review-20261124-163000.md"
+    },
+    "deploy-prod": {
+      "status": "completed",
+      "version": "13.0.0",
+      "pr": 323,
+      "merge": "3280f3ec",
+      "tag": "v13.0.0",
+      "release_run": "45400242676"
+    },
+    "close": {
+      "status": "completed",
+      "milestone": "#30 closed",
+      "branch": "deleted"
     }
   },
   "frozen": false,
