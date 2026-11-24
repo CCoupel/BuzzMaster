@@ -59,4 +59,11 @@ describe('AnimPage — MEMOTION : gagnant présélectionné (#321)', () => {
     fireEvent.click(btn(/VALIDER/))
     expect(g.doneMotionCard).toHaveBeenCalledWith('c1', '')
   })
+
+  it('seuls l’équipe qui a la main et « PERSONNE » sont proposés (règle de jeu existante) ; pas d’autre équipe', () => {
+    const g = game('Rouges'); useGame.mockReturnValue(g); render(<AnimPage />)
+    expect(screen.queryByRole('button', { name: /Bleus/ })).toBeNull()
+    expect(teamChip('Rouges')).toBeTruthy()
+    expect(btn(/PERSONNE/).hasAttribute('aria-pressed')).toBe(true)
+  })
 })

@@ -87,6 +87,9 @@ const action = () => screen.getByRole('button', { name: /^(Attribuer les points|
 // #289 : le compteur n'est plus dans le bouton mais sur la ligne 2 du bloc (`.award-count`)
 const awardN = () => parseInt(document.querySelector('.award-count')?.textContent, 10) || 0
 const box = (name) => screen.getByRole('checkbox', { name: `Sélectionner ${name}` })
+// #321 (v13.1.0) : la présélection coche d'office les bonnes unités à l'entrée en REVEALED. Ces tests (#244/#251/#254)
+// partent d'une sélection vide : on la vide par le geste existant « Tout désélectionner » (assertions inchangées).
+const clearPreselect = () => { const b = screen.queryByRole('button', { name: 'Tout désélectionner' }); if (b) fireEvent.click(b) }
 const pointsField = () => screen.getByLabelText('Points')
 
 describe('GamePage — attribution groupée : envoi, résultat, bornes, niveau joueur (#244/#251/#254)', () => {
@@ -94,7 +97,7 @@ describe('GamePage — attribution groupée : envoi, résultat, bornes, niveau j
 
   it('niveau équipe : un lot TEAM_POINTS_BATCH avec le montant par défaut, bouton désactivé pendant l\'envoi', () => {
     const g = mkGame(); useGame.mockReturnValue(g)
-    render(<GamePage />)
+    render(<GamePage />); clearPreselect()
     fireEvent.click(box('Les Bleus'))
     fireEvent.click(action())
     expect(g.teamPointsBatch).toHaveBeenCalledWith('9', [{ team: 'Les Bleus', points: 1 }])
@@ -104,7 +107,7 @@ describe('GamePage — attribution groupée : envoi, résultat, bornes, niveau j
 
   it('niveau JOUEUR (POINTS_TARGET PLAYER) : cases sur les lignes de joueurs, aucune case d\'équipe, BUMPER_POINTS_BATCH', () => {
     const g = mkGame({}, QCM({ POINTS_TARGET: 'PLAYER' })); useGame.mockReturnValue(g)
-    render(<GamePage />)
+    render(<GamePage />); clearPreselect()
     expect(screen.queryByRole('checkbox', { name: 'Sélectionner Les Bleus' })).toBeNull()
     fireEvent.click(box('Paul'))
     fireEvent.click(box('Mamie'))
@@ -116,7 +119,7 @@ describe('GamePage — attribution groupée : envoi, résultat, bornes, niveau j
   it('joueurs déjà crédités (AWARDED_TEAMS.PLAYERS) : case grisée, « ✓ déjà crédité +N »', () => {
     const g = mkGame({ awardedPlayers: { b1: { POINTS: 3, TIMESTAMP: 1, TEAM: 'Les Bleus' } } }, QCM({ POINTS_TARGET: 'PLAYER' }))
     useGame.mockReturnValue(g)
-    render(<GamePage />)
+    render(<GamePage />); clearPreselect()
     expect(box('Paul').disabled).toBe(true)
     expect(screen.getByText('✓ déjà crédité +3')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Tout sélectionner' }))
@@ -165,7 +168,7 @@ describe('GamePage — attribution groupée : envoi, résultat, bornes, niveau j
 
   it('montant hors bornes (±999) : bouton désactivé, raison VISIBLE dans le texte', () => {
     const g = mkGame(); useGame.mockReturnValue(g)
-    render(<GamePage />)
+    render(<GamePage />); clearPreselect()
     fireEvent.click(box('Les Bleus'))
     fireEvent.change(pointsField(), { target: { value: '1000' } })
     expect(action().disabled).toBe(true)
@@ -176,7 +179,7 @@ describe('GamePage — attribution groupée : envoi, résultat, bornes, niveau j
 
   it('montant nul : raison visible', () => {
     useGame.mockReturnValue(mkGame())
-    render(<GamePage />)
+    render(<GamePage />); clearPreselect()
     fireEvent.click(box('Les Bleus'))
     fireEvent.change(pointsField(), { target: { value: '0' } })
     expect(action().disabled).toBe(true)
@@ -187,7 +190,7 @@ describe('GamePage — attribution groupée : envoi, résultat, bornes, niveau j
     const g = mkGame(); g.connectionId = 'me'
     g.gameState.LAUNCH_LOCK = { ACTIVE: true, OWNER: 'other', SINCE: 1, EXPIRES_AT: 2 }
     useGame.mockReturnValue(g)
-    render(<GamePage />)
+    render(<GamePage />); clearPreselect()
     fireEvent.click(box('Les Bleus'))
     expect(action().disabled).toBe(true)
     expect(screen.getByText(/Lancement d’une nouvelle partie en cours sur un autre poste/)).toBeTruthy()

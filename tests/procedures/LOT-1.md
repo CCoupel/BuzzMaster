@@ -180,7 +180,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Carte MEMOTION en REVEAL sur /admin (mode multi-équipes puis SOLO) | L'équipe qui a la main est présélectionnée (✓), « Perdu » et les autres restent choisissables, rien n'est envoyé avant « Valider » | | |
+| 1 | Carte MEMOTION en REVEAL sur /admin (mode multi-équipes puis SOLO) | L'équipe qui a la main est présélectionnée (✓) ; seuls elle et « Perdu » sont proposés (règle de jeu existante) ; rien n'est envoyé avant le bouton « Valider » | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -194,7 +194,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Même carte sur /anim (tablette) | Même présélection ; « PERSONNE » choisissable ; « VALIDER » envoie le gagnant ; résultat identique sur la TV | | |
+| 1 | Même carte sur /anim (tablette) | Même présélection (confirmation `confirmWinner`, anim seulement) ; seuls l'équipe qui a la main et « PERSONNE » sont proposés ; « VALIDER » envoie le gagnant ; résultat identique sur la TV | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
