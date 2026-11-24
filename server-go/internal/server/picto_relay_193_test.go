@@ -54,9 +54,11 @@ func strokesMsgPad193(t *testing.T, pad int) *protocol.Message {
 //
 // Déterministe, indépendant de la vitesse du runner : (1) peu de trames, juste de quoi dépasser la file d'envoi (256) —
 // la boucle s'arrête dès que la file est PLEINE (preuve structurelle, mesurée sur le client du hub), puis une salve de
-// trames excédentaires est jetée ; (2) la non-éviction est constatée tout de suite, bien avant le délai d'écriture de 3 s
-// (CLIENT_WRITE_TIMEOUT, coupure par timeout du serveur, distincte de l'éviction : si un runner exceptionnellement lent
-// le laisse expirer pendant le remplissage, le test s'annule au lieu d'accuser TrySendToTypes).
+// trames excédentaires est jetée ; (2) la non-éviction est constatée tout de suite, bien avant le délai d'écriture de 3 s.
+//
+// Principe des t.Skip : un Skip n'est admis QUE si le cas testé n'a pas pu être atteint (le serveur a coupé le client
+// par CLIENT_WRITE_TIMEOUT avant que la file ait été pleine, sur un runner exceptionnellement lent). Dès que la file a été
+// pleine, ou dès qu'une éviction est observée, c'est un échec — jamais un Skip.
 func TestPictoRelay193_TrySend_FullBufferDropsFrameAndKeepsClient(t *testing.T) {
 	hub, bl, url := newHub246(t, ClientTypeTV)
 	dialStalled246(t, url)
@@ -76,35 +78,37 @@ func TestPictoRelay193_TrySend_FullBufferDropsFrameAndKeepsClient(t *testing.T) 
 		return 0, 0
 	}
 	// 1) remplir la file d'envoi (256) ; chaque envoi supplémentaire est jeté (pas d'éviction).
-	sent := 0
-	for ; sent < 5000; sent++ {
+	filled, capacity := false, 0
+	for sent := 0; sent < 5000 && hub.ClientCount() == 1; sent++ {
 		if n, c := queue(); c > 0 && n == c {
+			filled, capacity = true, c
 			break
 		}
 		ts.TrySendToTypes(msg, ClientTypeTV)
 	}
-	n, c := queue()
-	if c == 0 || n != c {
-		t.Fatalf("précondition : la file d'envoi du client lent doit être pleine après %d trames (len=%d cap=%d)", sent, n, c)
+	// Une vraie éviction est TOUJOURS un échec, quel que soit l'état du runner.
+	if logHas246(bl, "CLIENT_EVICTED_SLOW") {
+		t.Fatalf("TrySendToTypes ne doit jamais évincer un client lent ; logs=%v", bl.GetRecent(5))
+	}
+	// Cas non atteint : client coupé par le délai d'écriture AVANT que la file ait été pleine → seul Skip admis.
+	if !filled {
+		if hub.ClientCount() == 0 && logHas246(bl, "CLIENT_WRITE_TIMEOUT") && time.Since(start) > 2*time.Second {
+			t.Skipf("runner trop lent (%v) : le délai d'écriture de 3 s a coupé le client avant que la file d'envoi soit pleine — le cas testé n'a pas été atteint", time.Since(start))
+		}
+		t.Fatalf("précondition : la file d'envoi du client lent doit être pleine (clients=%d, écoulé %v)", hub.ClientCount(), time.Since(start))
 	}
 	for i := 0; i < 50; i++ { // salve excédentaire : toutes jetées, aucun blocage, aucune éviction
 		ts.TrySendToTypes(msg, ClientTypeTV)
 	}
-	// 2) constat immédiat : bien avant le délai d'écriture de 3 s du serveur.
-	elapsed := time.Since(start)
-	stayed := hub.ClientCount() == 1
-	evicted := logHas246(bl, "CLIENT_EVICTED_SLOW")
-	if !stayed && logHas246(bl, "CLIENT_WRITE_TIMEOUT") && elapsed > 2*time.Second {
-		t.Skipf("runner trop lent (%v) : le délai d'écriture de 3 s a coupé le client avant la fin du remplissage — coupure par timeout, pas une éviction", elapsed)
+	// 2) constat immédiat. La file ayant été pleine, une disparition du client est un ÉCHEC (jamais un Skip).
+	if logHas246(bl, "CLIENT_EVICTED_SLOW") {
+		t.Fatalf("TrySendToTypes ne doit jamais évincer un client lent ; logs=%v", bl.GetRecent(5))
 	}
-	if !stayed {
-		t.Errorf("le client au tampon plein doit RESTER connecté (clients=%d, écoulé %v)", hub.ClientCount(), elapsed)
+	if hub.ClientCount() != 1 {
+		t.Fatalf("le client au tampon plein doit RESTER connecté (clients=%d, écoulé %v, timeout=%v)", hub.ClientCount(), time.Since(start), logHas246(bl, "CLIENT_WRITE_TIMEOUT"))
 	}
-	if evicted {
-		t.Errorf("TrySendToTypes ne doit jamais évincer un client lent ; logs=%v", bl.GetRecent(5))
-	}
-	if n2, _ := queue(); n2 != c {
-		t.Errorf("la file reste pleine (les trames excédentaires sont perdues, pas empilées) : len=%d cap=%d", n2, c)
+	if n2, _ := queue(); n2 != capacity {
+		t.Errorf("la file reste pleine (les trames excédentaires sont perdues, pas empilées) : len=%d cap=%d", n2, capacity)
 	}
 }
 
@@ -175,18 +179,21 @@ func TestPictoRelay193_TrySend_OnlyRequestedTypes(t *testing.T) {
 }
 
 // Non-régression (§16) : BroadcastToTypes garde la déconnexion au tampon plein pour tout autre message — la TV
-// (type visé par le relais) y compris.
+// (type visé par le relais) y compris. Le client est bloqué par construction : si BroadcastToTypes cessait d'évincer,
+// le serveur finirait par le couper par CLIENT_WRITE_TIMEOUT. Skip admis UNIQUEMENT si cette coupure survient avant que la
+// file (256) ait pu se remplir (moins de ~300 diffusions) ; au-delà, l'absence d'éviction est une régression (#127).
 func TestPictoRelay193_BroadcastToTypes_UnchangedForOtherMessages(t *testing.T) {
 	hub, bl, url := newHub246(t, ClientTypeTV)
 	dialStalled246(t, url)
 	if !waitFor246(15*time.Second, func() bool { return hub.ClientCount() == 1 }) {
 		t.Fatal("précondition : le client doit être enregistré")
 	}
+	const queueCap = 256 // file d'envoi d'un client (websocket.go) : la remplir demande au moins queueCap + 1 diffusions
 	big, _ := protocol.NewMessage("UPDATE", map[string]string{"X": strings.Repeat("x", 16*1024)})
-	evicted := false
-	for i, deadline := 0, time.Now().Add(30*time.Second); !evicted && time.Now().Before(deadline); i++ {
+	evicted, sent := false, 0
+	for deadline := time.Now().Add(30 * time.Second); !evicted && time.Now().Before(deadline); sent++ {
 		hub.BroadcastToTypes(big, ClientTypeTV)
-		if i%8 == 7 {
+		if sent%8 == 7 {
 			evicted = logHas246(bl, "CLIENT_EVICTED_SLOW")
 			if hub.ClientCount() == 0 {
 				break
@@ -194,12 +201,12 @@ func TestPictoRelay193_BroadcastToTypes_UnchangedForOtherMessages(t *testing.T) 
 		}
 	}
 	evicted = evicted || waitFor246(5*time.Second, func() bool { return logHas246(bl, "CLIENT_EVICTED_SLOW") })
-	if !evicted && logHas246(bl, "CLIENT_WRITE_TIMEOUT") {
-		// Runner exceptionnellement lent : le délai d'écriture de 3 s a coupé le client avant que la file (256) ne se remplisse.
-		t.Skip("coupure par CLIENT_WRITE_TIMEOUT avant l'éviction : environnement trop lent pour ce scénario")
-	}
 	if !evicted {
-		t.Fatal("BroadcastToTypes : un client au tampon plein doit toujours être coupé et journalisé (#127)")
+		timeout := logHas246(bl, "CLIENT_WRITE_TIMEOUT")
+		if timeout && sent < queueCap+44 { // la file n'a pas pu se remplir avant la coupure : cas non atteint
+			t.Skipf("coupure par CLIENT_WRITE_TIMEOUT après %d diffusions seulement (file de %d non atteinte) : environnement trop lent pour ce scénario", sent, queueCap)
+		}
+		t.Fatalf("BroadcastToTypes : un client au tampon plein doit toujours être coupé et journalisé CLIENT_EVICTED_SLOW (#127) — %d diffusions, timeout=%v", sent, timeout)
 	}
 	if !waitFor246(15*time.Second, func() bool { return hub.ClientCount() == 0 }) {
 		t.Errorf("le client lent doit être retiré du hub (%d restant)", hub.ClientCount())
