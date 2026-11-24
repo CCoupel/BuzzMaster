@@ -48,9 +48,9 @@
           "credentials_env": [],
           "verified": {
             "status": "ok",
-            "at": "2026-11-23T16:20:00Z",
+            "at": "2026-11-24T00:00:00Z",
             "checks": [
-              "target-dir (build/qualif_v<X.Y.Z>/ writable) : ok",
+              "target-dir (build/qualif_v<X.Y.Z>/ writable) : ok (rejoue 2026-11-24)",
               "toolchain (go1.26.11, node v22.23.3, pio) : ok",
               "livraison = exe Windows remis a l utilisateur (lancement et smoke tests cote utilisateur, port 9090 non sonde depuis le conteneur — hors perimetre du jalon)"
             ]
