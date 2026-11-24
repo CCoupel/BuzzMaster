@@ -1543,6 +1543,9 @@ sérialisée vers tous les clients, un fichier séparé ne peut donc pas fuiter 
 
 - **Seule l'empreinte SHA-256 est stockée**, jamais le jeton en clair. Le jeton fait 32 octets (`crypto/rand`), en base64url.
 - Écriture atomique ; comparaison en temps constant (`crypto/subtle`).
+- **Écriture synchrone** à chaque changement (émission, retrait, purge), sous le verrou du moteur, jamais différée : une
+  sauvegarde en retard ne peut pas recréer un fichier supprimé par une réinitialisation.
+- **Store vide = pas de fichier** : un fichier absent signifie qu'aucun jeton n'est émis. Un store vide supprime le fichier.
 - Le fichier persiste au redémarrage. Il voyage avec `bumpers.json` dans les sauvegardes « Joueurs » et est retiré avec
   les joueurs (`NEW_GAME` purge, suppression d'un bumper, re-clé #122/#134).
 - Un fichier **absent** ou **illisible** est traité comme vide : toutes les places repassent en « premier arrivé »

@@ -43,6 +43,12 @@ Ce milestone ajoute aussi le jeton de session des tablettes joueurs, et corrige 
   perdu son jeton »). Les buzzers physiques ne sont pas concernés. Un navigateur ne peut pas inscrire un second joueur
   tant que la place mémorisée dans ce navigateur existe encore (onglet fermé compris).
 
+### Fixed
+
+- **Réinitialisation « Joueurs » et empreintes de session (#319)** — la réinitialisation sélective des joueurs supprime bien
+  les empreintes de jetons. Une sauvegarde différée pouvait recréer le fichier `vplayer_sessions.json` après cette suppression :
+  les écritures sont désormais synchrones, et un store vide n'a pas de fichier.
+
 ### Notes
 
 - **Sécurité** : les mots sont lisibles par qui peut ouvrir la liste des questions ou les pages admin et animateur, qui
