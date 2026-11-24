@@ -1,6 +1,22 @@
 # Changelog des Contrats API
 
 ---
+## [20261124-e] — v13.1.0 — Présélection des gagnants : écarts de la revue LOT-1 (#321)
+
+`award-preselect.md` révision 2, texte aligné sur le code et sur la règle MEMOTION existante. **Aucun BREAKING.**
+- **[CHANGED — correction]** §4 MEMOTION : le sélecteur propose seulement « équipe qui a la main » et « Personne »
+  (`motionRules.js`). La phrase « les autres équipes restent sélectionnables » est retirée.
+  - SOLO : l'équipe unique a la main ; sans équipe, retour sur « Personne ».
+  - Anim : geste en deux temps (choix, puis VALIDER), option `confirmWinner` activée par `AnimPage`.
+  - Payload de `MEMOTION_DONE` inchangé.
+- **[CHANGED — précision]** §2 QCM : la couleur marquée est posée par `setPickedColor(QCM_CORRECT)`.
+- **[CHANGED — précision]** §1 :
+  - paramètre facultatif `knownKeys` (clés absentes ignorées) ;
+  - au niveau joueur, seuls QCM et SPEEDY produisent des clés de joueur ; ARDOISE ne coche rien.
+- **[CHANGED — précision]** §5 : les tests existants de l'attribution groupée sont **adaptés** (fixtures et mise en
+  place), sans supprimer ni affaiblir aucune assertion. Ce n'est plus « sans modification ».
+
+---
 ## [20261124-d] — v13.1.0 — PICTO RAFALE : pool de mots (moteur de pool généralisé), IA, « Pools », type Rafale Picto et passes (#318)
 
 `picto.md` révision 9 (§17, nouveau) et **`picto-pool.md` révision 2** (nouveau). Arbitrages : GATE 1.5 et GATE 2

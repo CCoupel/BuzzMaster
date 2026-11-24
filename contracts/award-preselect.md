@@ -1,6 +1,7 @@
 # Contrat — Présélection des gagnants au crédit (#321, v13.1.0)
 
-**Statut** : contrat de référence (contract-first), **révision 1** (2026-11-24, GATE 2).
+**Statut** : contrat de référence (contract-first), **révision 2** (2026-11-24, écarts de la revue LOT-1,
+`_work/reports/code-review-20261124-170140.md`).
 **Périmètre** : **frontend seul**. Aucun champ `GameState`, aucune action, aucun endpoint n'est ajouté : toutes les
 données existent déjà (bumpers, `GameState`, question).
 **Arbitrages** : GATE 2 du 2026-11-24 (P3, P3-bis, P3a, P3d). Plan : `_work/reports/plan-20261124-v1310.md`.
@@ -17,11 +18,23 @@ données existent déjà (bumpers, `GameState`, question).
 
 ```js
 // Signature [planner] — fonction pure, testée en table
-preselectAwardKeys({ question, gameState, bumpers, awardLevel, awarded, amountOf }) → string[]
+preselectAwardKeys({ question, gameState, bumpers, awardLevel, awarded, amountOf, knownKeys }) → string[]
 // awardLevel : 'TEAM' | 'PLAYER' (resolveAwardLevel) ; clés = noms d'équipe ou MAC de bumper
 // awarded    : clés déjà créditées (AWARDED_TEAMS / AWARDED_PLAYERS, équipe créditée au niveau équipe comprise)
 // amountOf   : (clé) → montant par défaut de la page
+// knownKeys  : facultatif — clés existantes (équipes ou joueurs affichés et attribuables) ; une clé candidate
+//              absente (équipe supprimée ou renommée, clé d'un autre niveau) est ignorée. Absent : aucun filtre
 ```
+
+**Niveau d'attribution** :
+- **niveau équipe** : clés = noms d'équipe ;
+- **niveau joueur** (`awardLevel = 'PLAYER'`) : seuls **QCM** (joueurs qui ont donné `QCM_CORRECT`) et **SPEEDY**
+  (le joueur premier buzzeur) produisent des clés de joueur (MAC) ;
+- **ARDOISE** compare des réponses **par équipe** : au niveau joueur, ses clés d'équipe ne correspondent à aucune
+  unité attribuable, elles sont écartées par `knownKeys` et **rien n'est coché** ;
+- Picto, Rafale Picto, Mémoire et Rafale Speedy sont toujours au niveau équipe (`resolveAwardLevel`).
+
+Les clés candidates sont dédoublonnées.
 
 **Règles communes** :
 - on ne coche **jamais** une unité déjà créditée ;
@@ -41,7 +54,7 @@ preselectAwardKeys({ question, gameState, bumpers, awardLevel, awarded, amountOf
 | `MEMORY`, multi-équipes | les équipes de `MEMORY_PARTICIPATING_TEAMS` de score > 0 (`calcMemoryScore`) | `MEMORY_TEAM_PAIRS` / `MEMORY_TEAM_ERRORS` |
 | `RAFALE` (Rafale Speedy), SOLO | l'équipe de `RAFALE_PARTICIPATING_TEAMS`, si son compteur retenu est > 0. **Le choix « équipe qui joue » existe déjà** : en SOLO, une équipe est exigée pour `READY` (#201, `participantsConform`, sélecteur d'équipe de la page Jeu) | `RAFALE_TEAM_COUNTERS` |
 | `RAFALE`, multi-équipes | les équipes de `RAFALE_PARTICIPATING_TEAMS` de compteur retenu > 0 (`rafaleCounterForTeam`) | `RAFALE_TEAM_COUNTERS` / `RAFALE_TEAM_BEST` |
-| `QCM` | les unités qui ont donné `QCM_CORRECT` : équipes au niveau équipe, joueurs au niveau joueur. Équivaut à `pickQcmAnswer(QCM_CORRECT)` existant (couleur marquée, `awardWrong = false`, champ « Points » sur la base du barème). Aucune bonne réponse : rien n'est coché | bumpers (`answeredColor`, `hasAnswered`) |
+| `QCM` | les unités qui ont donné `QCM_CORRECT` : équipes au niveau équipe, joueurs au niveau joueur. Équivaut à `pickQcmAnswer(QCM_CORRECT)` existant : la **couleur marquée** est posée par `setPickedColor(QCM_CORRECT)`, avec `awardWrong = false` et le champ « Points » sur la base du barème. Aucune bonne réponse : rien n'est coché | bumpers (`answeredColor`, `hasAnswered`) |
 | `SPEEDY` | le **premier buzzeur**, c'est-à-dire le bumper de plus petit `TIME > 0` (ordre de `utils/buzzOrder.js`) : le joueur au niveau joueur, son équipe au niveau équipe. **L'admin décoche** si la réponse était fausse. Aucun buzz : rien n'est coché | bumpers |
 | `ARDOISE` | les équipes dont la réponse **repliée** est égale à la réponse attendue `ANSWER` repliée (§3). `ANSWER` vide : rien n'est coché | réponses ARDOISE de l'admin, `question.ANSWER` |
 | `MEMOTION` | voir §4 (gagnant de **carte**, pas la colonne Équipes) | — |
@@ -59,19 +72,31 @@ Exemple : « Éléphant » = « elephant » = « ÉLÉPHANT » ; « Le Louvre »
 ## 4. MEMOTION — gagnant de carte présélectionné (P3d)
 
 - À l'étape de validation d'une carte (`MEMOTION_SUBPHASE = REVEAL`, avant `MEMOTION_DONE`), le sélecteur de gagnant
-  part sur **l'équipe qui a la main** (`MEMOTION_CURRENT_TEAM`), au lieu d'aucune sélection. Cela vaut sur l'admin
-  et sur l'anim.
-- Tous les modes sont concernés (SOLO compris : l'équipe unique a la main).
-- « Personne » et les autres équipes restent sélectionnables. Rien n'est envoyé avant le clic de validation
-  existant.
+  propose, comme aujourd'hui, **seulement deux choix** (règle `motionRules.js`) :
+  - **l'équipe qui a la main** (`MEMOTION_CURRENT_TEAM`) ;
+  - **« Personne »**.
+  Aucune autre équipe n'est jamais proposée. Le sélecteur part sur l'équipe qui a la main, au lieu d'aucune
+  sélection. Cela vaut sur l'admin et sur l'anim.
+- **SOLO** : l'équipe unique a la main (`SetMotionParticipatingTeams` pose `MEMOTION_CURRENT_TEAM = teams[0]`) ; c'est
+  elle qui est présélectionnée. Sans équipe participante (aucune équipe qui a la main), la présélection retombe sur
+  « Personne ».
+- **Geste sur l'anim, en deux temps** : choix (présélectionné), puis **VALIDER**. Le composant le prend en charge par
+  l'option `confirmWinner`, activée par `AnimPage` ; elle vaut `false` par défaut, ce qui garde la rétrocompatibilité.
+  Rien n'est envoyé avant le clic de validation.
+- Sur l'admin, le gagnant présélectionné se valide par le geste existant.
 - Le payload de `MEMOTION_DONE {CARD_ID, WINNER_TEAM, UNITS}` est **inchangé**.
 
 ## 5. Tests exigés
 
 - Table de `preselectAwardKeys` : chaque ligne du §2, plus les cas limites (unité déjà créditée, montant nul ou
   négatif, aucun participant, niveau joueur et niveau équipe, équipe supprimée).
-- `GamePage` : la présélection apparaît à l'entrée en `REVEALED`. Les tests existants de l'attribution groupée
-  (#244 / #251 / #254 / #289) passent sans modification.
-- MEMOTION : le gagnant présélectionné sur l'admin et l'anim reste modifiable ; le payload de `MEMOTION_DONE` est
-  inchangé.
+- `GamePage` : la présélection apparaît à l'entrée en `REVEALED`.
+- Tests existants de l'attribution groupée (#244 / #251 / #254 / #289) : la présélection coche d'office, donc leurs
+  fixtures et leur mise en place sont **adaptées**, **sans supprimer ni affaiblir aucune assertion**. Par exemple, un
+  test repart d'une sélection vide par le geste existant « Tout désélectionner », ou un test de remise à zéro attend
+  la sélection recalculée au lieu d'une sélection vide.
+- MEMOTION :
+  - le choix présélectionné est l'équipe qui a la main, « Personne » restant possible ;
+  - sur l'anim, l'envoi n'a lieu qu'après VALIDER ;
+  - le payload de `MEMOTION_DONE` est inchangé.
 - Repli ARDOISE : les 4 cas nommés.
