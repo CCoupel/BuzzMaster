@@ -5,7 +5,7 @@ Historique des versions du projet BuzzControl.
 ## [13.1.0] - 2026-11-24 — Présélection des gagnants au crédit, sécurité des dépendances Go (#321, #322)
 
 À la révélation de la réponse, la page Jeu coche désormais d'office les équipes ou les joueurs que la question désigne.
-Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas sur « Donner les points ».
+Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas sur « Attribuer les points ».
 
 ### Added
 
@@ -13,7 +13,7 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
   selon le type de question :
   - **Picto** : l'équipe qui dessine, si la manche est trouvée ;
   - **Mémoire** : en solo, l'équipe participante ; en multi-équipes, les équipes qui ont un score positif ;
-  - **Rafale** : l'équipe participante en solo, ou les équipes dont le compteur retenu est positif en multi-équipes ;
+  - **Rafale** : en solo, l'équipe participante si son compteur retenu est positif ; en multi-équipes, les équipes dont le compteur retenu est positif ;
   - **QCM** : les équipes ou les joueurs qui ont donné la bonne couleur ;
   - **Speedy** : le premier buzzeur (son joueur au niveau joueur, son équipe au niveau équipe). L'admin décoche si la réponse était fausse ;
   - **Ardoise** : les équipes dont la réponse correspond à la réponse attendue (comparaison sans accents, sans casse,
@@ -21,9 +21,9 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
   - **Memotion** : voir ci-dessous.
   Une unité déjà créditée, ou dont le montant est nul ou négatif, n'est jamais cochée. La sélection reste modifiable.
 - **Memotion : gagnant de carte présélectionné (#321)** — le sélecteur de gagnant part sur l'équipe qui a la main, avec
-  « Personne » comme seul autre choix. En solo, l'équipe unique est présélectionnée. Sur l'anim, le geste est en deux
-  temps : choix, puis **VALIDER** ; rien n'est envoyé avant ce clic. Sur l'admin, le choix présélectionné se confirme
-  par **Valider**. Le message envoyé au serveur ne change pas.
+  « Personne » comme seul autre choix (libellé « Perdu » sur l'admin). En solo, l'équipe unique est présélectionnée. Sur l'anim,
+  le geste est en deux temps : choix, puis **VALIDER** ; rien n'est envoyé avant ce clic. Sur l'admin, le choix
+  présélectionné se confirme par **Valider**. Le message envoyé au serveur ne change pas.
 
 ### Security
 

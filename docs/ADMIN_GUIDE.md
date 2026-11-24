@@ -246,10 +246,10 @@ d'un coup.
   - Une ancienne question ARDOISE sans réglage crédite désormais **l'équipe** (auparavant le joueur).
 - **Présélection (v13.1.0, #321)** : à l'entrée en REVEALED, la page coche d'office les équipes ou les joueurs gagnants
   selon la question (Picto, Mémoire, Rafale, QCM, Speedy, Ardoise ; voir `contracts/award-preselect.md` §2). Une unité
-  déjà créditée ou dont le montant est nul ou négatif n'est pas cochée. Rien n'est attribué avant « Donner les points » :
+  déjà créditée ou dont le montant est nul ou négatif n'est pas cochée. Rien n'est attribué avant « Attribuer les points » :
   décochez ou cochez à la main avant de valider. Pour SPEEDY, décochez si la réponse du premier buzzeur était fausse.
-- **Memotion (v13.1.0, #321)** : le gagnant de carte est présélectionné sur l'équipe qui a la main ; « Personne » reste
-  possible. Validez avec **Valider** (sur l'anim, le geste est en deux temps : choix puis VALIDER).
+- **Memotion (v13.1.0, #321)** : le gagnant de carte est présélectionné sur l'équipe qui a la main ; L'autre choix
+  reste possible : « Perdu » sur l'admin, « PERSONNE » sur l'anim. Validez avec **Valider** (sur l'anim, le geste est en deux temps : choix puis VALIDER).
 - **Champ « Points »** : le montant vient du champ « Points » de la page, en tête de la colonne Équipes. Il est éditable
   après le REVEAL. Sa **base** est la valeur qu'il a à l'entrée en REVEALED. Une modification faite après le REVEAL est
   « modifiée à la main ».
