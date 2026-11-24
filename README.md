@@ -52,7 +52,7 @@ BuzzControl est une solution complete pour animer des jeux de quiz avec des buzz
 
 ### Tablettes joueurs (VJoueur)
 
-- Chaque joueur reçoit un **jeton de session** à son inscription : sa place ne se reprend qu'avec son appareil
+- Chaque joueur reçoit un **jeton de session** à son inscription : sa place ne se reprend qu'avec le jeton de son appareil, ou après libération par l'animateur
 - Un navigateur ne peut pas inscrire un second joueur tant que la place précédente y est mémorisée : l'animateur libère la place
 - Les buzzers physiques (BuzzClick, identifiés par MAC) ne sont pas concernés
 
@@ -204,9 +204,9 @@ cd web && npm install && cd ..
 }
 ```
 
-Les places des tablettes et leurs empreintes de session sont enregistrées dans `data/config/vplayer_sessions.json`
-(empreintes seules, jamais le jeton). Ce fichier voyage avec `bumpers.json` dans les sauvegardes « Joueurs ». Sans lui,
-les places repassent en « premier arrivé » et un avertissement est journalisé.
+Les places des tablettes sont enregistrées dans `bumpers.json`. Leurs empreintes de session sont dans
+`data/config/vplayer_sessions.json` (empreintes seules, jamais le jeton). Ce fichier voyage avec `bumpers.json` dans les
+sauvegardes « Joueurs ». Sans lui, les places repassent en « premier arrivé » et un avertissement est journalisé.
 
 ### Ports Reseau
 

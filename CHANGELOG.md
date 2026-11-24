@@ -2,14 +2,10 @@
 
 Historique des versions du projet BuzzControl.
 
-## [13.0.0] - 2026-11-23 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191 à #194, #319)
+## [13.0.0] - 2026-11-24 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191, #192, #193, #319, #194)
 
 Nouveau type de jeu **Picto** (✏️) : un dessinateur dessine un mot secret sur sa tablette, l'équipe le devine à l'oral.
 Ce milestone ajoute aussi le jeton de session des tablettes joueurs, et corrige le temps et les points de la page Jeu.
-Version indicative : le numéro exact du build QUALIF est rapporté par le déploiement.
-
-Lots livrés : LOT-1 (type et éditeur, #191), LOT-2.1 (préparation et dessin en direct, #192 et #193), LOT-2.2 (jeton de
-session, #319), LOT-2.3 (fin de manche, révélation et relance, #194), et le correctif de la page Jeu (#192).
 
 ### Added
 
@@ -28,14 +24,15 @@ session, #319), LOT-2.3 (fin de manche, révélation et relance, #194), et le co
   et à l'animateur, sans passer par l'état du jeu. Une feuille est bornée (6 000 traits, 60 000 points), et un client
   qui perd une trame redemande la feuille entière.
 
-### Changed
-
-- **Page Jeu (#192)** — le temps et les points affichés en préparation sont repris de la question, pour tous les types.
 - **Fin de manche Picto (#194)** — « Trouvé ! » arrête et révèle la manche en une seule action, y compris sur le gong
   (après « Temps écoulé »). Issues : trouvé, temps écoulé, arrêt, sans mot. La révélation montre le mot seul sur la TV et
   les tablettes. Le crédit va à l'équipe seule, par la ligne de crédit commune, pré-remplie aux points de la question
   (crédit manuel, ajustable). La relance de la question remet la manche en préparation. Les LED des buzzers allument
   l'équipe qui dessine.
+
+### Changed
+
+- **Page Jeu (#192)** — le temps et les points affichés en préparation sont repris de la question, pour tous les types.
 
 ### Security
 
@@ -44,7 +41,7 @@ session, #319), LOT-2.3 (fin de manche, révélation et relance, #194), et le co
   reconnexion sans le bon jeton est refusée (`INVALID_SESSION`), sans éviction du joueur légitime. Les places créées
   avant v13.0.0 n'ont pas de jeton : la première tablette qui s'y connecte la prend (voir ADMIN_GUIDE, « Tablette qui a
   perdu son jeton »). Les buzzers physiques ne sont pas concernés. Un navigateur ne peut pas inscrire un second joueur
-  tant que la place de l'inscription précédente y est mémorisée (onglet fermé compris).
+  tant que la place mémorisée dans ce navigateur existe encore (onglet fermé compris).
 
 ### Notes
 
