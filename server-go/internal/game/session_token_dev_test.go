@@ -236,3 +236,31 @@ func TestSessionToken_LoadReportsMissingOrUnreadableFile(t *testing.T) {
 		t.Errorf("fichier valable : pas d'erreur attendue, got %v", err)
 	}
 }
+
+// CI rouge (reset « Joueurs ») : une sauvegarde différée ne doit jamais recréer le fichier d'un store vide.
+func TestSessionToken_EmptyStoreHasNoFile_DeferredSaveCannotRecreateIt(t *testing.T) {
+	e, path := newSessionEngine(t)
+	id, _ := enrol(t, e, "Alice")
+	if err := e.SaveVPlayerSessions(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("avec une place, le fichier existe : %v", err)
+	}
+	e.DeleteBumper(id) // store vide
+	if err := e.SaveVPlayerSessions(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("store vide : le fichier doit être supprimé, got %v", err)
+	}
+	// Réinitialisation : suppression explicite du fichier puis sauvegardes différées en retard.
+	_ = os.Remove(path)
+	for i := 0; i < 20; i++ {
+		go func() { _ = e.SaveVPlayerSessions() }()
+	}
+	time.Sleep(100 * time.Millisecond)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("une sauvegarde différée a recréé le fichier d'un store vide : %v", err)
+	}
+}

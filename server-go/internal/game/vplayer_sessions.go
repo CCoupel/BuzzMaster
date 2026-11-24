@@ -115,8 +115,28 @@ func (e *Engine) loadVPlayerSessionsUnsafe() error {
 func (e *Engine) SaveVPlayerSessions() error {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+	return e.writeSessionsUnsafe()
+}
+
+// writeSessionsUnsafe persists the store; the caller holds e.mu (read or write).
+//
+// The store is written SYNCHRONOUSLY by every mutation (issue, remove, prune), under the engine lock — never by
+// a deferred goroutine. A deferred save has no ordering with the explicit file operations of the backup
+// handlers: after a "Joueurs" reset a late save re-created the file (CI failure of
+// TestVPlayerSessionsBackup319_ResetSelect, reproduced 14/60 locally), and after a restoration it would
+// overwrite — or, for an empty store, delete — the file just restored. The writes are rare (enrolment, seat
+// re-key, deletion) and tiny, so they cost nothing on the engine lock.
+//
+// An empty store has NO file: the explicit removal of a reset and the persistence agree.
+func (e *Engine) writeSessionsUnsafe() error {
 	s := e.sessions
 	if s == nil || s.path == "" {
+		return nil
+	}
+	if len(s.tokens) == 0 {
+		if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 		return nil
 	}
 	data, err := json.MarshalIndent(vplayerSessionsFile{Tokens: s.tokens}, "", "  ")
@@ -152,6 +172,14 @@ func (e *Engine) SaveVPlayerSessions() error {
 	return nil
 }
 
+// persistSessionsUnsafe writes the store after a mutation, synchronously (see writeSessionsUnsafe); a failure is
+// logged without any token or fingerprint.
+func (e *Engine) persistSessionsUnsafe() {
+	if err := e.writeSessionsUnsafe(); err != nil {
+		log.Printf("[Engine] vplayer sessions: write failed: %v", err)
+	}
+}
+
 // VPlayerSeatsWithoutFingerprint counts the VJoueur seats that hold no token fingerprint: the seats of the
 // "first to arrive" window (matrix case 1c). Used for the WARN journal of contracts/vplayer-session.md §6.
 func (e *Engine) VPlayerSeatsWithoutFingerprint() int {
@@ -183,7 +211,7 @@ func (e *Engine) sessionIssueUnsafe(id string) string {
 		return ""
 	}
 	e.sessions.tokens[id] = tokenFingerprint(tok)
-	safeGo("SaveVPlayerSessions", e.SaveVPlayerSessions)
+	e.persistSessionsUnsafe()
 	return tok
 }
 
@@ -194,7 +222,7 @@ func (e *Engine) sessionRemoveUnsafe(id string) {
 	}
 	if _, ok := e.sessions.tokens[id]; ok {
 		delete(e.sessions.tokens, id)
-		safeGo("SaveVPlayerSessions", e.SaveVPlayerSessions)
+		e.persistSessionsUnsafe()
 	}
 }
 
@@ -212,6 +240,6 @@ func (e *Engine) sessionPruneUnsafe() {
 		}
 	}
 	if changed {
-		safeGo("SaveVPlayerSessions", e.SaveVPlayerSessions)
+		e.persistSessionsUnsafe()
 	}
 }
