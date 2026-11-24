@@ -1,7 +1,8 @@
 # Contrat — Présélection des gagnants au crédit (#321, v13.1.0)
 
-**Statut** : contrat de référence (contract-first), **révision 2** (2026-11-24, écarts de la revue LOT-1,
-`_work/reports/code-review-20261124-170140.md`).
+**Statut** : contrat de référence (contract-first), **révision 3** (2026-11-24, écarts de la revue LOT-1,
+`_work/reports/code-review-20261124-170140.md`, puis relecture des docs
+`_work/reports/code-review-docs-lot1-20261124-171306.md`).
 **Périmètre** : **frontend seul**. Aucun champ `GameState`, aucune action, aucun endpoint n'est ajouté : toutes les
 données existent déjà (bumpers, `GameState`, question).
 **Arbitrages** : GATE 2 du 2026-11-24 (P3, P3-bis, P3a, P3d). Plan : `_work/reports/plan-20261124-v1310.md`.
@@ -14,7 +15,8 @@ données existent déjà (bumpers, `GameState`, question).
   les **coche d'office** au même moment.
 - Le **montant** de chaque unité ne change pas : c'est la règle existante (`defaultTeamAward` /
   `resolvePointsAward`, `utils/pointsAward.js`).
-- Le crédit reste **manuel** : rien n'est envoyé tant que l'admin n'a pas cliqué « Donner les points ».
+- Le crédit reste **manuel** : rien n'est envoyé tant que l'admin n'a pas cliqué « Attribuer les points »
+  (`TeamAwardBar`).
 
 ```js
 // Signature [planner] — fonction pure, testée en table
@@ -72,19 +74,20 @@ Exemple : « Éléphant » = « elephant » = « ÉLÉPHANT » ; « Le Louvre »
 ## 4. MEMOTION — gagnant de carte présélectionné (P3d)
 
 - À l'étape de validation d'une carte (`MEMOTION_SUBPHASE = REVEAL`, avant `MEMOTION_DONE`), le sélecteur de gagnant
-  propose, comme aujourd'hui, **seulement deux choix** (règle `motionRules.js`) :
-  - **l'équipe qui a la main** (`MEMOTION_CURRENT_TEAM`) ;
-  - **« Personne »**.
-  Aucune autre équipe n'est jamais proposée. Le sélecteur part sur l'équipe qui a la main, au lieu d'aucune
-  sélection. Cela vaut sur l'admin et sur l'anim.
+  propose **seulement deux choix** (règle `motionRules.js`) : **l'équipe qui a la main** (`MEMOTION_CURRENT_TEAM`), et
+  **personne** (« Perdu » sur l'admin, « PERSONNE » sur l'anim). Aucune autre équipe n'est jamais proposée.
+- Le choix part sur **l'équipe qui a la main**, au lieu d'aucune sélection, sur l'admin comme sur l'anim.
 - **SOLO** : l'équipe unique a la main (`SetMotionParticipatingTeams` pose `MEMOTION_CURRENT_TEAM = teams[0]`) ; c'est
-  elle qui est présélectionnée. Sans équipe participante (aucune équipe qui a la main), la présélection retombe sur
-  « Personne ».
-- **Geste sur l'anim, en deux temps** : choix (présélectionné), puis **VALIDER**. Le composant le prend en charge par
-  l'option `confirmWinner`, activée par `AnimPage` ; elle vaut `false` par défaut, ce qui garde la rétrocompatibilité.
-  Rien n'est envoyé avant le clic de validation.
-- Sur l'admin, le gagnant présélectionné se valide par le geste existant.
-- Le payload de `MEMOTION_DONE {CARD_ID, WINNER_TEAM, UNITS}` est **inchangé**.
+  elle qui est présélectionnée. Sans équipe qui a la main, la présélection retombe sur « personne ».
+- **Geste en deux temps, sur l'admin comme sur l'anim** : un **choix** (modifiable), puis une **validation**. Rien
+  n'est envoyé avant la validation.
+
+| Écran | Avant v13.1.0 | À partir de v13.1.0 |
+|---|---|---|
+| Admin (`GamePage`, « Qui a bien répondu ? ») | un clic sur un chip envoyait `MEMOTION_DONE` aussitôt | chips de **sélection** (équipe qui a la main, « Perdu »), puis **nouveau** bouton **« Valider »** qui envoie `MEMOTION_DONE` |
+| Anim (`AnimMotionActions`) | un clic envoyait aussitôt | **sélection** (équipe qui a la main, « PERSONNE »), puis **« VALIDER »** (sous-libellé : l'équipe choisie ou « personne »). Option `confirmWinner` du composant, activée par `AnimPage`, `false` par défaut (rétrocompatible) |
+
+- Le payload de `MEMOTION_DONE {CARD_ID, WINNER_TEAM, UNITS}` est **inchangé** (`WINNER_TEAM = ""` pour personne).
 
 ## 5. Tests exigés
 
@@ -96,7 +99,7 @@ Exemple : « Éléphant » = « elephant » = « ÉLÉPHANT » ; « Le Louvre »
   test repart d'une sélection vide par le geste existant « Tout désélectionner », ou un test de remise à zéro attend
   la sélection recalculée au lieu d'une sélection vide.
 - MEMOTION :
-  - le choix présélectionné est l'équipe qui a la main, « Personne » restant possible ;
-  - sur l'anim, l'envoi n'a lieu qu'après VALIDER ;
+  - le choix présélectionné est l'équipe qui a la main, « personne » restant possible ;
+  - l'envoi n'a lieu qu'après « Valider » (admin) ou « VALIDER » (anim) ;
   - le payload de `MEMOTION_DONE` est inchangé.
 - Repli ARDOISE : les 4 cas nommés.

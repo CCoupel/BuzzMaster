@@ -1,6 +1,17 @@
 # Changelog des Contrats API
 
 ---
+## [20261124-f] — v13.1.0 — Présélection des gagnants : MEMOTION admin en deux temps, libellé du bouton (#321)
+
+`award-preselect.md` révision 3, texte aligné sur le code (relecture des docs du LOT-1). **Aucun BREAKING.**
+- **[CHANGED — correction]** §4 MEMOTION, admin : les chips de « Qui a bien répondu ? » **sélectionnent** (équipe qui
+  a la main, « Perdu »). Un **nouveau** bouton « Valider » envoie `MEMOTION_DONE`. Avant, un clic sur un chip
+  l'envoyait aussitôt. L'admin et l'anim suivent le même geste en deux temps ; « Perdu » (admin) et « PERSONNE »
+  (anim) désignent le même choix « personne ».
+- **[CHANGED — correction]** §1 : le bouton de crédit s'appelle « Attribuer les points » (`TeamAwardBar`), et non
+  « Donner les points ».
+
+---
 ## [20261124-e] — v13.1.0 — Présélection des gagnants : écarts de la revue LOT-1 (#321)
 
 `award-preselect.md` révision 2, texte aligné sur le code et sur la règle MEMOTION existante. **Aucun BREAKING.**
