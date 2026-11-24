@@ -449,6 +449,11 @@ body {
     color: var(--text-muted);
 }
 
+.feature-card p strong {
+    color: var(--primary);
+    font-weight: 700;
+}
+
 /* Capture d'ecran illustrant une carte de fonctionnalite (v5.10) */
 .feature-shot {
     width: 100%;
