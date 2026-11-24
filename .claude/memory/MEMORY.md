@@ -21,9 +21,6 @@
 - **Décisions de ce milestone** : une manche = un mot, sans passe (passes reportées v13.1.0) ; mot saisi dans la question, pas de
   réservoir ni d'IA (reportés v13.1.0, #48 / #318) ; mode RAFALE de PICTO (maximum de mots) reporté v13.1.0.
 - **Travail en cours** : aucun. Milestone à clore après PROD.
-- **Points à trancher, non migrés au RETEX** (règle permanente ou cible incertaine) :
-  1. capture marketing : navigateur sans tête (Playwright + chrome-headless-shell) à inscrire dans `.claude-launcher/env.yaml`
-     (fichier infra, modifié non commité — à traiter par `infra`).
 - **Backlog / points de vigilance** :
   - **#259** : endpoints sans authentification (`/questions`, `/files`, `/ws/*`) ; les mots Picto sont lisibles avant correction.
   - **#318 / #48** (v13.1.0) : réservoir Picto, génération IA, catégorie « Pools » de la sauvegarde, mode RAFALE de PICTO.
