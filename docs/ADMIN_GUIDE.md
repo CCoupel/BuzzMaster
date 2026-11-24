@@ -1316,10 +1316,12 @@ l'éditeur de la question, la préparation, le dessin, puis la fin de manche et 
 - **Arrêt** (STOP) : la manche s'arrête. La tablette du dessinateur affiche « ⏹ Manche arrêtée » sur sa feuille verrouillée.
   Le mot se révèle ensuite avec « 👁 Révéler le mot » (animateur), sans points.
 - **Sans mot** : si la question n'a plus de mot au lancement, la manche s'arrête aussitôt, sans rien envoyer au dessinateur.
-- **Révélation** : sur l'animateur, le titre passe à « ✅ Trouvé — le mot est affiché sur la TV ». Sur l'admin, le titre est
-  « ✏️ Picto — révélé · ✅ Trouvé ». Le bouton **REPONSE** de la page Jeu (le même que pour les autres types) révèle la
-  manche, comme sur la page Jeu de l'admin. La TV et les tablettes n'affichent que le **mot**. Le crédit de l'équipe se voit par
-  l'animation de points commune, sans mention « Trouvé par ».
+- **Révélation** : le titre reprend l'issue réelle de la manche. Exemple après « Trouvé » : sur l'animateur,
+  « ✅ Trouvé — le mot est affiché sur la TV » ; sur l'admin, « ✏️ Picto — révélé · ✅ Trouvé ». Après « Temps écoulé » ou
+  un arrêt, le titre affiche l'issue correspondante, par exemple « ⏰ Temps écoulé — le mot est affiché sur la TV ». La TV et les
+  tablettes n'affichent que le **mot**. Le crédit de l'équipe se voit par l'animation de points commune, sans mention « Trouvé par ».
+- **Bouton de révélation** : sur l'admin, le bouton **REPONSE** de la page Jeu (le même que pour les autres types) ; sur
+  l'animateur, « 👁 Révéler le mot ».
 
 **Relancer la question** : si le dessinateur décroche ou si la manche est mal partie, sélectionnez de nouveau la question.
 Elle revient en préparation, avec la même équipe et le même dessinateur (modifiables), et une feuille vierge au lancement
