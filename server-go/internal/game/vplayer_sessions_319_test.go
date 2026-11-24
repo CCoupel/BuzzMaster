@@ -57,6 +57,9 @@ func (s *sessEngine319) persist(t *testing.T) map[string]string {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(s.sessions)
+	if os.IsNotExist(err) {
+		return map[string]string{} // store vide = pas de fichier (4541fc0a) : aucune empreinte
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +120,8 @@ func TestVPlayerSessions319_File_Mode0600_AtomicNoLeftover(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(s.dir)
 	for _, en := range entries {
-		if strings.Contains(en.Name(), ".tmp") {
+		// Seul le fichier des empreintes est concerné : une sauvegarde de bumpers.json peut être en vol (goroutine du moteur).
+		if strings.HasPrefix(en.Name(), "vplayer_sessions.json") && strings.Contains(en.Name(), ".tmp") {
 			t.Errorf("écriture atomique : fichier temporaire %q laissé sur le disque", en.Name())
 		}
 	}
