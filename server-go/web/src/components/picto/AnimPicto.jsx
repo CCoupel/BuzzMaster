@@ -25,6 +25,8 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
   const withPlayers = new Set(Object.values(bumpers || {}).filter(b => b.TEAM).map(b => b.TEAM))
   const teamList = Object.keys(teams || {}).filter(name => withPlayers.has(name)).map(name => ({ name, color: teams[name]?.COLOR }))
   const points = q.POINTS
+  const outcomeShown = !!gs.PICTO_OUTCOME && (gs.phase === 'STOPPED' || gs.phase === 'REVEALED')
+  const outcomeSuffix = gs.phase === 'REVEALED' ? ' — le mot est affiché sur la TV' : (gs.PICTO_OUTCOME === 'TIMEOUT' ? ' — le mot n\'est pas encore affiché' : '')
   return (
     <div className="anim-picto" data-testid="anim-picto">
       <div className="anim-picto-bar">
@@ -46,16 +48,17 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
             </div>
             <div className="anim-picto-side">
               <div className="picto-wordbox">
-                <span className="picto-lbl">{gs.phase === 'REVEALED' ? 'Mot révélé' : 'Mot à faire deviner'}</span>
+                {/* Libellé de la carte du mot : texte exact des maquettes validées (anim_picto__found_credit) */}
+                {outcomeShown ? (
+                  <div className="picto-lbl" data-testid="anim-picto-outcome"><b>{outcomeLabel(gs)}</b>{outcomeSuffix}</div>
+                ) : (
+                  <span className="picto-lbl">Mot à faire deviner</span>
+                )}
                 <div className="picto-word" data-testid="anim-picto-word">{word || '—'}</div>
                 {cat && <p className="picto-muted">{cat.label} · tiré parmi les {words} mot{words > 1 ? 's' : ''} de la question</p>}
               </div>
-              {gs.PICTO_OUTCOME && (gs.phase === 'STOPPED' || gs.phase === 'REVEALED') && (
-                <div className="anim-picto-outcome" data-testid="anim-picto-outcome">
-                  <b>{outcomeLabel(gs)}</b>
-                  {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME === 'TIMEOUT' && <p className="picto-muted">Réponse donnée sur le gong ? « Trouvé » crédite encore l'équipe. Sinon, « Révéler » montre le mot à tous, sans points.</p>}
-                  {gs.phase === 'REVEALED' && <p className="picto-muted">Crédit : ligne de l'équipe ci-dessous (montant pré-rempli aux points de la question).</p>}
-                </div>
+              {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME === 'TIMEOUT' && (
+                <p className="picto-muted">Réponse donnée sur le gong ? « Trouvé » crédite encore l'équipe. Sinon, « Révéler » montre le mot à tous, sans points.</p>
               )}
               <div className="anim-picto-actions">
                 {canPictoFound(gs) && (

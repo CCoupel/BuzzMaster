@@ -66,7 +66,8 @@ describe('PictoPanel (admin) — fin de manche', () => {
   it('révélé : mot révélé et crédit par la colonne Équipes', () => {
     render(<PictoPanel gameState={{ ...base, phase: 'REVEALED', PICTO_OUTCOME: 'FOUND', PICTO_REVEALED_WORD: 'Maison' }} actions={acts()} />)
     expect(screen.getByTestId('picto-word').textContent).toBe('Maison')
-    expect(screen.getByTestId('picto-outcome').textContent).toMatch(/Trouvé.*colonne Équipes/)
+    expect(screen.getByTestId('picto-outcome').textContent).toMatch(/Picto — révélé · ✅ Trouvé/)
+    expect(screen.getByText(/Crédit par la colonne Équipes \(champ Points pré-rempli à 10\), comme pour les autres types ; il déclenche l'animation commune des points sur la TV\./)).toBeTruthy()
   })
 })
 
@@ -87,8 +88,7 @@ describe('AnimPictoView — fin de manche', () => {
     expect(screen.getByTestId('anim-picto-reveal')).toBeTruthy()
     rerender(<AnimPictoView gameState={{ ...base, phase: 'REVEALED', PICTO_OUTCOME: 'FOUND', PICTO_REVEALED_WORD: 'Maison' }} teams={teams} bumpers={bumpers} actions={acts()} store={createPictoCanvasStore()} />)
     expect(screen.getByTestId('anim-picto-word').textContent).toBe('Maison')
-    expect(screen.getByTestId('anim-picto-outcome').textContent).toMatch(/✅ Trouvé/)
-    expect(screen.getByTestId('anim-picto-outcome').textContent).not.toMatch(/par Bleue/)
+    expect(screen.getByTestId('anim-picto-outcome').textContent).toBe('✅ Trouvé — le mot est affiché sur la TV')
   })
   it('alerte dessinateur déconnecté en manche', () => {
     render(<AnimPictoView gameState={{ ...base, PICTO_DRAWER_CONNECTED: false }} teams={teams} bumpers={bumpers} actions={acts()} store={createPictoCanvasStore()} />)

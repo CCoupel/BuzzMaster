@@ -39,10 +39,14 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
   const words = gs.PICTO_WORDS_COUNT || (q.PICTO_WORDS || []).length || 0
   const word = pictoShownWord(gs, pictoWord)
   const team = teamList.find(t => t.name === gs.PICTO_TEAM)
+  const revealed = gs.phase === 'REVEALED'
 
   return (
     <div className="picto-panel" data-testid="picto-panel">
-      <div className="picto-title">✏️ Picto — {isPreparing(gs.phase) ? 'préparation' : gs.phase === 'REVEALED' ? 'révélé' : 'manche en cours'}</div>
+      {/* Titre exact de la maquette validée admin_game_picto__found_credit : « ✏️ Picto — révélé · ✅ Trouvé » en REVEALED */}
+      <div className="picto-title" data-testid={revealed && gs.PICTO_OUTCOME ? 'picto-outcome' : undefined}>
+        ✏️ Picto — {isPreparing(gs.phase) ? 'préparation' : revealed ? `révélé${gs.PICTO_OUTCOME ? ` · ${outcomeLabel(gs)}` : ''}` : 'manche en cours'}
+      </div>
       <p className="picto-muted">
         ✍️ <b>{words} mot{words > 1 ? 's' : ''}</b> dans la question
         {cat ? ` · ${cat.icon ? `${cat.icon} ` : ''}${cat.label}` : ''} · un mot tiré au lancement
@@ -51,9 +55,10 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
       {(isDrawing(gs.phase) || gs.phase === 'REVEALED') && (
         <div className="picto-live">
           <div className="picto-wordbox">
-            <span className="picto-lbl">{gs.phase === 'REVEALED' ? 'Mot révélé' : 'Mot · secret (admin, animateur, dessinateur)'}</span>
+            {!revealed && <span className="picto-lbl">Mot · secret (admin, animateur, dessinateur)</span>}
             <div className="picto-word" data-testid="picto-word">{word || '—'}</div>
           </div>
+          {!revealed && (
           <div className="picto-side">
             <div className="picto-muted" style={team ? { '--c': teamCss(team.color) } : undefined}>
               ✏️ {gs.PICTO_DRAWER_NAME || '—'} · {gs.PICTO_TEAM || '—'}
@@ -64,13 +69,18 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
               </button>
             )}
           </div>
+          )}
         </div>
       )}
-      {(gs.phase === 'STOPPED' || gs.phase === 'REVEALED') && gs.PICTO_OUTCOME && (
+      {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME && (
         <p className="picto-outcome" data-testid="picto-outcome">
           {outcomeLabel(gs)}
-          {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME === 'TIMEOUT' ? ' — le mot n\'est pas encore affiché : « Trouvé » crédite encore l\'équipe, « Reveal » montre le mot à tous, sans points.' : ''}
-          {gs.phase === 'REVEALED' ? ' — crédit par la colonne Équipes (champ Points pré-rempli aux points de la question) ; l\'animation de gain commune s\'affiche sur la TV.' : ''}
+          {gs.PICTO_OUTCOME === 'TIMEOUT' ? ' — le mot n\'est pas encore affiché : « Trouvé » crédite encore l\'équipe, « Reveal » montre le mot à tous, sans points.' : ''}
+        </p>
+      )}
+      {revealed && (
+        <p className="picto-muted">
+          Crédit par la colonne Équipes (champ Points pré-rempli à {q.POINTS ?? '—'}), comme pour les autres types ; il déclenche l'animation commune des points sur la TV.
         </p>
       )}
       <PictoDisconnectAlert gs={gs} />
