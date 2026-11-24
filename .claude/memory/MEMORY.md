@@ -22,10 +22,7 @@
   réservoir ni d'IA (reportés v13.1.0, #48 / #318) ; mode RAFALE de PICTO (maximum de mots) reporté v13.1.0.
 - **Travail en cours** : aucun. Milestone à clore après PROD.
 - **Points à trancher, non migrés au RETEX** (règle permanente ou cible incertaine) :
-  1. « une question à la fois » (AskUserQuestion) : règle utilisateur, cible à choisir (CLAUDE.md ou COMMON) ;
-  2. labels d'issue : « LOT A VALIDER » retiré dès la validation du GATE LOT, avant la CI ; CI rouge → `EN COURS` + commentaire :
-     règle à porter dans `GITHUB.template.md` (template, pas le projet) ;
-  3. capture marketing : navigateur sans tête (Playwright + chrome-headless-shell) à inscrire dans `.claude-launcher/env.yaml`
+  1. capture marketing : navigateur sans tête (Playwright + chrome-headless-shell) à inscrire dans `.claude-launcher/env.yaml`
      (fichier infra, modifié non commité — à traiter par `infra`).
 - **Backlog / points de vigilance** :
   - **#259** : endpoints sans authentification (`/questions`, `/files`, `/ws/*`) ; les mots Picto sont lisibles avant correction.
