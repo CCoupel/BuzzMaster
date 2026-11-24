@@ -75,7 +75,7 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
       {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME && (
         <p className="picto-outcome" data-testid="picto-outcome">
           {outcomeLabel(gs)}
-          {gs.PICTO_OUTCOME === 'TIMEOUT' ? ' — le mot n\'est pas encore affiché : « Trouvé » crédite encore l\'équipe, « Reveal » montre le mot à tous, sans points.' : ''}
+          {gs.PICTO_OUTCOME === 'TIMEOUT' ? ' — le mot n\'est pas encore affiché : « Trouvé » crédite encore l\'équipe, « REPONSE » montre le mot à tous, sans points.' : ''}
         </p>
       )}
       {revealed && (

@@ -53,11 +53,11 @@ describe('PictoPanel (admin) — fin de manche', () => {
     fireEvent.click(screen.getByTestId('picto-found'))
     expect(a.found).toHaveBeenCalled()
   })
-  it('temps écoulé : « Trouvé (sur le gong) » proposé, mot secret toujours affiché à l\'admin, explication de Reveal', () => {
+  it('temps écoulé : « Trouvé (sur le gong) » proposé, mot secret toujours affiché à l\'admin, explication du bouton REPONSE', () => {
     render(<PictoPanel gameState={{ ...base, phase: 'STOPPED', PICTO_OUTCOME: 'TIMEOUT' }} actions={acts()} pictoWord={w} />)
     expect(screen.getByTestId('picto-found').textContent).toMatch(/sur le gong/)
     expect(screen.getByTestId('picto-word').textContent).toBe('Maison')
-    expect(screen.getByTestId('picto-outcome').textContent).toMatch(/Reveal/)
+    expect(screen.getByTestId('picto-outcome').textContent).toMatch(/REPONSE/)
   })
   it('arrêt : pas de « Trouvé »', () => {
     render(<PictoPanel gameState={{ ...base, phase: 'STOPPED', PICTO_OUTCOME: 'STOPPED' }} actions={acts()} pictoWord={w} />)
