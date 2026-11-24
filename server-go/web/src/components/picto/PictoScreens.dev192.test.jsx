@@ -70,10 +70,10 @@ describe('AnimPictoView (anim, M1)', () => {
     expect(screen.queryByRole('button', { name: /Vide/ })).toBeNull()
     expect(screen.getByText(/mots dans la question/)).toBeTruthy()
   })
-  it('manche : mot et gain, pas de bouton de remplacement du dessinateur', () => {
+  it('manche : mot, pas de chip « Gain », pas de bouton de remplacement du dessinateur', () => {
     render(<AnimPictoView gameState={{ ...base, phase: 'STARTED' }} teams={teams} bumpers={bumpers} actions={actions()} pictoWord={{ WORD: 'Maison', EPOCH: 3 }} store={createPictoCanvasStore()} />)
     expect(screen.getByTestId('anim-picto-word').textContent).toBe('Maison')
-    expect(screen.getByText(/\+10 pts/)).toBeTruthy()
+    expect(screen.queryByText(/Gain/)).toBeNull() // plus de chip « Gain » en manche (gain montré par l'animation commune, #265)
     expect(screen.queryByRole('button', { name: /Changer/ })).toBeNull()
   })
 })

@@ -45,16 +45,13 @@ export function pictoShownWord(gs, pictoWord) {
   return ''
 }
 
-/** Équipe qui a trouvé (issue FOUND), sinon ''. */
-export const pictoFoundBy = (gs) => (gs?.PICTO_OUTCOME === 'FOUND' ? (gs.PICTO_TEAM || '') : '')
-
 /** « Trouvé ! » proposé : manche en cours, ou temps écoulé tant que le mot n'est pas révélé (I5, §6.4). */
 export const canPictoFound = (gs) => gs?.phase === 'STARTED' || gs?.phase === 'PAUSED' || (gs?.phase === 'STOPPED' && gs?.PICTO_OUTCOME === 'TIMEOUT')
 
 /** Libellé court de l'issue (admin / anim). */
 export function outcomeLabel(gs) {
   switch (gs?.PICTO_OUTCOME) {
-    case 'FOUND': return `✅ Trouvé par ${gs.PICTO_TEAM || "l'équipe"}`
+    case 'FOUND': return '✅ Trouvé'
     case 'TIMEOUT': return '⏰ Temps écoulé'
     case 'STOPPED': return '⏹ Manche arrêtée'
     case 'NO_WORD': return 'Aucun mot dans la question'

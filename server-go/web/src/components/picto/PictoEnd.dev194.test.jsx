@@ -4,7 +4,7 @@ import PictoPanel from './PictoPanel'
 import { AnimPictoView } from './AnimPicto'
 import PictoTv from './PictoTv'
 import { createPictoCanvasStore } from './pictoCanvasStore'
-import { canPictoFound, outcomeLabel, pictoFoundBy, makePictoActions } from './pictoState'
+import { canPictoFound, outcomeLabel, makePictoActions } from './pictoState'
 import { resolveAwardLevel } from '../../utils/pointsAward'
 
 // #194 (LOT-2.3, tâche 12) — fin de manche : « Trouvé », temps écoulé, révélation, crédit, alerte de déconnexion.
@@ -30,13 +30,11 @@ describe('pictoState — issues', () => {
     expect(canPictoFound({ ...base, phase: 'REVEALED', PICTO_OUTCOME: 'FOUND' })).toBe(false)
     expect(canPictoFound({ ...base, phase: 'READY' })).toBe(false)
   })
-  it('libellés des 4 issues ; l\'équipe gagnante seulement pour FOUND', () => {
-    expect(outcomeLabel({ ...base, PICTO_OUTCOME: 'FOUND' })).toBe('✅ Trouvé par Bleue')
+  it('libellés des 4 issues ; « Trouvé » sans nom d\'équipe', () => {
+    expect(outcomeLabel({ ...base, PICTO_OUTCOME: 'FOUND' })).toBe('✅ Trouvé')
     expect(outcomeLabel({ ...base, PICTO_OUTCOME: 'TIMEOUT' })).toMatch(/Temps écoulé/)
     expect(outcomeLabel({ ...base, PICTO_OUTCOME: 'STOPPED' })).toMatch(/arrêtée/)
     expect(outcomeLabel({ ...base, PICTO_OUTCOME: 'NO_WORD' })).toMatch(/Aucun mot/)
-    expect(pictoFoundBy({ ...base, PICTO_OUTCOME: 'TIMEOUT' })).toBe('')
-    expect(pictoFoundBy({ ...base, PICTO_OUTCOME: 'FOUND' })).toBe('Bleue')
   })
   it('PICTO_FOUND est envoyé sans charge', () => {
     const send = vi.fn(); makePictoActions(send).found()
@@ -68,7 +66,7 @@ describe('PictoPanel (admin) — fin de manche', () => {
   it('révélé : mot révélé et crédit par la colonne Équipes', () => {
     render(<PictoPanel gameState={{ ...base, phase: 'REVEALED', PICTO_OUTCOME: 'FOUND', PICTO_REVEALED_WORD: 'Maison' }} actions={acts()} />)
     expect(screen.getByTestId('picto-word').textContent).toBe('Maison')
-    expect(screen.getByTestId('picto-outcome').textContent).toMatch(/Trouvé par Bleue.*colonne Équipes/)
+    expect(screen.getByTestId('picto-outcome').textContent).toMatch(/Trouvé.*colonne Équipes/)
   })
 })
 
@@ -89,7 +87,8 @@ describe('AnimPictoView — fin de manche', () => {
     expect(screen.getByTestId('anim-picto-reveal')).toBeTruthy()
     rerender(<AnimPictoView gameState={{ ...base, phase: 'REVEALED', PICTO_OUTCOME: 'FOUND', PICTO_REVEALED_WORD: 'Maison' }} teams={teams} bumpers={bumpers} actions={acts()} store={createPictoCanvasStore()} />)
     expect(screen.getByTestId('anim-picto-word').textContent).toBe('Maison')
-    expect(screen.getByTestId('anim-picto-outcome').textContent).toMatch(/Trouvé par Bleue/)
+    expect(screen.getByTestId('anim-picto-outcome').textContent).toMatch(/✅ Trouvé/)
+    expect(screen.getByTestId('anim-picto-outcome').textContent).not.toMatch(/par Bleue/)
   })
   it('alerte dessinateur déconnecté en manche', () => {
     render(<AnimPictoView gameState={{ ...base, PICTO_DRAWER_CONNECTED: false }} teams={teams} bumpers={bumpers} actions={acts()} store={createPictoCanvasStore()} />)
@@ -99,12 +98,13 @@ describe('AnimPictoView — fin de manche', () => {
 
 describe('PictoTv — révélation et tablettes', () => {
   const cat = { label: 'Animaux', icon: '🐾' }; const store = createPictoCanvasStore()
-  it('TV : mot révélé + « Trouvé par … · +10 pts » en FOUND', () => {
+  it('TV : le mot révélé seul — ni « Trouvé par … » ni « +N pts » (l\'animation de gain commune s\'en charge)', () => {
     render(<PictoTv gameState={{ ...base, phase: 'REVEALED', PICTO_OUTCOME: 'FOUND', PICTO_REVEALED_WORD: 'Maison' }} catMeta={cat} store={store} />)
     expect(screen.getByTestId('picto-revealed-word').textContent).toBe('Maison')
-    expect(screen.getByTestId('picto-found-by').textContent).toBe('✅ Trouvé par Bleue · +10 pts')
+    expect(screen.queryByTestId('picto-found-by')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/Trouvé par|\+10 pts/)
   })
-  it('TV : mot révélé sans ligne « Trouvé » pour les autres issues ; rien du tout si aucun mot (NO_WORD)', () => {
+  it('TV : même mot seul pour les autres issues ; rien du tout si aucun mot (NO_WORD)', () => {
     const { rerender, container } = render(<PictoTv gameState={{ ...base, phase: 'REVEALED', PICTO_OUTCOME: 'TIMEOUT', PICTO_REVEALED_WORD: 'Maison' }} catMeta={cat} store={store} />)
     expect(screen.getByTestId('picto-revealed-word')).toBeTruthy()
     expect(screen.queryByTestId('picto-found-by')).toBeNull()
@@ -117,20 +117,22 @@ describe('PictoTv — révélation et tablettes', () => {
     expect(container.querySelector('.zone-answers').textContent).toBe('')
     expect(container.textContent).not.toMatch(/Maison/)
   })
-  it('dessinateur : feuille verrouillée avec le motif (pause, temps écoulé, arrêt), puis « Trouvé par … » et le mot en révélation', () => {
+  it('dessinateur : feuille verrouillée avec le motif (pause, temps écoulé, arrêt), puis « Mot révélé » et le mot en révélation', () => {
     const props = { isVPlayer: true, playerId: 'b1', store, sendMessage: vi.fn() }
     const { rerender } = render(<PictoTv {...props} gameState={{ ...base, phase: 'STOPPED', PICTO_OUTCOME: 'TIMEOUT' }} pictoWord={w} />)
     expect(screen.getByText('⏰ Temps écoulé')).toBeTruthy()
     rerender(<PictoTv {...props} gameState={{ ...base, phase: 'STOPPED', PICTO_OUTCOME: 'STOPPED' }} pictoWord={w} />)
     expect(screen.getByText('⏹ Manche arrêtée')).toBeTruthy()
     rerender(<PictoTv {...props} gameState={{ ...base, phase: 'REVEALED', PICTO_OUTCOME: 'FOUND', PICTO_REVEALED_WORD: 'Maison' }} />)
-    expect(screen.getByText('✅ Trouvé par Bleue')).toBeTruthy()
+    expect(screen.getByText('Mot révélé')).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/Trouvé par/)
     expect(screen.getByTestId('picto-drawer-word').textContent).toBe('Maison')
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
-  it('autres tablettes en révélation : « Trouvé par … » et le mot, sans feuille', () => {
+  it('autres tablettes en révélation : « Mot révélé » puis le mot seul, sans feuille', () => {
     render(<PictoTv isVPlayer playerId="b9" teamName="Rouge" store={store} gameState={{ ...base, phase: 'REVEALED', PICTO_OUTCOME: 'FOUND', PICTO_REVEALED_WORD: 'Maison' }} />)
-    expect(screen.getByTestId('picto-guesser-revealed').textContent).toMatch(/Trouvé par Bleue.*Maison/)
+    expect(screen.getByTestId('picto-guesser-revealed').textContent).toMatch(/Mot révélé.*Maison/)
+    expect(screen.getByTestId('picto-guesser-revealed').textContent).not.toMatch(/Trouvé par/)
     expect(screen.queryByTestId('picto-canvas')).toBeNull()
   })
 })

@@ -70,7 +70,7 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
         <p className="picto-outcome" data-testid="picto-outcome">
           {outcomeLabel(gs)}
           {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME === 'TIMEOUT' ? ' — le mot n\'est pas encore affiché : « Trouvé » crédite encore l\'équipe, « Reveal » montre le mot à tous, sans points.' : ''}
-          {gs.phase === 'REVEALED' ? ' — crédit par la colonne Équipes (champ Points pré-rempli aux points de la question).' : ''}
+          {gs.phase === 'REVEALED' ? ' — crédit par la colonne Équipes (champ Points pré-rempli aux points de la question) ; l\'animation de gain commune s\'affiche sur la TV.' : ''}
         </p>
       )}
       <PictoDisconnectAlert gs={gs} />

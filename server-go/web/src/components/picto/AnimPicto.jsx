@@ -50,12 +50,11 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
                 <div className="picto-word" data-testid="anim-picto-word">{word || '—'}</div>
                 {cat && <p className="picto-muted">{cat.label} · tiré parmi les {words} mot{words > 1 ? 's' : ''} de la question</p>}
               </div>
-              {points ? <div className="picto-chips"><span className="picto-chip">Gain <b>+{points} pts</b></span></div> : null}
               {gs.PICTO_OUTCOME && (gs.phase === 'STOPPED' || gs.phase === 'REVEALED') && (
                 <div className="anim-picto-outcome" data-testid="anim-picto-outcome">
                   <b>{outcomeLabel(gs)}</b>
                   {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME === 'TIMEOUT' && <p className="picto-muted">Réponse donnée sur le gong ? « Trouvé » crédite encore l'équipe. Sinon, « Révéler » montre le mot à tous, sans points.</p>}
-                  {gs.phase === 'REVEALED' && <p className="picto-muted">Crédit : ligne de chaque équipe ci-dessous (montant pré-rempli aux points de la question pour l'équipe qui a trouvé).</p>}
+                  {gs.phase === 'REVEALED' && <p className="picto-muted">Crédit : ligne de l'équipe ci-dessous (montant pré-rempli aux points de la question).</p>}
                 </div>
               )}
               <div className="anim-picto-actions">

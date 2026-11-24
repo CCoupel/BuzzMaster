@@ -12,7 +12,7 @@ import { useEffect } from 'react'
 import Timer from '../Timer'
 import PictoCanvasView from './PictoCanvasView'
 import PictoCanvasInput from './PictoCanvasInput'
-import { errorText, pictoFoundBy, pictoShownWord } from './pictoState'
+import { errorText, pictoShownWord } from './pictoState'
 import './PictoCanvas.css'
 import './PictoTv.css'
 
@@ -52,11 +52,6 @@ export function PictoTvScreen({ gameState: gs, catMeta, store }) {
         {revealed && gs.PICTO_REVEALED_WORD && (
           <div className="answer-container">
             <p className="answer-text" data-testid="picto-revealed-word">{gs.PICTO_REVEALED_WORD}</p>
-            {pictoFoundBy(gs) && (
-              <p className="picto-found-by" data-testid="picto-found-by">
-                ✅ Trouvé par {pictoFoundBy(gs)}{gs.question?.POINTS ? ` · +${gs.question.POINTS} pts` : ''}
-              </p>
-            )}
           </div>
         )}
       </div>
@@ -71,7 +66,6 @@ export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage
   const locked = gs.phase !== 'STARTED'
   const full = error?.CODE === 'CANVAS_FULL'
   const revealed = gs.phase === 'REVEALED'
-  const foundBy = pictoFoundBy(gs)
   // Feuille verrouillée : pause, temps écoulé / arrêt ; en révélation, la feuille finale reste affichée sans voile
   const lockLabel = gs.phase === 'PAUSED' ? '⏸ Jeu en pause'
     : gs.phase === 'STOPPED' ? (gs.PICTO_OUTCOME === 'TIMEOUT' ? '⏰ Temps écoulé' : '⏹ Manche arrêtée')
@@ -92,7 +86,7 @@ export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage
   return (
     <div className={`picto-tab drawer${landscape ? ' land' : ''}`} data-testid="picto-drawer">
       <div className="picto-tab-banner">
-        <span>{revealed ? (foundBy ? `✅ Trouvé par ${foundBy}` : 'Mot révélé') : `Fais deviner · ⏱ ${mmss(gs.timer)}`}</span>
+        <span>{revealed ? 'Mot révélé' : `Fais deviner · ⏱ ${mmss(gs.timer)}`}</span>
         <div className="picto-tab-word" data-testid="picto-drawer-word">{word || '—'}</div>
       </div>
       <div className="picto-tab-sheet">
@@ -113,10 +107,9 @@ export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage
 export function PictoGuesserScreen({ gameState: gs, teamName }) {
   const mine = !!teamName && teamName === gs.PICTO_TEAM
   if (gs.phase === 'REVEALED') {
-    const foundBy = pictoFoundBy(gs)
     return (
       <div className="picto-tab center" data-testid="picto-guesser-revealed">
-        {foundBy ? <div className="picto-tab-sub">✅ Trouvé par {foundBy}</div> : null}
+        <div className="picto-tab-sub">Mot révélé</div>
         {gs.PICTO_REVEALED_WORD ? <div className="picto-tab-word big">{gs.PICTO_REVEALED_WORD}</div> : null}
       </div>
     )
