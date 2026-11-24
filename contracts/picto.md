@@ -3,7 +3,7 @@
 **Issues** : #191 (type de question PICTO et éditeur), #192 (équipe et dessinateur, remise secrète du mot), #193 (canal
 de dessin temps réel), #194 (manche jouable de bout en bout). Découpage : plan `_work/reports/plan-20261123-picto.md`.
 
-**Statut** : contrat de référence, écrit avant implémentation (contract-first) — **révision 8** (2026-11-24, revue LOT-2.3 : révélation et crédit).
+**Statut** : contrat de référence, écrit avant implémentation (contract-first) — **révision 9** (2026-11-24, v13.1.0 : nouveau type « Rafale Picto » `RAFALE_PICTO`, source du mot, passes — §17, version finale du GATE 2 ; pool de mots : `contracts/picto-pool.md` rév. 2).
 
 **Arbitrages** :
 - cadrage : `_work/reports/plan-pictionary-cadrage-20261123-135359.md` ;
@@ -444,6 +444,9 @@ il reconstruit la question de zéro (cf. RAFALE, bugfix 2026-08-31). Aucun autre
 
 ## 12. Reporté en v13.1.0 — décisions déjà prises (milestone #48, issue #318)
 
+> **Révision 9** : ces décisions sont désormais contractualisées dans `contracts/picto-pool.md` (pool, marquages,
+> HTTP, IA, sauvegarde) et au §17 (type « Rafale Picto » `RAFALE_PICTO`, source, passes). En cas d'écart, ces deux textes font foi.
+
 Rien de cette section n'est implémenté en v13.0.0. Elle garde les décisions du GATE 2 pour que #318 les reprenne.
 
 - **Source du mot au choix** : `PICTO_SOURCE` ∈ `RESERVOIR` | `WORDS`. ⚠️ **Absent = `WORDS`**, pour que les
@@ -532,3 +535,274 @@ la porte :
 | Chronomètre global | Questions SPEEDY / QCM / MEMORY : fin de chronomètre inchangée (`OnTimeUp` puis `Stop()`) |
 | Resélection d'une question (#200) | Comportement inchangé pour les autres types |
 | Types existants | Les 8 types existants : aucune régression (suites complètes) |
+
+---
+
+## 17. Type « Rafale Picto » (`RAFALE_PICTO`), source du mot et passes (v13.1.0, milestone #48, #318) — révision 9
+
+**Arbitrages** :
+- GATE 1.5 du 2026-11-24 (`_work/reports/plan-ambiguities-20261124-135359.md`) :
+  - Q1 : pool + IA + « Pools » ;
+  - Q2 : la passe coûte des points ;
+  - Q3 : même dessinateur pour toute la manche ;
+  - Q4 : crédit manuel pré-rempli ;
+  - H1 à H5.
+- GATE 2 du 2026-11-24 :
+  - P2 : interrupteur « 1 passe / illimitées » ;
+  - P4 : pioche stratifiée ;
+  - P1 / P5 : pool = instance du moteur de pool Speedy généralisé, avec le marquage « utilisé »
+    (`picto-pool.md` rév. 2) ;
+  - Q5 corrigée : le dessinateur **annonce** la passe à voix haute, l'admin et l'anim la déclenchent ;
+  - **« Rafale Picto » est un type de question à part entière, comme « Rafale Speedy »**, pas un mode du type Picto.
+
+Le pool de mots (stockage, marquage, HTTP, IA, sauvegarde) est contractualisé dans **`contracts/picto-pool.md`**.
+
+### 17.1 Principe — deux types, une famille
+
+| Type (`QuestionType`) | Libellé | Icône | Manche |
+|---|---|---|---|
+| `PICTO` (v13.0.0) | **« Picto »** | ✏️ | Une équipe, **un mot** (§1 à §16) |
+| **`RAFALE_PICTO`** (nouveau) | **« Rafale Picto »** | 🖍️ **[planner]** (✏️ est à Picto, 🌀 à Rafale Speedy, ⚡ à Speedy) | Une équipe fait deviner **le plus de mots possible** dans le temps de la question (`TIME`), avec des passes |
+
+- **Famille Picto** : les deux types partagent la manche dessinée de v13.0.0 :
+  - préparation (équipe, dessinateur choisi ou tiré) ;
+  - relais de dessin, époque, rattrapage ;
+  - confidentialité du mot ;
+  - LED et ambiance ;
+  - buzzers ignorés ;
+  - crédit au niveau équipe.
+- Un **prédicat unique** décide de l'appartenance à la famille : `IsPictoFamily(type)` en Go et `isPictoFamily(type)`
+  en JS, avec des cas de test nommés à l'identique. **Chaque site** qui teste aujourd'hui `== PICTO` pour la manche
+  dessinée passe par ce prédicat. Cela concerne ~12 sites Go et ~24 sites JS (tâche d'audit dédiée,
+  plan LOT-3).
+- Les **champs `GameState` `PICTO_*`** (§5 et §17.4) sont **l'état de manche commun** à la famille : ils ne sont pas
+  dupliqués.
+- Aucune nouvelle phase principale : une manche Rafale Picto vit dans `STARTED` (↔ `PAUSED`). Les mots se succèdent
+  à l'intérieur de `STARTED`, avec une nouvelle époque de feuille par mot.
+- Une seule équipe et un seul dessinateur pour toute la manche (Q3).
+- Chronomètre global commun (H4).
+- **Compatibilité** : `PICTO_MODE` n'a jamais été implémenté. Les questions `PICTO` v13.0.0 sont inchangées, sans
+  migration.
+
+### 17.2 Champs de question
+
+**Type `PICTO`** (un mot), champs ajoutés en v13.1.0 (LOT-2) à son `OwnedFields` :
+
+| Champ JSON | Type | Règle | Défaut de l'éditeur (nouvelle question) |
+|---|---|---|---|
+| `PICTO_SOURCE` | string | `""` / `WORDS` \| `RESERVOIR` (pool Picto) ; absent = `WORDS` | `RESERVOIR` (I4) |
+| `PICTO_WORDS` | string[] | Exigé si la source est `WORDS` : 1 à 20 mots (§3.1). Non écrit si la source est `RESERVOIR` | — |
+| `PICTO_CATEGORIES` | string[] | Exigé si la source est `RESERVOIR` : au moins 1 catégorie connue | catégorie de la question |
+| `PICTO_DIFFICULTIES` | int[] | Exigé si la source est `RESERVOIR` : au moins 1 valeur de 1 à 3 | `[1, 2, 3]` |
+
+**Type `RAFALE_PICTO`** (LOT-3), `OwnedFields` exclusifs, puisque le registre impose qu'un champ appartienne à un seul
+type (`question_types.go`, `OwnedFields` « belong exclusively ») :
+
+| Champ JSON | Type | Règle | Défaut de l'éditeur |
+|---|---|---|---|
+| `RAFALE_PICTO_SOURCE` | string | `WORDS` \| `RESERVOIR` | `RESERVOIR` |
+| `RAFALE_PICTO_WORDS` | string[] | Exigé si la source est `WORDS` : 1 à 20 mots (§3.1). **Secret**, retiré des messages TV et tablette (§10) | — |
+| `RAFALE_PICTO_CATEGORIES` | string[] | Exigé si la source est `RESERVOIR` | catégorie de la question |
+| `RAFALE_PICTO_DIFFICULTIES` | int[] | Exigé si la source est `RESERVOIR` | `[1, 2, 3]` |
+| `RAFALE_PICTO_PASS_COST` | int | **0 à 100 points** retirés par passe ; **0 = gratuite** | 0 |
+| `RAFALE_PICTO_PASS_LIMIT` | int | **`0` = illimité**, **`1` = une seule passe** (P2) ; toute autre valeur → `400` | 0 |
+| `RAFALE_PICTO_POOL_END` | string | `END` (fin de manche) \| `LOOP` (reboucler sur les passés) ; absent = `END` | `LOOP` |
+
+Règles communes :
+- tous les champs sont `omitempty` (round-trip octet pour octet des fixtures, `rafale.md` §3.3) ;
+- `TIME` (30 à 300 s), `POINTS` (points **par mot trouvé**) et `CATEGORY` (catégorie du crédit) sont réutilisés.
+
+**Registre** (`question-types.md` §7) — `RAFALE_PICTO` :
+
+| Propriété | Valeur |
+|---|---|
+| `OwnedFields` | les 7 champs ci-dessus |
+| `MediaSlots` | aucun |
+| `NestableInMotionCard` | `false` |
+| `HasPlayerInput` | `true` (`PICTO_STROKES`) |
+| `DefaultPointsRule` | vide |
+
+Le type est aussi déclaré :
+- dans `AllQuestionTypes()` et sous `QuestionTypeRafalePicto = "RAFALE_PICTO"` ;
+- dans `questionTypeMeta.js` : `{ key: 'RAFALE_PICTO', label: 'Rafale Picto', icon: '🖍️', nestable: false }` ;
+- dans le test d'exhaustivité, avec un type inconnu qui ne retombe jamais sur SPEEDY (#183).
+
+Il **n'entre pas** dans `generableQuestionTypes` : l'IA remplit le pool, pas la question.
+
+**Multipart** (`POST /questions`) : `picto_source`, `picto_categories` (JSON), `picto_difficulties` (JSON) pour le type
+`PICTO` ; `rafale_picto_*` pour le type `RAFALE_PICTO`. `handleUploadQuestion` les relit explicitement.
+- **Refus `400`** : `PICTO_SOURCE_INVALID`, `PICTO_FILTER_INVALID`, `PICTO_WORDS_INVALID`, `PICTO_PASS_INVALID`,
+  `PICTO_POOL_END_INVALID`. Mêmes codes pour les deux types.
+- La validation des mots, de la source et du filtre est **une seule fonction** qui prend le jeu de champs du type.
+
+L'éditeur monte un **sous-éditeur « Mots à dessiner » partagé** (source, filtre, mots, alerte du pool), paramétré
+par le préfixe de champ du type.
+
+### 17.3 Préparation et lancement (Rafale Picto)
+
+- Préparation **identique** au §6.1. La garde de `START` reste `NO_DRAWER`.
+- `participantsConform` (famille) : avec la source `RESERVOIR`, il faut au moins 1 mot disponible
+  (`picto-pool.md` §3), sinon `POOL_EMPTY`. En Rafale Picto, l'admin et l'anim voient un avertissement
+  « N mots disponibles, environ M nécessaires » (`M = plafond(TIME / 10)`).
+- Au passage en `STARTED`, dans les deux types :
+  1. époque + 1, journal vidé ;
+  2. tirage du 1er mot, avec le marquage « utilisé » si la source est le pool ;
+  3. `PICTO_WORD` (§9.2) ;
+  4. `UPDATE`.
+
+### 17.4 Champs `GameState` ajoutés (état de manche de la famille)
+
+Tous **sans `omitempty`**, tableaux jamais `null`, jamais persistés, diffusés à tous les clients web et jamais aux
+buzzers. Remis à vide au `START`, au changement de question, à la relance, à `InitGameWith` et à `NEW_GAME`.
+Ils survivent à `stopUnsafe` et restent en `REVEALED`.
+
+| Champ | Type | Contenu |
+|---|---|---|
+| `PICTO_FOUND_COUNT` | int | Mots trouvés dans la manche |
+| `PICTO_FOUND_WORDS` | string[] | Mots **trouvés**, dans l'ordre. Publics : ils ont été dits à voix haute (H2) |
+| `PICTO_PASS_COUNT` | int | Passes utilisées |
+| `PICTO_PASSES_LEFT` | int | Passes restantes ; **−1 = illimité** |
+| `PICTO_POOL_AVAILABLE` | int | Mots encore tirables (en préparation : pool filtré ou mots saisis ; en manche : jamais montrés, plus les passés en attente si `LOOP`) |
+| `PICTO_ROUND_POINTS` | int | Montant suggéré du crédit : `max(0, PICTO_FOUND_COUNT × POINTS − PICTO_PASS_COUNT × RAFALE_PICTO_PASS_COST)`, calculé par le serveur |
+| `PICTO_WORD_CATEGORY` | string | Indice public : catégorie du mot en cours (pool), sinon celle de la question. Vaut pour les deux types |
+
+`PICTO_OUTCOME` gagne la valeur `POOL_END` (Rafale Picto). En Picto (un mot), les compteurs restent à 0 et
+`PICTO_PASSES_LEFT` vaut −1.
+
+### 17.5 Déroulé d'une manche Rafale Picto — `STARTED`
+
+| Déclencheur | Émetteurs | Phases | Effet |
+|---|---|---|---|
+| `PICTO_FOUND {EPOCH}` | admin, anim | `STARTED`, `PAUSED` | `PICTO_FOUND_COUNT + 1`, mot ajouté à `PICTO_FOUND_WORDS`, puis **mot suivant**. Cue `rafale-bonne` |
+| `PICTO_PASS {EPOCH}` | **admin, anim** (le dessinateur **annonce** la passe à voix haute) | `STARTED` | Refusée si `PICTO_PASSES_LEFT = 0` (`PASS_LIMIT_REACHED`). Sinon `PICTO_PASS_COUNT + 1`, `PICTO_PASSES_LEFT − 1` (sauf −1), le mot entre dans la **file des passés**, puis **mot suivant**. Cue `rafale-mauvaise` |
+| `PICTO_STROKES`, `PAUSE`, `STOP`, appui buzzer | — | — | Inchangés (§6.3) |
+| Fin du chronomètre | serveur | `STARTED` | `PICTO_OUTCOME = TIMEOUT`, `STOPPED` |
+
+**Mot suivant**, sous le verrou du moteur et dans la même action :
+1. époque + 1, journal vidé ;
+2. tirage (§17.6) et marquage « utilisé » (pool) ;
+3. `PICTO_WORD` au dessinateur, à l'admin et à l'anim ;
+4. `UPDATE`.
+
+**Affichage du mot trouvé sur la TV (GATE 2, M4)** — **affichage seulement, côté client TV** :
+- quand `PICTO_FOUND_WORDS` grandit, la TV garde la feuille de l'époque précédente pendant
+  **1 seconde** (`PICTO_FOUND_FLASH_MS = 1000`, constante du client). Le mot trouvé s'y affiche en surimpression
+  (« ✅ *mot* »), **sans « Trouvé par »** ni points ;
+- ensuite, elle passe à la feuille vierge de la nouvelle époque. Les traits de la nouvelle époque reçus pendant
+  cette seconde sont tamponnés, puis affichés : rien n'est perdu ;
+- le grand compteur s'incrémente au même moment ;
+- une **passe** n'affiche jamais le mot : la feuille se vide, avec un repère « ⏭ » discret ;
+- l'**animation commune des points** (`TvPointsAward`) ne joue **qu'au crédit** de fin de manche, jamais à chaque
+  mot.
+- Le serveur ne change pas : le mot trouvé est déjà public (`PICTO_FOUND_WORDS`).
+
+**`EPOCH` obligatoire en Rafale Picto** : une action d'une autre époque est refusée (`PICTO_ERROR STALE_WORD`, à
+l'émetteur seul, sans effet). Deux gestes simultanés (admin ‖ anim) ne font donc avancer que d'un mot.
+En Picto (un mot), `EPOCH` reste facultatif sur `PICTO_FOUND`.
+
+**Émetteurs** :
+- `PICTO_PASS` et `PICTO_FOUND` : **admin et anim seulement** ;
+- **aucun élargissement** de la liste blanche `vplayer` ;
+- `PICTO_PASS` sur une question `PICTO` (un mot) : `NOT_RAFALE`.
+
+### 17.6 Tirage du mot suivant et fin de pool
+
+1. Tirer un mot **jamais montré dans la manche** :
+   - source `RESERVOIR` : pioche **stratifiée** du pool Picto, entrées non « utilisées » (`picto-pool.md` §3) ;
+   - source `WORDS` : mots de la question pas encore montrés, en tirage uniforme.
+2. Aucun mot frais :
+   - `RAFALE_PICTO_POOL_END = LOOP` et file des passés non vide → le plus ancien mot passé revient (FIFO). Un mot
+     trouvé ne revient jamais (H2) ;
+   - sinon → **fin de manche** : `PICTO_OUTCOME = POOL_END`, `stopUnsafe`, `STOPPED`, cue `rafale-fin-lot` (H1).
+3. Aucun mot au tout premier tirage : `NO_WORD` (filet existant).
+
+### 17.7 Fin de manche, révélation et crédit
+
+| Issue | Déclencheur | Suite |
+|---|---|---|
+| `TIMEOUT` | chronomètre | `STOPPED`, puis `REVEAL` → `REVEALED`. Un `PICTO_FOUND {EPOCH}` sur le gong (une fois, mot en cours) compte le mot, puis révèle dans la même action |
+| `STOPPED` | `STOP` | `STOPPED`, puis `REVEAL` ou relance |
+| `POOL_END` | §17.6 | `STOPPED`, puis `REVEAL` |
+| `NO_WORD` | §17.6, point 3 | inchangé |
+
+En `REVEALED` :
+- `PICTO_REVEALED_WORD` = le mot en cours non trouvé (`""` après `POOL_END`) ;
+- les mots passés ne sont **jamais** publiés ;
+- récapitulatif public : `PICTO_FOUND_COUNT`, `PICTO_FOUND_WORDS`, `PICTO_PASS_COUNT` ;
+- **crédit manuel pré-rempli** à `PICTO_ROUND_POINTS`, ajustable, quelle que soit l'issue. Chemin existant
+  (`TEAM_POINTS` / `TEAM_POINTS_BATCH`, `AWARDED_TEAMS`, animation commune). Équipe présélectionnée sur l'admin
+  (#321, `award-preselect.md`). **Plancher 0** : les passes ne débitent jamais le score.
+
+### 17.8 Relance et déconnexions
+
+- **Relance** (§6.6) : compteurs, file des passés et mots trouvés remis à zéro. Avec la source pool, les mots déjà
+  tirés restent « utilisés » (I2) ; les mots saisis repartent en tirage libre.
+- **Dessinateur déconnecté** : la manche continue, l'admin et l'anim font « Trouvé » et « Passer ». À la
+  reconnexion, le dessinateur reçoit le mot en cours et sa feuille.
+
+### 17.9 Confidentialité (complète le §10)
+
+- Le mot en cours n'est jamais dans `GameState`, ni dans un message `/ws/tv`, ni sur une tablette autre que celle du
+  dessinateur.
+- `RAFALE_PICTO_WORDS` est retiré des messages TV et tablette, sur les **trois sites** de sérialisation, par la même
+  liste partagée que `PICTO_WORDS`.
+- `PICTO_FOUND_WORDS` ne contient que des mots trouvés.
+- **Tests exigés** :
+  - fuite par mot sur une manche `RAFALE_PICTO` de 5 mots (trouvés, passés, rebouclés), pour les deux sources ;
+  - un test de « famille » : **chaque** site de confidentialité appliqué à `PICTO` l'est aussi à `RAFALE_PICTO`.
+
+### 17.10 Actions et codes (complète le §9)
+
+| Action | Payload | Émetteurs | Phases |
+|---|---|---|---|
+| `PICTO_FOUND` | `{ "EPOCH"?: int }` (obligatoire en Rafale Picto) | admin, anim | §6.4 (Picto) ; §17.5 et §17.7 (Rafale Picto) |
+| `PICTO_PASS` (**nouvelle**) | `{ "EPOCH": int }` | admin, anim | `STARTED`, Rafale Picto |
+
+- `PICTO_WORD` est inchangé et envoyé à chaque nouveau mot.
+- `PICTO_ERROR.CODE` gagne `PASS_LIMIT_REACHED | NOT_RAFALE | STALE_WORD | POOL_EMPTY`.
+- Les actions `PICTO_*` de v13.0.0 valent pour les deux types (famille).
+
+### 17.11 Périphériques, ambiance, sons
+
+- LED, ambiance et relais : règles de la famille (§15), inchangées.
+- Cues existantes seulement : `rafale-bonne` (Trouvé), `rafale-mauvaise` (passe), `rafale-fin-lot` (`POOL_END`),
+  « temps écoulé », gain au crédit. Les nouveaux sites entrent dans le test d'exhaustivité (`sound.md` §6.2).
+- Écrans : maquettes M4 à M8 du plan v13.1.0.
+
+### 17.12 Non-régression exigée
+
+| Zone | Vérification |
+|---|---|
+| Type `PICTO` v13.0.0 | Suites Picto au vert, sans modification de test hors prédicat de famille |
+| Registre | `TestQuestionTypeRegistry_Exhaustive` avec `RAFALE_PICTO` ; type inconnu ≠ SPEEDY |
+| Fixtures | Round-trip octet pour octet ; aucun champ `RAFALE_PICTO_*` ni `PICTO_SOURCE` parasite |
+| Famille | Tableau de tests `IsPictoFamily` / `isPictoFamily` (Go et JS) ; audit des sites `== PICTO` |
+| Relais de dessin | Époque par mot : aucun trait d'un mot précédent sur la feuille suivante (y compris pendant la seconde d'affichage du mot trouvé sur la TV) |
+| Liste blanche | `PICTO_PASS` pour admin et anim seulement ; aucune action ajoutée pour `vplayer` |
+| Rafale Speedy | Inchangé |
+
+### 17.13 Libellés (GATE 2) — renommage d'affichage, identifiants inchangés
+
+| Désignation | Libellé à l'écran | Identifiants techniques |
+|---|---|---|
+| Type `RAFALE` existant | **« Rafale Speedy »** (🌀) | inchangés : `RAFALE`, `RAFALE_*`, `/api/rafale/*`, `files/rafale/`, cues `rafale-*`, clé de sauvegarde `rafale`, composants `Rafale*` |
+| Pool du type `RAFALE` | **« Pool Speedy »** | instance `rafale` (`picto-pool.md`) |
+| Type `PICTO` | **« Picto »** (✏️) | `PICTO` |
+| Nouveau type | **« Rafale Picto »** (🖍️) | `RAFALE_PICTO` (nouveau) |
+| Pool de mots | **« Pool Picto »** | instance `picto` (utilisée par `PICTO` et `RAFALE_PICTO`) |
+
+Libellés à renommer dans le frontend actuel (le type `RAFALE` devient « Rafale Speedy », son pool « Pool Speedy ») :
+- `utils/questionTypeMeta.js` (source unique) ;
+- onglet de `QuestionsPage` ;
+- titres de la page du pool ;
+- `BackupPage` ;
+- modale IA ;
+- `aiJobHelpers` ;
+- `GamePage` ;
+- `AnimPage` ;
+- `PlayerDisplay` ;
+- `soundCues` ;
+- `CategoryManagerDialog`.
+
+Les tests de libellés sont mis à jour en même temps. La documentation utilisateur prend les nouveaux libellés. La
+documentation technique garde les identifiants.

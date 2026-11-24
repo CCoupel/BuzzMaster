@@ -1,6 +1,54 @@
 # Changelog des Contrats API
 
 ---
+## [20261124-d] — v13.1.0 — PICTO RAFALE : pool de mots (moteur de pool généralisé), IA, « Pools », type Rafale Picto et passes (#318)
+
+`picto.md` révision 9 (§17, nouveau) et **`picto-pool.md` révision 2** (nouveau). Arbitrages : GATE 1.5 et GATE 2
+du 2026-11-24.
+**Aucun BREAKING** :
+- les questions PICTO v13.0.0 restent une manche un mot, source `WORDS` ;
+- les API, fichiers et prompt IA de RAFALE sont inchangés.
+
+Changements :
+- **[CHANGED — interne]** Le moteur de pool RAFALE est **généralisé** (`EntryPool`, alias `RafaleQuestion`),
+  avec deux instances, `rafale` et `picto`. Sont aussi généralisés :
+  - la pioche stratifiée ;
+  - la fabrique de handlers HTTP ;
+  - la liste des pools de la sauvegarde ;
+  - le descripteur de génération IA ;
+  - la page et la modale IA paramétrées.
+- **[NEW]** Pool Picto : `data/files/picto/reservoir.json` (même forme que RAFALE, le mot dans `QUESTION`, `ANSWER`
+  vide) et `data/config/picto_used.json` (marquage « utilisé », remis à zéro par `NEW_GAME`).
+- **[NEW]** HTTP : `GET|POST /api/picto/words`, `DELETE /api/picto/words/{id}`,
+  `POST /api/picto/words/{id}/reset`, `POST /api/picto/words/reset-all`, `GET /api/picto/pool`,
+  `POST /api/picto/generate-words` (paliers 10 / 20 / 50) et `POST /api/picto/words/batch` (collage). Écritures et génération refusées en `409 picto_round_in_progress` pendant une
+  manche Picto.
+- **[NEW]** Type de question **`RAFALE_PICTO`** (« Rafale Picto », 🖍️). Il est enregistré dans le registre et a ses
+  champs propres : `RAFALE_PICTO_SOURCE`, `_WORDS`, `_CATEGORIES`, `_DIFFICULTIES`, `_PASS_COST` (0–100 pts),
+  `_PASS_LIMIT` (`0` = illimité, `1` = une passe), `_POOL_END` (`END` \| `LOOP`).
+  - Il partage avec `PICTO` la manche dessinée et l'état `GameState` `PICTO_*`, via le prédicat
+    `IsPictoFamily` / `isPictoFamily`.
+  - `PICTO_MODE` (prévu à la révision précédente) est **abandonné** avant implémentation.
+- **[NEW]** Type `PICTO` : `PICTO_SOURCE` (absent = `WORDS` \| `RESERVOIR`), `PICTO_CATEGORIES`,
+  `PICTO_DIFFICULTIES`.
+- **[NEW]** `GameState` : `PICTO_FOUND_COUNT`, `PICTO_FOUND_WORDS`, `PICTO_PASS_COUNT`, `PICTO_PASSES_LEFT`,
+  `PICTO_POOL_AVAILABLE`, `PICTO_ROUND_POINTS`, `PICTO_WORD_CATEGORY`. `PICTO_OUTCOME` gagne `POOL_END`.
+- **[NEW]** Action `PICTO_PASS {EPOCH}` (admin, anim ; le dessinateur annonce la passe à voix haute). **Aucun**
+  élargissement de la liste blanche `vplayer`.
+- **[CHANGED]** `PICTO_FOUND` accepte `EPOCH`, obligatoire en Rafale Picto (`STALE_WORD`). `PICTO_ERROR.CODE` gagne
+  `PASS_LIMIT_REACHED`, `NOT_RAFALE`, `STALE_WORD`, `POOL_EMPTY`.
+- **[CHANGED]** TV : l'indice du bandeau haut devient `PICTO_WORD_CATEGORY` (catégorie du mot en cours).
+- **[CHANGED]** `AI_GENERATION_PROGRESS.TARGET` gagne `PICTO`.
+- **[NEW]** Sauvegarde, restauration et réinitialisation : clé `picto`. `BackupPage` a une catégorie « Pools »
+  (clé `rafale` inchangée).
+- **[CHANGED — affichage]** Le type `RAFALE` s'appelle « Rafale Speedy » à l'écran et son pool « Pool Speedy ». Le
+  pool de mots s'appelle « Pool Picto » (`picto.md` §17.13). **Aucun identifiant existant ne change.**
+- **[NEW]** `contracts/award-preselect.md` (#321) : présélection des gagnants au crédit, **frontend seul**, sans
+  champ ni action. Pour Rafale Speedy en SOLO, le choix de l'équipe existe déjà (#201).
+- La révision 1 de `picto-pool.md` (magasin `PictoWord` séparé, marquages `PRESENTED` / `REVEALED` par clé repliée)
+  est **retirée** avant toute implémentation.
+
+---
 ## [20261124-c] — v13.0.0 — Jeton de session : redémarrage sans élagage (revue D1, D2)
 
 `vplayer-session.md` §3 et §7, correction de texte alignée sur le code, sans BREAKING.
