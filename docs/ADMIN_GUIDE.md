@@ -1306,14 +1306,19 @@ l'éditeur de la question, la préparation, le dessin, puis la fin de manche et 
 
 ### Terminer une manche Picto
 
-- **« Trouvé ! »** (admin ou animateur) : l'équipe a trouvé le mot. La manche s'arrête et le mot s'affiche sur la TV et les
-  tablettes. Une ligne de crédit est proposée à l'équipe, pré-remplie aux points de la question. Ajustez-la si besoin, puis
-  validez : c'est un crédit manuel.
-- **Temps écoulé** : la manche s'arrête. La TV affiche « Temps écoulé », et le mot n'est **pas** encore affiché. Si la réponse
-  arrive sur le gong, « Trouvé » crédite encore l'équipe. Sinon, **« Révéler »** montre le mot à tous, sans points.
-- **Arrêt** (STOP) : la manche s'arrête, la TV affiche « Manche arrêtée ». Le mot se révèle ensuite avec « Révéler », sans points.
+- **« Trouvé ! »** (admin ou animateur) : l'équipe a trouvé le mot. La manche s'arrête et le mot est révélé. Une ligne de crédit
+  est proposée à l'équipe, pré-remplie aux points de la question. Ajustez-la si besoin, puis validez : c'est un crédit manuel.
+  Sur l'animateur, le bouton est « ✅ Trouvé ! » ; si la réponse arrive sur le gong, « ✅ Trouvé (sur le gong) ».
+- **Temps écoulé** : la manche s'arrête, et le mot n'est **pas** encore affiché. La tablette du dessinateur affiche
+  « ⏰ Temps écoulé » sur sa feuille verrouillée. L'animateur voit « ⏰ Temps écoulé — le mot n'est pas encore affiché ».
+  Si la réponse arrive sur le gong, « Trouvé (sur le gong) » crédite encore l'équipe. Sinon, « 👁 Révéler le mot » (animateur)
+  montre le mot à tous, sans points.
+- **Arrêt** (STOP) : la manche s'arrête. La tablette du dessinateur affiche « ⏹ Manche arrêtée » sur sa feuille verrouillée.
+  Le mot se révèle ensuite avec « 👁 Révéler le mot » (animateur), sans points.
 - **Sans mot** : si la question n'a plus de mot au lancement, la manche s'arrête aussitôt, sans rien envoyer au dessinateur.
-- Dans tous les cas, « Révéler » affiche le **mot seul** sur la TV et les tablettes. Le crédit de l'équipe se voit par
+- **Révélation** : sur l'animateur, le titre passe à « ✅ Trouvé — le mot est affiché sur la TV ». Sur l'admin, le titre est
+  « ✏️ Picto — révélé · ✅ Trouvé ». Le bouton **REPONSE** de la page Jeu (le même que pour les autres types) révèle la
+  manche, comme sur la page Jeu de l'admin. La TV et les tablettes n'affichent que le **mot**. Le crédit de l'équipe se voit par
   l'animation de points commune, sans mention « Trouvé par ».
 
 **Relancer la question** : si le dessinateur décroche ou si la manche est mal partie, sélectionnez de nouveau la question.
