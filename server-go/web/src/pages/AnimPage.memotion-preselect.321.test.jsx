@@ -60,6 +60,17 @@ describe('AnimPage — MEMOTION : gagnant présélectionné (#321)', () => {
     expect(g.doneMotionCard).toHaveBeenCalledWith('c1', '')
   })
 
+  it('même carte, autre équipe à la main : la sélection périmée est ignorée (repli sur l’équipe courante)', () => {
+    useGame.mockReturnValue(game('Rouges'))
+    const { rerender } = render(<AnimPage />)
+    fireEvent.click(teamChip('Rouges'))
+    const next = game('Bleus'); useGame.mockReturnValue(next)
+    rerender(<AnimPage />)
+    expect(teamChip('Bleus').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(btn(/VALIDER/))
+    expect(next.doneMotionCard).toHaveBeenCalledWith('c1', 'Bleus')
+  })
+
   it('seuls l’équipe qui a la main et « PERSONNE » sont proposés (règle de jeu existante) ; pas d’autre équipe', () => {
     const g = game('Rouges'); useGame.mockReturnValue(g); render(<AnimPage />)
     expect(screen.queryByRole('button', { name: /Bleus/ })).toBeNull()

@@ -68,7 +68,9 @@ export default function AnimMotionActions({
   // Sélection du gagnant de carte (REVEAL) : { card, value } — valable pour la carte qui l'a posée seulement,
   // sinon repli sur l'équipe qui a la main (présélection).
   const [picked, setPicked] = useState(null)
-  const winner = picked && picked.card === selectedCardId ? picked.value : currentTeam
+  const winner = picked && picked.card === selectedCardId && (picked.value === '' || picked.value === currentTeam) ? picked.value : currentTeam
+  // Hors REVEAL, une sélection éventuelle est oubliée.
+  if (picked && subphase !== 'REVEAL') setPicked(null)
   const handlers = { onFlipMotionCard, onStopMotionTimer, onRevealMotionCard, onDoneMotionCard }
 
   if (subphase === 'MEMORIZE') {
@@ -147,7 +149,7 @@ export default function AnimMotionActions({
         <button
           type="button"
           className="anim-conduct-btn anim-conduct-btn-go anim-motion-action-btn anim-motion-validate-btn"
-          onClick={() => onDoneMotionCard?.(selectedCardId, winner || '')}
+          onClick={() => { onDoneMotionCard?.(selectedCardId, winner || ''); setPicked(null) }}
         >
           VALIDER
           <span className="anim-conduct-btn-sub">{winner ? winner : 'personne'}</span>

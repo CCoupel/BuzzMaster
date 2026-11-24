@@ -36,6 +36,8 @@ function firstBuzzer(bumpers) {
 function candidateKeys({ question, gameState, bumpers, awardLevel }) {
   const gs = gameState || {}
   const player = awardLevel === 'PLAYER'
+  // Ces types créditent des équipes (clés = noms) : au niveau JOUEUR, aucune clé n'est valide.
+  if (player && ['PICTO', 'RAFALE_PICTO', 'MEMORY', 'RAFALE'].includes(question?.TYPE)) return []
   switch (question?.TYPE) {
     case 'PICTO':
       return gs.PICTO_OUTCOME === 'FOUND' && gs.PICTO_TEAM ? [gs.PICTO_TEAM] : []

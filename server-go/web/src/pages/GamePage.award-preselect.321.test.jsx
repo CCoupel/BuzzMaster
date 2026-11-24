@@ -54,6 +54,13 @@ const checked = () => Object.keys(TEAMS).filter((n) => screen.queryByRole('check
 describe('GamePage — présélection à l’entrée en REVEALED (#321)', () => {
   beforeEach(() => { useGame.mockReset() })
 
+  it('QCM : la présélection équivaut au clic sur la bonne couleur (réponse correcte marquée)', () => {
+    reveal({ question: { ID: '1', TYPE: 'QCM', QUESTION: 'Q', ANSWER: 'x', POINTS: '3', QCM_ANSWERS: { RED: 'a', GREEN: 'b' }, QCM_CORRECT: 'GREEN', STATUS: 'REVEALED' } })
+    const pressed = screen.getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true' && b.className.includes('qcm-picker-answer'))
+    expect(pressed.length).toBe(1)
+    expect(pressed[0].className).toContain('correct')
+  })
+
   it('QCM : les équipes ayant donné la bonne réponse sont cochées d’office', () => {
     reveal({ question: { ID: '1', TYPE: 'QCM', QUESTION: 'Q', ANSWER: 'x', POINTS: '3', QCM_ANSWERS: { RED: 'a', GREEN: 'b' }, QCM_CORRECT: 'GREEN', STATUS: 'REVEALED' } })
     expect(checked().sort()).toEqual(['Bleus', 'Verts'])
@@ -137,6 +144,17 @@ describe('GamePage — MEMOTION : gagnant de carte présélectionné (#321, §4)
     const game = mk(MOTION); useGame.mockReturnValue(game); render(<GamePage />)
     fireEvent.click(validate())
     expect(game.sendMessage).toHaveBeenCalledWith('MEMOTION_DONE', { CARD_ID: 'c1', WINNER_TEAM: 'Rouges' })
+  })
+
+  it('même carte, autre équipe à la main : la sélection périmée est ignorée (repli sur l’équipe courante)', () => {
+    const game = mk(MOTION); useGame.mockReturnValue(game)
+    const { rerender } = render(<GamePage />)
+    fireEvent.click(chip('Rouges'))
+    const next = mk({ ...MOTION, MEMOTION_CURRENT_TEAM: 'Bleus', MEMOTION_CURRENT_TEAM_COLOR: [0, 0, 255] }); useGame.mockReturnValue(next)
+    rerender(<GamePage />)
+    expect(chip('Bleus').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(validate())
+    expect(next.sendMessage).toHaveBeenCalledWith('MEMOTION_DONE', { CARD_ID: 'c1', WINNER_TEAM: 'Bleus' })
   })
 
   it('SOLO : l’équipe unique qui a la main est présélectionnée', () => {

@@ -165,3 +165,14 @@ describe('fold — repli de comparaison ARDOISE (§3)', () => {
   it('fold_spaces', () => { expect(fold('  Le   Louvre  ')).toBe('le louvre'); expect(fold('Le Louvre')).not.toBe(fold('Louvre')) })
   it('fold_empty', () => { expect(fold('')).toBe(''); expect(fold('   ')).toBe(''); expect(fold(undefined)).toBe(''); expect(fold(null)).toBe('') })
 })
+
+describe('preselectAwardKeys — niveau JOUEUR sans knownKeys (m2)', () => {
+  it.each(['PICTO', 'RAFALE_PICTO', 'MEMORY', 'RAFALE'])('%s : aucune clé d’équipe renvoyée au niveau joueur', (TYPE) => {
+    const keys = preselectAwardKeys({
+      question: { TYPE, MEMORY_MODE: 'SOLO' },
+      gameState: { PICTO_OUTCOME: 'FOUND', PICTO_TEAM: 'Bleus', PICTO_ROUND_POINTS: 2, MEMORY_PARTICIPATING_TEAMS: ['Bleus'], RAFALE_PARTICIPATING_TEAMS: ['Bleus'], RAFALE_TEAM_COUNTERS: { Bleus: 3 } },
+      bumpers: {}, awardLevel: 'PLAYER', awarded: [], amountOf: () => 5,
+    })
+    expect(keys).toEqual([])
+  })
+})

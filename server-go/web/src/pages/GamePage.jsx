@@ -513,6 +513,10 @@ export default function GamePage() {
   const [pickedColor, setPickedColor] = useState(null)
   // #321 — gagnant de carte MEMOTION : { card, value } ; absent ou autre carte → équipe qui a la main (présélection).
   const [motionPick, setMotionPick] = useState(null)
+  // Sélection périmée : remise à null hors REVEAL MEMOTION (la carte suivante repart de l'équipe qui a la main).
+  useEffect(() => {
+    if (!(gameState.question?.TYPE === 'MEMOTION' && gameState.MEMOTION_SUBPHASE === 'REVEAL')) setMotionPick(null)
+  }, [gameState.question?.TYPE, gameState.MEMOTION_SUBPHASE])
   const awardGuardRef = useRef(null)
   const awardBaseRef = useRef(pointsInput) // base du barème (champ « Points » à l'entrée en REVEALED)
   const pointsInputRef = useRef(pointsInput)
@@ -597,7 +601,11 @@ export default function GamePage() {
         }).amount
         : teamDefaultAward(key, base, true)),
     })
-    if (keys.length > 0) setAwardSelected(new Set(keys))
+    if (keys.length > 0) {
+      setAwardSelected(new Set(keys))
+      // QCM : présélection = clic sur la bonne couleur (même repère visuel que pickQcmAnswer).
+      if (gameState.question?.TYPE === 'QCM') setPickedColor(gameState.question.QCM_CORRECT)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState.question?.ID, gameState.phase])
   const awardEntries = awardableKeys
@@ -1754,7 +1762,7 @@ export default function GamePage() {
             if (subphase === 'REVEAL' && selectedMotionCard) {
               const diff = selectedMotionCard.DIFFICULTY || 1
               const currentTeamData = sortedTeams.find(t => t.name === currentTeam)
-              const winnerSel = motionPick && motionPick.card === gameState.MEMOTION_SELECTED ? motionPick.value : (currentTeam || '')
+              const winnerSel = motionPick && motionPick.card === gameState.MEMOTION_SELECTED && (motionPick.value === '' || motionPick.value === currentTeam) ? motionPick.value : (currentTeam || '')
               const currentTeamChipColor = currentTeamData ? getRgbColor(currentTeamData.COLOR) : undefined
               return (
                 <div className="memotion-admin-panel">
@@ -1790,7 +1798,7 @@ export default function GamePage() {
                     </button>
                     <button
                       className="memotion-winner-chip validate"
-                      onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: winnerSel })}
+                      onClick={() => { sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: winnerSel }); setMotionPick(null) }}
                     >
                       Valider
                     </button>
