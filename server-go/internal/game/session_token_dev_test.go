@@ -264,3 +264,34 @@ func TestSessionToken_EmptyStoreHasNoFile_DeferredSaveCannotRecreateIt(t *testin
 		t.Errorf("une sauvegarde différée a recréé le fichier d'un store vide : %v", err)
 	}
 }
+
+// Revue de 4541fc0a : la purge NEW_GAME retire les empreintes de N joueurs en UNE seule écriture sous le verrou.
+func TestSessionToken_NewGamePurgeWritesOnce(t *testing.T) {
+	e, path := newSessionEngine(t)
+	e.mu.Lock()
+	e.state.VirtualPlayerLimit = 50
+	e.mu.Unlock()
+	for i := 0; i < 6; i++ {
+		enrol(t, e, "Joueur"+string(rune('A'+i)))
+		time.Sleep(1100 * time.Millisecond) // l'ID est horodaté à la seconde
+	}
+	e.mu.Lock()
+	before, seats := e.sessions.writes, len(e.sessions.tokens)
+	e.mu.Unlock()
+	if seats != 6 {
+		t.Fatalf("6 places attendues, got %d", seats)
+	}
+	e.InitGameWith(NewGameOptions{PurgePlayers: true})
+	e.mu.RLock()
+	after, left := e.sessions.writes, len(e.sessions.tokens)
+	e.mu.RUnlock()
+	if left != 0 {
+		t.Errorf("toutes les empreintes retirées, reste %d", left)
+	}
+	if after-before != 1 {
+		t.Errorf("la purge de 6 joueurs doit coûter UNE écriture, got %d", after-before)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("store vide : pas de fichier, got %v", err)
+	}
+}

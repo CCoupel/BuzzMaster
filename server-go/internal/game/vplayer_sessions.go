@@ -32,6 +32,7 @@ type vplayerSessionsFile struct {
 type vplayerSessionStore struct {
 	path   string
 	tokens map[string]string
+	writes int // number of persistence operations performed (tests: a bulk purge must cost one)
 }
 
 // ErrInvalidSession is the reason of the PLAYER_REJECTED sent when a seat exists, has a token, and the
@@ -113,12 +114,12 @@ func (e *Engine) loadVPlayerSessionsUnsafe() error {
 
 // SaveVPlayerSessions writes the fingerprints atomically (temp file + rename).
 func (e *Engine) SaveVPlayerSessions() error {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
+	e.mu.Lock() // write lock: persistence operations are serialised (and count themselves)
+	defer e.mu.Unlock()
 	return e.writeSessionsUnsafe()
 }
 
-// writeSessionsUnsafe persists the store; the caller holds e.mu (read or write).
+// writeSessionsUnsafe persists the store; the caller holds e.mu for WRITING (it counts the operation).
 //
 // The store is written SYNCHRONOUSLY by every mutation (issue, remove, prune), under the engine lock — never by
 // a deferred goroutine. A deferred save has no ordering with the explicit file operations of the backup
@@ -133,6 +134,7 @@ func (e *Engine) writeSessionsUnsafe() error {
 	if s == nil || s.path == "" {
 		return nil
 	}
+	s.writes++
 	if len(s.tokens) == 0 {
 		if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
 			return err

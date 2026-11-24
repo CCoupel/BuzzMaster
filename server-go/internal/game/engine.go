@@ -4268,10 +4268,10 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 		for id, bumper := range e.data.Bumpers {
 			if bumper != nil && bumper.IsVirtual {
 				delete(e.data.Bumpers, id)
-				e.sessionRemoveUnsafe(id) // vplayer-session.md §7: NEW_GAME purge
 				res.PurgedPlayerIDs = append(res.PurgedPlayerIDs, id)
 			}
 		}
+		e.sessionPruneUnsafe() // vplayer-session.md §7: NEW_GAME purge — ONE write for all the purged seats
 		if len(res.PurgedPlayerIDs) > 0 {
 			e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
 			log.Printf("[Engine] InitGame: purged %d virtual player(s)", len(res.PurgedPlayerIDs))
