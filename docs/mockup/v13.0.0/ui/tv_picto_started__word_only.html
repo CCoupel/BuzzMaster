@@ -1,0 +1,108 @@
+<!--
+mockup:
+  composant: tv_picto_started
+  feature: word_only
+  version: 13.0.0
+  type: ui
+  issue: "#193 #194"
+  validee_le: 2026-11-24
+  proposition_retenue: "A — Révélation sans « Trouvé par », crédit par l'animation commune"
+  complete: []
+  remplace: ["v13.0.0/ui/tv_picto_started__zones.html"]
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%A8%3C/text%3E%3C/svg%3E">
+<title>v13.0.0 · TV Picto — mot seul, crédit animé</title>
+<style>
+:root{--g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g300:#d1d5db;--g400:#9ca3af;--g500:#6b7280;--g600:#4b5563;--g700:#374151;--g900:#111827;--pri:#4f46e5;--pri100:#e0e7ff;--ok:#16a34a;--okbg:#dcfce7;--err:#dc2626;--warn:#d97706;--warnbg:#fef3c7;--picto:#0891b2;--team:#2563eb;--team2:#dc2626;--team3:#16a34a;--type:#2f6fed}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:#111827;color:var(--g900);border-top:6px solid var(--type)}
+.mock-head{max-width:1100px;margin:0 auto;padding:.8rem 1rem .2rem;color:#e5e7eb}
+.mock-head h1{font-size:1.05rem;margin:0 0 .3rem}
+.mock-head p{font-size:.82rem;color:#9ca3af;margin:.2rem 0;line-height:1.45}
+.mock-head b{color:#e5e7eb}
+.tabs{position:sticky;top:0;z-index:300;background:#000;padding:.5rem 1rem;display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center;font-size:.8rem;color:#9ca3af}
+.tabs .grp{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center}
+.tabs .grp span{color:#e5e7eb;font-weight:600;margin-right:.2rem}
+.tabs button{font:inherit;font-size:.78rem;padding:.3rem .7rem;border-radius:.4rem;border:1px solid #4b5563;background:#1f2937;color:#fff;cursor:pointer}
+.tabs button.on{background:var(--pri);border-color:#818cf8}
+.stance{max-width:1100px;margin:.5rem auto;padding:.45rem 1rem;font-size:.82rem;color:#e5e7eb;background:#1f2937;border-radius:.4rem}
+section[data-proposition]{display:none;max-width:1180px;margin:0 auto;padding:0 1rem 2rem}
+section[data-proposition].on{display:block}
+.state{color:#e5e7eb;font-size:.85rem;font-weight:600;margin:1.1rem 0 .3rem}
+.state small{font-weight:400;color:#9ca3af}
+.row{display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-start}
+/* frames */
+.tablet{width:900px;max-width:100%;height:560px;border:8px solid #374151;border-radius:1.3rem;background:var(--g100);overflow:hidden;display:flex;flex-direction:column;padding:12px;gap:10px}
+.tv{width:960px;max-width:100%;aspect-ratio:16/9;border:10px solid #000;border-radius:.4rem;background:radial-gradient(circle at 50% 30%,#1e3a8a,#0b1020 70%);color:#fff;overflow:hidden;display:flex;flex-direction:column;padding:1.2%;gap:1.2%}
+.phone{width:300px;height:600px;border:8px solid #374151;border-radius:2rem;background:#fff;overflow:hidden;display:flex;flex-direction:column}
+.phone.land{width:600px;height:300px}
+.admin{width:1080px;max-width:100%;border:1px solid var(--g300);border-radius:.5rem;background:#fff;overflow:hidden}
+.admin .top{background:var(--g900);color:#fff;padding:.45rem .8rem;font-size:.8rem;display:flex;gap:1rem;align-items:center}
+.admin .body{padding:.8rem;display:flex;gap:.8rem}
+/* atoms */
+.chip{display:inline-flex;align-items:center;gap:.3rem;background:#fff;border-radius:999px;padding:.2rem .65rem;color:var(--g700);border:1px solid var(--g200);font-size:.78rem;white-space:nowrap}
+.chip.on{background:var(--pri100);border-color:var(--pri);color:var(--pri);font-weight:600}
+.chip.off{opacity:.45}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;border:0;border-radius:.6rem;padding:.7rem 1rem;font:inherit;font-weight:700;font-size:.95rem;color:#fff;background:var(--pri);cursor:default}
+.btn.big{font-size:1.2rem;padding:1rem 1.2rem}
+.btn.ok{background:var(--ok)}.btn.warn{background:var(--warn)}.btn.ghost{background:#fff;color:var(--g700);border:1px solid var(--g300)}.btn.dis{background:var(--g300);color:var(--g500)}
+.card{background:#fff;border:1px solid var(--g200);border-radius:.7rem;padding:.7rem}
+.muted{color:var(--g500);font-size:.8rem}
+.lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--g500);font-weight:700}
+.word{font-weight:800;letter-spacing:.02em}
+.sheet{background:#fff;border:2px solid var(--g300);border-radius:.3rem;aspect-ratio:1/1;position:relative;overflow:hidden}
+.sheet svg{width:100%;height:100%;display:block}
+.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%}
+.pill{display:inline-block;border-radius:.35rem;padding:.1rem .45rem;font-size:.72rem;font-weight:700}
+.note{font-size:.78rem;color:#9ca3af;margin:.3rem 0 0;max-width:1100px;line-height:1.45}
+.note b{color:#e5e7eb}
+table.t{border-collapse:collapse;width:100%;font-size:.8rem}
+table.t th,table.t td{border-bottom:1px solid var(--g200);padding:.35rem .45rem;text-align:left}
+table.t th{font-size:.7rem;text-transform:uppercase;color:var(--g500)}
+.field{display:flex;flex-direction:column;gap:.25rem;font-size:.82rem}
+.input{border:1px solid var(--g300);border-radius:.4rem;padding:.4rem .55rem;background:#fff;font-size:.85rem;min-height:2rem}
+.switch{display:inline-block;width:2.2rem;height:1.2rem;border-radius:999px;background:var(--g300);position:relative;vertical-align:middle}
+.switch::after{content:"";position:absolute;top:.15rem;left:.15rem;width:.9rem;height:.9rem;border-radius:50%;background:#fff}
+.switch.on{background:var(--pri)}.switch.on::after{left:1.15rem}
+.seg{display:inline-flex;border:1px solid var(--g300);border-radius:.45rem;overflow:hidden}
+.seg span{padding:.35rem .7rem;font-size:.8rem;border-right:1px solid var(--g300);background:#fff}
+.seg span:last-child{border-right:0}.seg span.on{background:var(--pri);color:#fff;font-weight:600}
+.diagram{background:#fff;border-radius:.5rem;padding:.6rem;overflow:auto}
+.diagram svg{display:block;max-width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="mock-head"><h1>v13.0.0 · TV Picto — mot seul, crédit animé</h1><p>Décision de l'utilisateur : « on n'affiche rien sauf l'animation classique des points quand l'animateur/admin les donne ». Zones communes et chronomètre commun inchangés. Remplace la maquette validée <code>v13.0.0/ui/tv_picto_started__zones.html</code>, qui est reprise en entier.</p></div>
+<div class="stance">Une seule proposition : la décision fixe le comportement.</div>
+<section data-proposition="A" class="on">
+<div class="state">Dessin en cours <small>— inchangé : chronomètre commun, indice, feuille, zone réponse vide</small></div><div class="tv" style="gap:0;padding:0">
+<div style="height:14%;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="font-size:2vw;line-height:1;font-weight:800;font-variant-numeric:tabular-nums">01:12</div>
+<div style="width:58%;height:10px;flex-shrink:0;background:#e5e7eb;border-radius:999px;overflow:hidden"><div style="height:100%;width:80%;background:#16a34a;border-radius:999px"></div></div></div>
+<div style="height:10%;display:flex;align-items:center;justify-content:center;gap:1.5%;font-size:1.6vw;background:rgba(255,255,255,.08)"><span style="background:#fff2;border-radius:.4rem;padding:.2% 1%">🏠 Vie quotidienne</span><span>✏️ <b>Alice</b> dessine pour <b style="color:#93c5fd">l'Équipe Bleue</b></span></div>
+<div style="flex:1;min-height:0;display:flex;justify-content:center;align-items:center;padding:1% 0"><div class="sheet" style="height:100%"><svg viewBox="0 0 100 100" aria-label="dessin en cours"><g fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<polyline points="22,52 50,26 79,51"/><polyline points="27,48 27,82 74,83 74,47"/><polyline points="44,83 44,70"/></g></svg></div></div>
+<div style="height:22%;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2%"></div></div><div class="state">Après « Trouvé ! » <small>— REVEALED : chronomètre arrêté, dessin final, <b>le mot seul</b> dans la zone réponse (comme la réponse des autres types)</small></div><div class="tv" style="gap:0;padding:0">
+<div style="height:14%;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="font-size:2vw;line-height:1;font-weight:800;font-variant-numeric:tabular-nums">00:41</div>
+<div style="width:58%;height:10px;flex-shrink:0;background:#e5e7eb;border-radius:999px;overflow:hidden"><div style="height:100%;width:46%;background:#d97706;border-radius:999px"></div></div></div>
+<div style="height:10%;display:flex;align-items:center;justify-content:center;gap:1.5%;font-size:1.6vw;background:rgba(255,255,255,.08)"><span style="background:#fff2;border-radius:.4rem;padding:.2% 1%">🏠 Vie quotidienne</span><span>✏️ <b>Alice</b> dessine pour <b style="color:#93c5fd">l'Équipe Bleue</b></span></div>
+<div style="flex:1;min-height:0;display:flex;justify-content:center;align-items:center;padding:1% 0"><div class="sheet" style="height:100%"><svg viewBox="0 0 100 100" aria-label="dessin en cours : une maison"><g fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<polyline points="22,52 50,26 79,51"/><polyline points="27,48 27,82 74,83 74,47"/><polyline points="44,83 44,64 56,64 56,83"/>
+<polyline points="33,56 41,56 41,63 33,63 33,56"/><polyline points="61,55 69,55 69,62 61,62 61,55"/><polyline points="63,37 63,27 69,27 69,42"/>
+<path d="M66,22 q3,-4 0,-8 q-3,-4 1,-8"/></g></svg></div></div>
+<div style="height:22%;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2%"><div style="text-align:center"><div style="font-size:4.2vw;font-weight:900;letter-spacing:.06em;color:#fde68a">MAISON</div></div></div></div><div class="state">Au crédit <small>— l'admin ou l'animateur donne les points : l'animation commune joue par-dessus l'écran</small></div><div class="tv" style="gap:0;padding:0;position:relative">
+<div style="height:14%;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="font-size:2vw;line-height:1;font-weight:800;font-variant-numeric:tabular-nums">00:41</div>
+<div style="width:58%;height:10px;flex-shrink:0;background:#e5e7eb;border-radius:999px;overflow:hidden"><div style="height:100%;width:46%;background:#d97706;border-radius:999px"></div></div></div>
+<div style="height:10%;display:flex;align-items:center;justify-content:center;gap:1.5%;font-size:1.6vw;background:rgba(255,255,255,.08)"><span style="background:#fff2;border-radius:.4rem;padding:.2% 1%">🏠 Vie quotidienne</span><span>✏️ <b>Alice</b> dessine pour <b style="color:#93c5fd">l'Équipe Bleue</b></span></div>
+<div style="flex:1;min-height:0;display:flex;justify-content:center;align-items:center;padding:1% 0"><div class="sheet" style="height:100%"><svg viewBox="0 0 100 100" aria-label="dessin en cours : une maison"><g fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<polyline points="22,52 50,26 79,51"/><polyline points="27,48 27,82 74,83 74,47"/><polyline points="44,83 44,64 56,64 56,83"/>
+<polyline points="33,56 41,56 41,63 33,63 33,56"/><polyline points="61,55 69,55 69,62 61,62 61,55"/><polyline points="63,37 63,27 69,27 69,42"/>
+<path d="M66,22 q3,-4 0,-8 q-3,-4 1,-8"/></g></svg></div></div>
+<div style="height:22%;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2%"><div style="text-align:center"><div style="font-size:4.2vw;font-weight:900;letter-spacing:.06em;color:#fde68a">MAISON</div></div></div><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none"><div style="position:absolute;width:6px;height:6px;border-radius:50%;background:#93c5fd;box-shadow:0 0 18px 8px #60a5fa;left:30%;top:30%"></div><div style="position:absolute;width:5px;height:5px;border-radius:50%;background:#fde68a;box-shadow:0 0 14px 6px #fbbf24;right:28%;top:24%"></div><div style="background:rgba(37,99,235,.95);color:#fff;border-radius:.8rem;padding:.6em 1.2em;text-align:center;box-shadow:0 0 30px rgba(96,165,250,.8)"><div style="font-size:1.2vw">Équipe Bleue</div><div style="font-size:3vw;font-weight:900">+10 pts</div></div><div style="position:absolute;bottom:3%;right:3%;font-size:1.2vw;background:#0008;color:#fde68a;border-radius:.3rem;padding:.1em .5em">animation commune existante (TvPointsAward, #265)</div></div></div><p class="note">Aucun « Trouvé par » ni « +N pts » propre à Picto. Le montant réellement crédité n'apparaît que dans l'animation commune (fusée, étincelles, carte « équipe +N pts », #265), au moment du crédit. « 0 pt » ne déclenche aucune animation. Temps écoulé ou abandon, puis « Révéler » : même écran que « Après Trouvé », le mot seul.</p>
+</section>
+</body>
+</html>

@@ -186,3 +186,6 @@
 
 ## admin_backup
 - Les réservoirs sont regroupés dans une catégorie « Pools » (Rafale, Picto…), en sauvegarde comme en réinitialisation. _(v13.0.0, admin_backup__pools, GATE 2, 2026-11-23)_
+
+## picto (TV, tablettes, admin, anim)
+- Pas de « Trouvé par » ni de points dans la zone réponse ou sur les tablettes : une seule équipe joue la question. La TV montre le mot seul. Le crédit se voit par l'animation de points commune (`TvPointsAward`, #265), avec le montant réellement crédité. L'issue « Trouvé » (sans « par … ») ne reste que sur l'admin et l'anim. _(v13.0.0, LOT-2.3, revue M1, décision utilisateur 2026-11-24)_

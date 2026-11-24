@@ -3,7 +3,7 @@
 **Issues** : #191 (type de question PICTO et éditeur), #192 (équipe et dessinateur, remise secrète du mot), #193 (canal
 de dessin temps réel), #194 (manche jouable de bout en bout). Découpage : plan `_work/reports/plan-20261123-picto.md`.
 
-**Statut** : contrat de référence, écrit avant implémentation (contract-first) — **révision 7** (2026-11-23, issue entrante : audit `security` du LOT-2.1).
+**Statut** : contrat de référence, écrit avant implémentation (contract-first) — **révision 8** (2026-11-24, revue LOT-2.3 : révélation et crédit).
 
 **Arbitrages** :
 - cadrage : `_work/reports/plan-pictionary-cadrage-20261123-135359.md` ;
@@ -13,6 +13,8 @@ de dessin temps réel), #194 (manche jouable de bout en bout). Découpage : plan
 - allègement : `planner-20261123-scope-reduction.md` (réservoir et IA reportés) ;
 - révision 5 (GATE 2) : **tirage libre** parmi les mots saisis, chronomètre TV commun à tous les types ;
 - révision 6 (GATE 2) : dessinateur **choisi en `READY` ou tiré au hasard** parmi les joueurs connectés de l'équipe ;
+- révision 8 (revue LOT-2.3, décision de l'utilisateur) : révélation sans « Trouvé par » ni points propres à Picto,
+  crédit visible par l'animation commune des points (§6.5, §15) ;
 - révision 7 (issue entrante, audit `security` du LOT-2.1) : liaison des tablettes par jeton de session
   (`contracts/vplayer-session.md`, M1), purge de l'état de débit (m1), `PICTO_CANVAS_SYNC` borné (m2).
 
@@ -225,6 +227,24 @@ feuille vierge, l'admin relance la question (§6.6).
   `GameState`. Les autres mots de la question ne sont jamais révélés.
 - La feuille reste affichée (le journal est conservé) jusqu'au changement de question. Le dessinateur garde sa
   feuille, verrouillée.
+- **Affichage de la révélation** (révision 8, décision de l'utilisateur du 2026-11-24, revue LOT-2.3 M1). Une seule
+  équipe joue la question, donc :
+  - la TV et les tablettes n'affichent **ni « Trouvé par … » ni points propres à Picto** ;
+  - la TV montre le **mot seul** dans la zone réponse, comme la réponse des autres types ;
+  - les tablettes montrent « Mot révélé » et le mot, et le dessinateur garde sa feuille finale ;
+  - l'issue de la manche (« ✅ Trouvé », « ⏰ Temps écoulé », « ⏹ Manche arrêtée ») ne reste visible que sur l'admin
+    et l'anim, **sans « par … »**.
+- **Déroulé au clic sur « Trouvé ! »** (admin ou anim, en `STARTED`, `PAUSED`, ou `STOPPED` après `TIMEOUT`) :
+  1. Le serveur arrête la manche et la révèle dans la même action (§6.4) : `REVEALED`, issue `FOUND`, mot publié.
+     Il diffuse `REVEAL` comme le `REVEAL` existant : les sons de question s'arrêtent, et les LED et l'ambiance
+     suivent les règles de révélation existantes. **Aucun point n'est attribué.**
+  2. La TV montre le chronomètre arrêté, le dessin final et le mot dans la zone réponse. Les tablettes montrent le
+     mot. L'admin et l'anim voient l'issue « ✅ Trouvé » et la ligne de crédit pré-remplie (§7).
+  3. L'admin ou l'animateur crédite l'équipe (`TEAM_POINTS`, chemin existant). Le serveur émet `SCORE_CHANGE.GAINS`,
+     qui déclenche l'**animation commune des points** (`TvPointsAward`, #265) : sur la TV, et sur les seules
+     tablettes de l'équipe créditée. Le montant affiché est celui réellement crédité. « 0 pt » ne déclenche aucune
+     animation (comportement commun).
+  4. Le passage à la question suivante est inchangé.
 
 ### 6.6 Enchaînement et relance
 
@@ -493,10 +513,10 @@ la porte :
 | Buzzers (LED) | Dès que `PICTO_TEAM` est choisie, et pendant la manche : les buzzers de l'équipe qui dessine sont en `SOLID` à la couleur d'équipe, ceux des autres équipes en `DIM` (helper actif / participants de `led.go`, déjà partagé par MEMORY, RAFALE et ROUE). Révélation, pause, reconnexion : règles existantes. Appui ignoré (§6.3) |
 | Éclairage d'ambiance | `ActiveTeam` = `PICTO_TEAM` (scène « tour d'équipe » existante) |
 | Sons | Bruitages existants seulement : décompte au départ du chronomètre, « temps écoulé » (`OnTimeUp`), gain au crédit. **Aucun nouveau bruitage** |
-| TV | **Structure commune à tous les types** (`game-content-zones`, maquette M3) : **chronomètre commun à tous les types** (composant `Timer` : mm:ss et barre de progression, à sa place habituelle, `zone-timer`) ; **bandeau haut** (`zone-question`) = l'indice, soit la catégorie et « ✏️ *Nom* dessine pour *Équipe* » ; **zone média** (`zone-media`) = la feuille carrée, centrée à ratio fixe ; **zone réponse** (`zone-answers`) = le mot, seulement en `REVEALED`. **Écran statique** : `overflow: hidden`, unités viewport, `min-height: 0` |
-| Tablette du dessinateur | Préparation : « C'est toi qui dessines ! » (sans le mot). `STARTED` : le mot en grand + la feuille carrée sur toute la largeur, **aucun bouton**. `PAUSED` : feuille verrouillée, « Jeu en pause ». `REVEALED` : feuille finale + mot. Paysage et portrait |
-| Tablettes de l'équipe qui dessine | « Devinez ! *Nom* dessine — regardez la TV », sans feuille |
-| Tablettes des autres équipes | « *Équipe* devine le dessin de *Nom* », sans feuille |
+| TV | **Structure commune à tous les types** (`game-content-zones`, maquette M3) : **chronomètre commun à tous les types** (composant `Timer` : mm:ss et barre de progression, à sa place habituelle, `zone-timer`) ; **bandeau haut** (`zone-question`) = l'indice, soit la catégorie et « ✏️ *Nom* dessine pour *Équipe* » ; **zone média** (`zone-media`) = la feuille carrée, centrée à ratio fixe ; **zone réponse** (`zone-answers`) = le **mot seul**, seulement en `REVEALED`, sans « Trouvé par » ni points (§6.5). **Crédit** : animation commune des points (`TvPointsAward`), au moment du crédit (maquette `tv_picto_started__word_only`). **Écran statique** : `overflow: hidden`, unités viewport, `min-height: 0` |
+| Tablette du dessinateur | Préparation : « C'est toi qui dessines ! » (sans le mot). `STARTED` : le mot en grand + la feuille carrée sur toute la largeur, **aucun bouton**. `PAUSED` : feuille verrouillée, « Jeu en pause ». `REVEALED` : « Mot révélé », le mot et la feuille finale, sans « Trouvé par ». Paysage et portrait |
+| Tablettes de l'équipe qui dessine | « Devinez ! *Nom* dessine — regardez la TV », sans feuille. `REVEALED` : « Mot révélé » et le mot. Au crédit : animation commune du gain de leur équipe (#265, `own_team`) |
+| Tablettes des autres équipes | « *Équipe* devine le dessin de *Nom* », sans feuille. `REVEALED` : « Mot révélé » et le mot. Aucune animation de crédit |
 
 ## 16. Non-régression exigée
 

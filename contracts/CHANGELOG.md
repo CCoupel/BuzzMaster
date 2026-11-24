@@ -1,6 +1,17 @@
 # Changelog des Contrats API
 
 ---
+## [20261124] — v13.0.0 — PICTO : révélation sans « Trouvé par », crédit par l'animation commune (revue LOT-2.3)
+
+`picto.md` révision 8 (§6.5, §15). Décision de l'utilisateur du 2026-11-24. Interface seulement : **aucun champ,
+aucune action, aucun payload ne change. Aucun BREAKING.**
+- **[CHANGED]** TV et tablettes : plus de « Trouvé par … » ni de « +N pts » propres à Picto à la révélation. La TV
+  montre le mot seul dans la zone réponse, et les tablettes « Mot révélé » et le mot.
+- **[CHANGED]** Le crédit (manuel, `TEAM_POINTS`) se voit par l'animation commune des points (`SCORE_CHANGE.GAINS`,
+  #265), avec le montant réellement crédité ; « 0 pt » ne déclenche aucune animation. L'issue « ✅ Trouvé » (sans
+  « par … ») reste sur l'admin et l'anim.
+
+---
 ## [20261123-d] — v13.0.0 — Jeton de session : journaux alignés sur le code (revue LOT-2.2)
 
 `vplayer-session.md` §3, précision sans BREAKING.
