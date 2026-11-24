@@ -30,6 +30,7 @@ BuzzControl est une solution complete pour animer des jeux de quiz avec des buzz
 | **QCM** | 4 choix colores (Rouge, Vert, Jaune, Bleu) |
 | **MEMORY** | Jeu de paires a memoriser |
 | **ROUE** | Roue de la Fortune : phrase a deviner, les equipes tournent la roue, proposent des consonnes et achetent des voyelles ; BONUS (marque 🎁 sur une case à points, éphémère ou permanent ; cadeau de l'animateur) ; composition de la roue par question (points, Banqueroute, Perdu, BONUS : global ou personnalise) |
+| **PICTO** | ✏️ Picto : un dessinateur (joueur VJoueur de l'équipe, choisi ou tiré au hasard) dessine un mot secret sur sa tablette, l'équipe le devine à l'oral ; mots saisis dans la question (1 à 20), un mot tiré au lancement ; « Trouvé ! » (y compris sur le gong), temps écoulé, arrêt, relance ; crédit manuel à l'équipe ; LED de l'équipe qui dessine |
 
 ### Interface d'Administration
 
@@ -49,6 +50,12 @@ BuzzControl est une solution complete pour animer des jeux de quiz avec des buzz
 - Fonds d'ecran personnalisables avec rotation automatique
 - Mode plein ecran pour videoprojecteur
 
+### Tablettes joueurs (VJoueur)
+
+- Chaque joueur reçoit un **jeton de session** à son inscription : sa place ne se reprend qu'avec son appareil
+- Un navigateur ne peut pas inscrire un second joueur tant que la place précédente y est mémorisée : l'animateur libère la place
+- Les buzzers physiques (BuzzClick, identifiés par MAC) ne sont pas concernés
+
 ### Buzzers (BuzzClick)
 
 - 4 boutons colores par buzzer (A, B, C, D)
@@ -64,6 +71,7 @@ BuzzControl est une solution complete pour animer des jeux de quiz avec des buzz
 - Bonus de completion (Memory)
 - Penalites d'erreur (optionnel)
 - Historique complet avec recalcul automatique
+- Temps et points de la page Jeu repris de la question, pour tous les types
 
 ---
 
@@ -195,6 +203,10 @@ cd web && npm install && cd ..
   }
 }
 ```
+
+Les places des tablettes et leurs empreintes de session sont enregistrées dans `data/config/vplayer_sessions.json`
+(empreintes seules, jamais le jeton). Ce fichier voyage avec `bumpers.json` dans les sauvegardes « Joueurs ». Sans lui,
+les places repassent en « premier arrivé » et un avertissement est journalisé.
 
 ### Ports Reseau
 

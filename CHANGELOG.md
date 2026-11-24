@@ -2,10 +2,14 @@
 
 Historique des versions du projet BuzzControl.
 
-## [13.0.0] - 2026-11-23 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191 à #194, #319) — partiel
+## [13.0.0] - 2026-11-23 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191 à #194, #319)
 
-Entrée **partielle** : la manche Picto est jouable de bout en bout, mais le milestone v13.0.0 n'est pas encore clos (QA,
-QUALIF et validation humaine restent à faire).
+Nouveau type de jeu **Picto** (✏️) : un dessinateur dessine un mot secret sur sa tablette, l'équipe le devine à l'oral.
+Ce milestone ajoute aussi le jeton de session des tablettes joueurs, et corrige le temps et les points de la page Jeu.
+Version indicative : le numéro exact du build QUALIF est rapporté par le déploiement.
+
+Lots livrés : LOT-1 (type et éditeur, #191), LOT-2.1 (préparation et dessin en direct, #192 et #193), LOT-2.2 (jeton de
+session, #319), LOT-2.3 (fin de manche, révélation et relance, #194), et le correctif de la page Jeu (#192).
 
 ### Added
 
