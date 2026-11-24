@@ -16,7 +16,6 @@ import (
 
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
-	"buzzcontrol/internal/server"
 )
 
 const pictoActFound = "PICTO_FOUND"
@@ -244,8 +243,6 @@ func TestPictoRound194_NoWord_StopsImmediately_RevealGivesAnEmptyWord(t *testing
 
 func TestPictoRound194_Credit_ManualThroughTeamPoints_TeamOnly(t *testing.T) {
 	w := newPictoWire(t)
-	// handleTeamPoints résout la catégorie du crédit par httpServer (absent du harnais fonctionnel).
-	w.app.httpServer = server.NewHTTPServer(0, w.app.engine, w.app.wsHub, w.app.buzzerHub, server.NewLogsWebSocketHub(10))
 	w.roundStartedWithDelay(t, 120)
 	w.send(t, w.admin, pictoActFound, struct{}{})
 	waitPhase(t, w, "REVEALED")
@@ -429,8 +426,6 @@ func TestPictoRound194_ReconnectingScreens_GetTheSheet_AdminAnimAlsoTheWord(t *t
 	w.send(t, w.alice, pictoActStrokes, strokesPayload(ep, 1, [2]int{100, 100}, [2]int{200, 200}))
 	w.tv.waitAction(t, pictoActStrokes, 1, 3*time.Second)
 
-	// sendStateToClient (HELLO) déréférence httpServer, absent du harnais fonctionnel.
-	w.app.httpServer = server.NewHTTPServer(0, w.app.engine, w.app.wsHub, w.app.buzzerHub, server.NewLogsWebSocketHub(10))
 	base := startAnimAllowlistTestServer(t, w.app)
 	for _, tc := range []struct {
 		name, path string
@@ -463,7 +458,6 @@ func TestPictoRound194_ReconnectingScreens_GetTheSheet_AdminAnimAlsoTheWord(t *t
 // Hors manche, un écran qui se connecte ne reçoit ni feuille d'office ni mot.
 func TestPictoRound194_ScreenConnectingOutsideARound_GetsNothing(t *testing.T) {
 	w := newPictoWire(t)
-	w.app.httpServer = server.NewHTTPServer(0, w.app.engine, w.app.wsHub, w.app.buzzerHub, server.NewLogsWebSocketHub(10))
 	base := startAnimAllowlistTestServer(t, w.app)
 	c := newWireClient(t, "tv-2", dialWS(t, base, "/ws/tv"))
 	learnClientID(t, w.app, c.conn)

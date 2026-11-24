@@ -19,6 +19,7 @@ import (
 
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
+	"buzzcontrol/internal/server"
 
 	"github.com/gorilla/websocket"
 )
@@ -137,6 +138,10 @@ type pictoWire struct {
 func newPictoWire(t *testing.T) *pictoWire {
 	t.Helper()
 	app := newBroadcast127TestApp(t)
+	// httpServer AVANT le démarrage du hub (startAnimAllowlistTestServer lance wsHub.Run) : NewHTTPServer pose
+	// wsHub.OnClientRegistered, relu par Run() — l'appeler après serait une course (-race). Requis par
+	// sendStateToClient (HELLO) et handleTeamPoints.
+	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
 	app.setupPictoCallbacks()                                 // comme main.go:665
 	app.wsHub.OnPlayerDisconnected = app.onPlayerDisconnected // comme main.go:886
 	app.engine.SetPhase(game.PhaseEnroll)
