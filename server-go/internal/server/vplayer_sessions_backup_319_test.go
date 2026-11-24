@@ -48,6 +48,19 @@ func newSessBackup319(t *testing.T) *sessBackup319 {
 	return &sessBackup319{srv: srv, cfgDir: cfg, id: id, token: token}
 }
 
+// waitCond319 attend (3 s au plus) qu'une condition observable soit vraie.
+func waitCond319(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("délai dépassé : %s", what)
+}
+
 func (b *sessBackup319) get(t *testing.T, url string) *httptest.ResponseRecorder {
 	t.Helper()
 	w := httptest.NewRecorder()
@@ -103,6 +116,9 @@ func TestVPlayerSessionsBackup319_ResetSelect_RemovesFingerprintsWithThePlayers(
 	if w.Code != http.StatusOK {
 		t.Fatalf("200 attendu, got %d: %s", w.Code, w.Body.String())
 	}
+	// handleResetSelect enchaîne SetBumpers (sauvegarde différée) et la suppression des fichiers : on laisse retomber la
+	// sauvegarde différée avant de lire l'état du disque, puis le fichier des empreintes ne doit plus exister.
+	time.Sleep(200 * time.Millisecond)
 	if _, err := os.Stat(filepath.Join(b.cfgDir, "vplayer_sessions.json")); err == nil {
 		t.Errorf("vplayer_sessions.json doit être supprimé avec les joueurs")
 	}
@@ -119,10 +135,19 @@ func TestVPlayerSessionsBackup319_Restore_SessionStaysValid(t *testing.T) {
 
 	archive := b.get(t, "/backup-select?bumpers=true").Body.Bytes()
 
-	// On efface les joueurs (état + fichiers), comme après un incident.
+	// On efface les joueurs (état + fichiers), comme après un incident. SetBumpers déclenche une SaveBumpers différée
+	// (goroutine du moteur, antérieure à v13) qui réécrit bumpers.json : on ATTEND qu'elle soit retombée (condition
+	// observable : bumpers.json ne contient plus la place) avant d'effacer les fichiers puis de restaurer — sinon elle
+	// pourrait écrire « {} » après l'extraction de l'archive et vider les places restaurées.
 	b.srv.engine.SetBumpers(make(map[string]*game.Bumper))
-	os.Remove(filepath.Join(b.cfgDir, "bumpers.json"))
+	bumpersFile := filepath.Join(b.cfgDir, "bumpers.json")
+	waitCond319(t, "la sauvegarde différée de SetBumpers a réécrit bumpers.json sans la place", func() bool {
+		raw, err := os.ReadFile(bumpersFile)
+		return err == nil && !strings.Contains(string(raw), b.id)
+	})
+	os.Remove(bumpersFile)
 	os.Remove(filepath.Join(b.cfgDir, "vplayer_sessions.json"))
+	time.Sleep(50 * time.Millisecond) // aucune autre écriture différée en vol (une seule goroutine par mutation)
 
 	body, contentType := multipartRestoreBody(t, archive)
 	req := httptest.NewRequest(http.MethodPost, "/restore", body)
