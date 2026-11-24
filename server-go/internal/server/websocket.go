@@ -684,8 +684,21 @@ func (h *WebSocketHub) TrySendToTypes(msg *protocol.Message, types ...ClientType
 		return
 	}
 	dataByType := make(map[ClientType][]byte, len(types))
+	var shared []byte // PICTO_STROKES carries nothing type-specific: one marshal for every recipient
 	for _, t := range types {
 		if _, done := dataByType[t]; done {
+			continue
+		}
+		if msg.Action == protocol.ActionPictoStrokes {
+			if shared == nil {
+				data, err := msg.SerializeForWebSocket()
+				if err != nil {
+					LogError(game.LogComponentWebSocket, "TrySendToTypes: failed to serialize %s: %v", msg.Action, err)
+					return
+				}
+				shared = data
+			}
+			dataByType[t] = shared
 			continue
 		}
 		data, err := serializeForClientType(msg, t)

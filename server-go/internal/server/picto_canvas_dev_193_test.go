@@ -234,3 +234,41 @@ func TestPictoCanvasDev_AllowSyncRateLimit(t *testing.T) {
 		t.Error("ForgetClient doit oublier les deux compteurs")
 	}
 }
+
+// TrySendToTypes sérialise PICTO_STROKES une seule fois pour tous les destinataires (rien de propre au type) :
+// mêmes octets pour TV, admin et anim, jamais pour une tablette ; un tampon plein perd la trame sans éviction.
+func TestPictoTrySendDev_SingleMarshalSameBytesForAllTypes(t *testing.T) {
+	hub := NewWebSocketHub()
+	mk := func(id string, ct ClientType, buf int) *WebSocketClient {
+		c := &WebSocketClient{ID: id, Type: ct, Send: make(chan []byte, buf)}
+		hub.clients[c] = true
+		return c
+	}
+	tv, admin, anim, tablet, full := mk("tv", ClientTypeTV, 4), mk("adm", ClientTypeAdmin, 4), mk("anim", ClientTypeAnim, 4), mk("tab", ClientTypeVPlayer, 4), mk("tv-full", ClientTypeTV, 1)
+	full.Send <- []byte("occupé")
+	msg, err := protocol.NewMessage(protocol.ActionPictoStrokes, protocol.PictoStrokesPayload{Epoch: 3, Seq: 7, Strokes: []protocol.PictoStroke{{ID: 1, Pts: [][]int{{1, 2}}, End: true}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub.TrySendToTypes(msg, ClientTypeTV, ClientTypeAdmin, ClientTypeAnim)
+	want, _ := msg.SerializeForWebSocket()
+	for name, c := range map[string]*WebSocketClient{"tv": tv, "admin": admin, "anim": anim} {
+		select {
+		case got := <-c.Send:
+			if string(got) != string(want) {
+				t.Errorf("%s : octets différents", name)
+			}
+		default:
+			t.Errorf("%s : trame non reçue", name)
+		}
+	}
+	if len(tablet.Send) != 0 {
+		t.Error("une tablette ne reçoit jamais PICTO_STROKES")
+	}
+	if len(full.Send) != 1 {
+		t.Error("tampon plein : la trame est perdue, rien d'autre ne change")
+	}
+	if _, still := hub.clients[full]; !still {
+		t.Error("le client au tampon plein reste enregistré")
+	}
+}
