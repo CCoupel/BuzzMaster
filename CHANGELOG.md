@@ -23,7 +23,6 @@ Ce milestone ajoute aussi le jeton de session des tablettes joueurs, et corrige 
 - **Dessin en direct (#193)** — le dessinateur trace sur sa tablette ; les traits sont relayés à la TV, à l'admin
   et à l'animateur, sans passer par l'état du jeu. Une feuille est bornée (6 000 traits, 60 000 points), et un client
   qui perd une trame redemande la feuille entière.
-
 - **Fin de manche Picto (#194)** — « Trouvé ! » arrête et révèle la manche en une seule action, y compris sur le gong
   (après « Temps écoulé »). Issues : trouvé, temps écoulé, arrêt, sans mot. La révélation montre le mot seul sur la TV et
   les tablettes. Le crédit va à l'équipe seule, par la ligne de crédit commune, pré-remplie aux points de la question

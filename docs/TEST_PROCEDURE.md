@@ -504,7 +504,7 @@ consommé par la validation (contrat §2 : `GET /models`, pas un appel de géné
 - Un test qui bloque un client WebSocket se heurte à `CLIENT_WRITE_TIMEOUT` (3 s) sur un runner lent. **Borner le scénario
   au cas testé** (par exemple la file pleine), pas à un volume arbitraire.
 - Un `t.Skip` n'est admis **que si le cas testé n'a pas pu être atteint**. Jamais un skip quand le cas a été atteint : il
-  masquerait une régression (revue ba4befbe / d81619f7 ; la règle est appliquée par 02767d26 aux tests de relais PICTO).
+  masquerait une régression (revue ba4befbe ; la règle est appliquée par 02767d26 aux tests de relais PICTO).
 
 ## Plan de test HTML à chaque GATE (v13.0.0 RETEX)
 

@@ -410,7 +410,7 @@ GOOS=linux GOARCH=arm64 go build -o buzzcontrol ./cmd/server
 ## Dépendances, govulncheck et exceptions (v13.0.0 RETEX)
 
 - `scripts/ci.sh` (étape 8, `govulncheck`) **bloque la CI**. Accepter un risque de dépendance ne suffit pas : il faut
-  **mettre à jour** la dépendance, ou ajouter une **exception explicite** dans le script (identifiant de la faille et motif).
+  **mettre à jour** la dépendance, ou faire évoluer le script pour exclure explicitement l'identifiant avec son motif (aucun mécanisme n'existe à ce jour).
 - Exemple : `gorilla/websocket` v1.5.3 → pseudo-version `v1.5.4-0.20240701034025-d67f41855da4` (GO-2026-6278, #320). Aucun
   tag publié ne contient le correctif ; la pseudo-version pointe le commit d'origine.
 
