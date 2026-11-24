@@ -13,7 +13,7 @@
   ],
   "status": "in_progress",
   "started_at": "2026-11-23T13:50:00Z",
-  "updated_at": "2026-11-24T15:20:00Z",
+  "updated_at": "2026-11-24T15:35:00Z",
   "intensite_depart": "complet",
   "cycles": 1,
   "plan": ".claude/workflow/plan-13.0.0.md",
@@ -290,8 +290,14 @@
       "artifact": "v4"
     },
     "retex": {
-      "status": "in_progress",
-      "task": "_work/tasks/doc-updater-20261124-retex.md"
+      "status": "completed",
+      "shas": [
+        "cfdfc79d",
+        "e4f46aed"
+      ]
+    },
+    "changelog_review": {
+      "status": "in_progress"
     }
   },
   "frozen": false,
