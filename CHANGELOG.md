@@ -33,9 +33,14 @@ Ce milestone ajoute aussi le jeton de session des tablettes joueurs, et corrige 
 ### Changed
 
 - **Page Jeu (#192)** — le temps et les points affichés en préparation sont repris de la question, pour tous les types.
+- **Relais du dessin Picto sérialisé une seule fois (#193)** — `PICTO_STROKES` est encodé une seule fois pour tous les écrans
+  (TV, admin, animateur), au lieu d'une fois par type de client. Même contenu relayé, charge CPU réduite.
 
 ### Security
 
+- **Dépendance WebSocket mise à jour (#320)** — `gorilla/websocket` passe de v1.5.3 à la pseudo-version `v1.5.4-0.20240701034025-d67f41855da4`,
+  qui contient le correctif de GO-2026-6278. Aucun tag publié ne contient ce correctif : la pseudo-version pointe le commit
+  d67f41855da4 (2024-07-01). `govulncheck` ne signale plus la faille.
 - **Jeton de session des tablettes joueurs (#319)** — une tablette ne peut plus reprendre une place avec son seul ID.
   Un jeton aléatoire est remis à l'enrôlement et à chaque reconnexion ; le serveur ne garde que son empreinte. Une
   reconnexion sans le bon jeton est refusée (`INVALID_SESSION`), sans éviction du joueur légitime. Les places créées
