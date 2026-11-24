@@ -2769,6 +2769,7 @@ gh label create "EN QA"     --color "f9d0c4" --description "Issue en cours de te
 gh label edit "A VALIDER" --name "LOT A VALIDER" 2>/dev/null || true   # migration v5.4.0 : label renommé
 gh label create "PLAN A VALIDER" --color "fbca04" --description "Plan rendu, en attente de validation utilisateur (GATE 2)" --force
 gh label create "LOT A VALIDER"  --color "f29513" --description "Lot en QUALIF, en attente de validation utilisateur (GATE LOT)" --force
+gh label create "VALIDE"         --color "5319e7" --description "Validée par l'utilisateur, en attente du push du lot puis de la CI verte" --force
 gh label create "A PUBLIER"      --color "d4c5f9" --description "Prête pour la PROD, en attente du Oui utilisateur (GATE 4)" --force
 gh label create "DONE"      --color "0e8a16" --description "Issue livrée et validée"           --force
 ```
@@ -3060,7 +3061,7 @@ Commandes disponibles :
 - /build, /publish qualif|prod, /deploy qualif|prod
 - /milestone new/status/close
 - /backlog, /marketing
-- /progression, /context-audit
+- /progression, /context-audit, /cleanup
 - /start-session, /end-session
 - /team-status
 
@@ -4052,6 +4053,7 @@ gh label create "EN QA"     --color "f9d0c4" --description "Issue en cours de te
 gh label edit "A VALIDER" --name "LOT A VALIDER" 2>/dev/null || true   # migration v5.4.0 : label renommé
 gh label create "PLAN A VALIDER" --color "fbca04" --description "Plan rendu, en attente de validation utilisateur (GATE 2)" --force
 gh label create "LOT A VALIDER"  --color "f29513" --description "Lot en QUALIF, en attente de validation utilisateur (GATE LOT)" --force
+gh label create "VALIDE"         --color "5319e7" --description "Validée par l'utilisateur, en attente du push du lot puis de la CI verte" --force
 gh label create "A PUBLIER"      --color "d4c5f9" --description "Prête pour la PROD, en attente du Oui utilisateur (GATE 4)" --force
 gh label create "DONE"      --color "0e8a16" --description "Issue livrée et validée"           --force
 ```
@@ -4083,7 +4085,7 @@ Synchronisation terminee.
   CLAUDE.md bloc TEAMLEADER_PROTOCOL : mis à jour
   Modeles/efforts agents            : <defauts adaptes | N alertes — N surcharges appliquees> (etape d6a)
   CLAUDE.md table Agents Disponibles : mis à jour (N lignes — documentation uniquement)
-  Labels GitHub                     : vérifiés (PLANNING, PLAN A VALIDER, PRET, EN COURS, EN REVIEW, EN QA, LOT A VALIDER, A PUBLIER, DONE)
+  Labels GitHub                     : vérifiés (PLANNING, PLAN A VALIDER, PRET, EN COURS, EN REVIEW, EN QA, LOT A VALIDER, VALIDE, A PUBLIER, DONE)
   Audit contexte (/context-audit)   : N corriges (Auto), N arbitres, N laisses (etape d7b)
   Publication                       : <PUBLISH> (section 7 — ex. "pousse sur origin/main")
   Schema infrastructure             : [convertit vers environments[] | deja a jour | inchange (refuse)]
