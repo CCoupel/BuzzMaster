@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { motionGestures } from '../utils/motionRules'
 import { getRgbColor, getContrastColor } from '../utils/colorUtils'
 import './AnimMotionActions.css'
@@ -47,6 +48,9 @@ function dispatch(gesture, handlers) {
  * @param {() => void} props.onStopMotionTimer - stopMotionTimer (useGame())
  * @param {() => void} props.onRevealMotionCard - revealMotionCard (useGame())
  * @param {(cardId: string, winnerTeam: string) => void} props.onDoneMotionCard - doneMotionCard (useGame())
+ * @param {boolean} [props.confirmWinner] - #321 (award-preselect.md §4) : en REVEAL, l'équipe qui a la main est
+ *   PRÉSÉLECTIONNÉE (modifiable : PERSONNE) et rien n'est envoyé avant le clic « VALIDER ». Faux : un clic envoie
+ *   aussitôt (comportement historique).
  */
 export default function AnimMotionActions({
   subphase,
@@ -59,7 +63,12 @@ export default function AnimMotionActions({
   onStopMotionTimer,
   onRevealMotionCard,
   onDoneMotionCard,
+  confirmWinner = false,
 }) {
+  // Sélection du gagnant de carte (REVEAL) : { card, value } — valable pour la carte qui l'a posée seulement,
+  // sinon repli sur l'équipe qui a la main (présélection).
+  const [picked, setPicked] = useState(null)
+  const winner = picked && picked.card === selectedCardId ? picked.value : currentTeam
   const handlers = { onFlipMotionCard, onStopMotionTimer, onRevealMotionCard, onDoneMotionCard }
 
   if (subphase === 'MEMORIZE') {
@@ -103,6 +112,23 @@ export default function AnimMotionActions({
         const teamStyle = gesture.color
           ? { backgroundColor: getRgbColor(gesture.color), color: getContrastColor(gesture.color) }
           : undefined
+        if (confirmWinner && subphase === 'REVEAL') {
+          const value = gesture.payload.WINNER_TEAM
+          const on = (value || '') === (winner || '')
+          return (
+            <button
+              key={gesture.key}
+              type="button"
+              className={`anim-conduct-btn anim-conduct-btn-${gesture.state} anim-motion-action-btn${on ? ' anim-motion-winner-on' : ''}`}
+              aria-pressed={on}
+              onClick={() => setPicked({ card: selectedCardId, value: value || '' })}
+              style={teamStyle}
+            >
+              {on ? '✓ ' : ''}{gesture.label}
+              {gesture.subLabel && <span className="anim-conduct-btn-sub">{gesture.subLabel}</span>}
+            </button>
+          )
+        }
         return (
           <button
             key={gesture.key}
@@ -117,6 +143,16 @@ export default function AnimMotionActions({
           </button>
         )
       })}
+      {confirmWinner && subphase === 'REVEAL' && (
+        <button
+          type="button"
+          className="anim-conduct-btn anim-conduct-btn-go anim-motion-action-btn anim-motion-validate-btn"
+          onClick={() => onDoneMotionCard?.(selectedCardId, winner || '')}
+        >
+          VALIDER
+          <span className="anim-conduct-btn-sub">{winner ? winner : 'personne'}</span>
+        </button>
+      )}
     </div>
   )
 }

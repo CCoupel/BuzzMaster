@@ -921,6 +921,7 @@ export default function AnimPage() {
           onStopMotionTimer={stopMotionTimer}
           onRevealMotionCard={revealMotionCard}
           onDoneMotionCard={doneMotionCard}
+          confirmMotionWinner
           waitReason={waitReason}
           // RAFALE (contrat rafale.md §5.1, milestone v8.0.0, #107 phase 2)
           // — câblage réel des boutons VALIDE/INVALIDE (AnimRafaleActions,

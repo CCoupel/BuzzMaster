@@ -136,6 +136,7 @@ function buttonSubLabel(key, state, phase, waitReason, ardoiseBlocked, launchLoc
  * @param {() => void} [props.onStopMotionTimer] - stopMotionTimer (useGame())
  * @param {() => void} [props.onRevealMotionCard] - revealMotionCard (useGame())
  * @param {(cardId: string, winnerTeam: string) => void} [props.onDoneMotionCard] - doneMotionCard (useGame())
+ * @param {boolean} [props.confirmMotionWinner] - #321 : REVEAL MEMOTION = gagnant présélectionné + « VALIDER » (transmis à AnimMotionActions)
  * @param {string|null} [props.waitReason] - #172/C2 : motif d'attente PREPARE
  *   (utils/prepareWaitReason.js, calculé par AnimPage.jsx) — remplace le
  *   repli générique "indispo." du bouton LANCER quand renseigné
@@ -198,6 +199,7 @@ export default function AnimConductPanel({
   onStopMotionTimer,
   onRevealMotionCard,
   onDoneMotionCard,
+  confirmMotionWinner = false,
   waitReason = null,
   rafaleDisabled = false,
   onRafaleValidate,
@@ -395,6 +397,7 @@ export default function AnimConductPanel({
               onStopMotionTimer={onStopMotionTimer}
               onRevealMotionCard={onRevealMotionCard}
               onDoneMotionCard={onDoneMotionCard}
+              confirmWinner={confirmMotionWinner}
             />
             {/* #235 (T14) — gestes du son (hôte au START, ou carte sonore retournée) sous les
                 gestes de carte ; rangée absente quand ni l'hôte ni la carte courante n'ont de son. */}

@@ -1074,6 +1074,16 @@
   text-shadow: none;
 }
 
+.memotion-winner-chip.selected {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.memotion-winner-chip.validate {
+  background: var(--success, #16a34a);
+  margin-left: auto;
+}
+
 .memotion-winner-chip.none:hover {
   background: var(--gray-500);
 }

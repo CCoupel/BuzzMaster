@@ -7,6 +7,7 @@ import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
 import { sortQuestionsByOrder, sortQuestionsByRounds, roundIndexOf, countEntries } from '../utils/questionOrder'
 import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter } from '../utils/buzzOrder'
+import { preselectAwardKeys } from '../utils/awardPreselect'
 import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { getMotionGridCols, getMotionCardCoord, getMotionCardPointsDisplay, isMotionSecretMode } from '../utils/motionGrid'
 import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
@@ -510,6 +511,8 @@ export default function GamePage() {
   const [awardSending, setAwardSending] = useState(false)
   const [awardToast, setAwardToast] = useState(null) // { kind: 'ok'|'error', text }
   const [pickedColor, setPickedColor] = useState(null)
+  // #321 — gagnant de carte MEMOTION : { card, value } ; absent ou autre carte → équipe qui a la main (présélection).
+  const [motionPick, setMotionPick] = useState(null)
   const awardGuardRef = useRef(null)
   const awardBaseRef = useRef(pointsInput) // base du barème (champ « Points » à l'entrée en REVEALED)
   const pointsInputRef = useRef(pointsInput)
@@ -571,6 +574,32 @@ export default function GamePage() {
   const teamLevelCredited = (teamName) => awardedTeams[teamName]?.TEAM_LEVEL === true
   const awardablePlayers = displayTeams.flatMap(t => (teamLevelCredited(t.name) ? [] : t.buzzers.map(b => b.mac))).filter(mac => !(mac in awardedPlayers))
   const awardableKeys = isPlayerLevel ? awardablePlayers : awardableTeams.map(t => t.name)
+
+  // #321 — présélection des gagnants à l'entrée en REVEALED (règle unique utils/awardPreselect.js).
+  // Déclaré APRÈS l'effet de remise à zéro ci-dessus (mêmes dépendances, ordre d'exécution). Le montant
+  // est évalué sur la base du barème figée à l'entrée en REVEALED (awardBaseRef), pas sur le champ
+  // « Points » : une modification manuelle ultérieure ne recoche ni ne décoche rien.
+  useEffect(() => {
+    if (gameState.phase !== 'REVEALED') return
+    const base = awardBaseRef.current > 0 ? awardBaseRef.current : 0
+    const keys = preselectAwardKeys({
+      question: gameState.question,
+      gameState,
+      bumpers,
+      awardLevel,
+      awarded: new Set([...Object.keys(awardedTeams), ...Object.keys(awardedPlayers)]),
+      knownKeys: awardableKeys,
+      amountOf: (key) => (isPlayerLevel
+        ? resolvePointsAward(gameState.question, base, {
+          hintsAtBuzz: playerHintsCount(bumpers[key], gameState.qcmInvalidated?.length || 0),
+          memory: { matchedPairs: gameState.memoryMatchedPairs?.length || 0, errors: gameState.memoryErrors || 0 },
+          useHints: true,
+        }).amount
+        : teamDefaultAward(key, base, true)),
+    })
+    if (keys.length > 0) setAwardSelected(new Set(keys))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.question?.ID, gameState.phase])
   const awardEntries = awardableKeys
     .filter(key => awardSelected.has(key))
     .map(key => (isPlayerLevel
@@ -1725,6 +1754,7 @@ export default function GamePage() {
             if (subphase === 'REVEAL' && selectedMotionCard) {
               const diff = selectedMotionCard.DIFFICULTY || 1
               const currentTeamData = sortedTeams.find(t => t.name === currentTeam)
+              const winnerSel = motionPick && motionPick.card === gameState.MEMOTION_SELECTED ? motionPick.value : (currentTeam || '')
               const currentTeamChipColor = currentTeamData ? getRgbColor(currentTeamData.COLOR) : undefined
               return (
                 <div className="memotion-admin-panel">
@@ -1743,18 +1773,26 @@ export default function GamePage() {
                   <div className="memotion-winner-chips">
                     {currentTeam && (
                       <button
-                        className="memotion-winner-chip"
+                        className={`memotion-winner-chip${winnerSel === currentTeam ? ' selected' : ''}`}
                         style={{ backgroundColor: currentTeamChipColor }}
-                        onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: currentTeam })}
+                        aria-pressed={winnerSel === currentTeam}
+                        onClick={() => setMotionPick({ card: gameState.MEMOTION_SELECTED, value: currentTeam })}
                       >
-                        {currentTeam}
+                        {winnerSel === currentTeam ? '✓ ' : ''}{currentTeam}
                       </button>
                     )}
                     <button
-                      className="memotion-winner-chip none"
-                      onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: '' })}
+                      className={`memotion-winner-chip none${winnerSel === '' ? ' selected' : ''}`}
+                      aria-pressed={winnerSel === ''}
+                      onClick={() => setMotionPick({ card: gameState.MEMOTION_SELECTED, value: '' })}
                     >
-                      Perdu
+                      {winnerSel === '' ? '✓ ' : ''}Perdu
+                    </button>
+                    <button
+                      className="memotion-winner-chip validate"
+                      onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: winnerSel })}
+                    >
+                      Valider
                     </button>
                   </div>
                 </div>

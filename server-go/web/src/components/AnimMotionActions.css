@@ -37,3 +37,9 @@
 .anim-motion-banner b {
   color: var(--text-primary, #eae7f5);
 }
+
+/* #321 — gagnant de carte présélectionné (REVEAL) : contour sur la sélection courante. */
+.anim-motion-winner-on {
+  outline: 3px solid #fff;
+  outline-offset: -3px;
+}
