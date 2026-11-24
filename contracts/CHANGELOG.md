@@ -1,6 +1,15 @@
 # Changelog des Contrats API
 
 ---
+## [20261124-c] — v13.0.0 — Jeton de session : redémarrage sans élagage (revue D1, D2)
+
+`vplayer-session.md` §3 et §7, correction de texte alignée sur le code, sans BREAKING.
+- **[CHANGED — précision]** Au redémarrage, les empreintes sont rechargées **sans élagage ni écriture** (`LoadBumpers`
+  ne passe pas par `SetBumpers`). L'élagage n'a lieu qu'à la restauration, au remplacement de la liste des joueurs
+  (`SetBumpers`), à la purge `NEW_GAME` et aux effacements. Une empreinte orpheline reste sans effet jusque-là.
+- Mise en forme : « Jamais dans `Bumper` » sur sa propre ligne au §3.
+
+---
 ## [20261124-b] — v13.0.0 — Jeton de session : écriture synchrone, store vide sans fichier (correctif CI 4541fc0a)
 
 `vplayer-session.md` §3 et §7, précision alignée sur le code, sans BREAKING.

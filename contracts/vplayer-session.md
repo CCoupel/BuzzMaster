@@ -48,8 +48,9 @@ N'importe quel client qui rejoue cet ID :
     (un fichier déjà absent n'est pas une erreur).
   - **Au démarrage**, le chargement n'écrit rien. Un fichier illisible est conservé tel quel jusqu'à la première
     mutation. Un fichier absent avec **0 place sans empreinte** ne produit aucun journal. Les règles de `WARN` du §6
-    sont inchangées. **Jamais dans `Bumper`** **[planner]** : la structure `Bumper` est sérialisée vers tous les clients, et
-  un fichier séparé ne peut pas fuiter par un sérialiseur oublié.
+    sont inchangées.
+  - **Jamais dans `Bumper`** **[planner]** : la structure `Bumper` est sérialisée vers tous les clients, et un
+    fichier séparé ne peut pas fuiter par un sérialiseur oublié.
 - **Comparaison** : empreinte du jeton reçu comparée à l'empreinte stockée en **temps constant**
   (`crypto/subtle.ConstantTimeCompare`).
 - **Confidentialité** : le jeton en clair n'est envoyé qu'au client qui vient d'être lié (`PLAYER_CONNECTED`, par
@@ -176,9 +177,10 @@ après une reconnexion légitime de le retrouver. Cela ne crée aucune fuite : s
 | Suppression d'un bumper (`DELETE` admin, purge) | Empreinte supprimée |
 | `NEW_GAME` qui purge les joueurs des tablettes | Toutes les empreintes des bumpers supprimés sont retirées |
 | Sauvegarde sélective « Joueurs » / restauration | `vplayer_sessions.json` voyage avec `bumpers.json` : les mêmes drapeaux dans `handleBackupSelect`, `handleResetSelect`, `detectTARContents` et `handleRestore` |
-| Redémarrage du serveur | Empreintes rechargées depuis le fichier, puis élagage des ID inconnus (écrit de façon synchrone). Fichier absent : store vide |
+| Redémarrage du serveur | Empreintes rechargées depuis le fichier (`SetVPlayerSessionsPath`), **sans élagage ni écriture** : `LoadBumpers` charge les joueurs sans passer par `SetBumpers`. Une empreinte dont l'ID n'est plus un joueur reste dans le fichier, sans effet (aucun ID ne revient), jusqu'au prochain élagage. Fichier absent : store vide |
+| Élagage (empreintes des ID qui ne sont plus des joueurs) | Seulement à la **restauration** (`LoadVPlayerSessions`), au **remplacement de la liste des joueurs** (`SetBumpers` : mise à jour complète, réinitialisation « Joueurs »), à la purge `NEW_GAME` et aux effacements (`ClearBumpers`, `ClearAll`) |
 
-Chaque ligne de ce tableau qui modifie les empreintes **écrit le fichier de façon synchrone**, et le **supprime** si plus
+Chaque événement de ce tableau qui modifie les empreintes **écrit le fichier de façon synchrone**, et le **supprime** si plus
 aucune empreinte ne reste (§3). Après un `NEW_GAME` qui retire toutes les places des tablettes, il n'y a donc plus de
 `vplayer_sessions.json`.
 
