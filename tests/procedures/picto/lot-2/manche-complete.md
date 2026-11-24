@@ -22,12 +22,12 @@
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Choisir l'équipe « Rouges », un dessinateur, lancer ; le dessinateur trace pendant ~20 s | Dessin en direct sur la TV ; le mot n'apparaît que sur le téléphone du dessinateur, l'admin et l'anim | | |
-| 2 | L'équipe devine **à l'oral** ; l'animateur appuie sur « Trouvé ! » | La manche s'arrête **et** la réponse est révélée en une seule fois : le **mot apparaît en zone réponse de la TV**, le chronomètre s'arrête | | |
-| 3 | TV | La feuille reste affichée (verrouillée), avec le mot révélé | | |
-| 4 | Téléphone du dessinateur | Feuille finale + mot, sans possibilité de dessiner | | |
-| 5 | Anim / admin : ligne de crédit | « +10 pts » **pré-rempli** pour l'équipe « Rouges » (points de la question), ajustable | | |
-| 6 | Valider le crédit | Score de l'équipe +10, animation de gain, la ligne n'est plus proposée (une seule attribution) ; **aucun score individuel** pour le dessinateur | | |
-| 7 | Les autres téléphones | Voient le résultat ; jamais la feuille pendant le dessin | | |
+| 2 | L'équipe devine **à l'oral** ; l'animateur appuie sur « Trouvé ! » | La manche s'arrête **et** la réponse est révélée en une seule fois, **sans aucun point attribué** : le chronomètre s'arrête, la TV montre le dessin final et **le mot seul** en zone réponse | | |
+| 3 | TV | **Aucun** « Trouvé par … », aucun « +10 pts », aucun nom d'équipe dans la zone réponse : le mot, comme la réponse des autres types | | |
+| 4 | Téléphones (dessinateur et autres) | Dessinateur : « Mot révélé », le mot et sa feuille finale ; les autres : « Mot révélé » et le mot ; aucun « Trouvé par … » ni points | | |
+| 5 | Anim / admin | Issue « ✅ Trouvé » **sans le nom de l'équipe** ; ligne de crédit « +10 pts » **pré-remplie** pour « Rouges » seulement (« 0 pt » pour les autres équipes) | | |
+| 6 | Valider le crédit « +10 pts » | **L'animation commune des points** se joue sur la TV (équipe « Rouges », +10), et sur les **seuls** téléphones de « Rouges » ; la ligne se verrouille ; score de l'équipe +10 ; aucun score individuel pour le dessinateur | | |
+| 7 | Regarder les téléphones des autres équipes | Aucune animation de points | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -42,7 +42,8 @@
 | 1 | Lancer une manche et laisser le chronomètre aller à zéro (ou régler une durée courte) | Son et éclairage « temps écoulé » habituels ; la manche s'arrête ; **le mot n'est pas encore affiché** sur la TV | | |
 | 2 | Écrans animateur / admin | Proposent « Trouvé ! » et la révélation | | |
 | 3 | « Trouvé ! » (l'équipe a répondu sur le gong) | Révélation immédiate, issue « Trouvé », crédit pré-rempli à 10 pts | | |
-| 4 | Refaire un temps écoulé, cette fois « Révéler » sans « Trouvé » | Mot révélé, **aucun crédit** proposé (seulement « 0 pt » côté anim) | | |
+| 4 | Refaire un temps écoulé, cette fois « Révéler » sans « Trouvé » | Mot révélé (mot seul sur la TV), **aucun crédit** proposé (seulement « 0 pt » côté anim) | | |
+| 4b | Valider « 0 pt » | **Aucune animation** sur la TV ni les téléphones, aucun texte de points ; la ligne se verrouille sur « 0 pt » | | |
 | 5 | Après la révélation, essayer « Trouvé ! » | Plus proposé / refusé | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
