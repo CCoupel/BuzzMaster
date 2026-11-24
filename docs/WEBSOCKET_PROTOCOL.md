@@ -2133,6 +2133,7 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 | `PICTO_SET_TEAM` | `{ "TEAM": string }` | admin, anim | `PREPARE`, `READY` |
 | `PICTO_SET_DRAWER` | `{ "PLAYER": string }` (ID de bumper) | admin, anim | `PREPARE`, `READY` |
 | `PICTO_DRAW_DRAWER` | `{}` (tirage au hasard parmi les VJoueurs connectés de l'équipe) | admin, anim | `PREPARE`, `READY` |
+| `PICTO_FOUND` | `{}` (« Trouvé ! » : arrête la manche et la révèle dans la même action) | admin, anim | `STARTED`, `PAUSED`, et `STOPPED` après `TIMEOUT` |
 | `PICTO_STROKES` | `{ "EPOCH": int, "STROKES": [ { "ID": int, "PTS": [[x, y], ...], "END": bool } ] }` | VJoueur dessinateur | `STARTED` |
 | `PICTO_CANVAS_SYNC` | `{}` | tv, admin, anim ; VJoueur seulement s'il est le dessinateur | toutes |
 
@@ -2177,7 +2178,8 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 - `QUESTION.PICTO_WORDS` est retiré des messages `/ws/tv` et `/ws/player` (les trois sites de sérialisation). Il reste
   présent pour `/ws/admin` et `/ws/anim`.
 - Le mot de la manche n'est dans aucun `UPDATE` ni message à la TV ou à une tablette non dessinatrice ; il n'apparaît dans
-  `GameState` qu'en `REVEALED`, dans une livraison ultérieure.
+  `GameState` qu'en `REVEALED`, avec `PICTO_REVEALED_WORD` (et `PICTO_REVEALED_CATEGORY`). Les `UPDATE` de la TV et des
+  tablettes portent le mot seul, sans payload de « Trouvé par ».
 
 ## References
 

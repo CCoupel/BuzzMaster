@@ -2,10 +2,10 @@
 
 Historique des versions du projet BuzzControl.
 
-## [13.0.0] - 2026-11-23 — Picto : type de question, préparation, dessin en direct et jeton de session (LOT-1, LOT-2.1 et LOT-2.2, #191 à #193, #319) — partiel
+## [13.0.0] - 2026-11-23 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191 à #194, #319) — partiel
 
-Entrée **partielle** : le type Picto est en cours de livraison (milestone v13.0.0). La fin de manche avec révélation
-suit dans un lot suivant.
+Entrée **partielle** : la manche Picto est jouable de bout en bout, mais le milestone v13.0.0 n'est pas encore clos (QA,
+QUALIF et validation humaine restent à faire).
 
 ### Added
 
@@ -27,6 +27,11 @@ suit dans un lot suivant.
 ### Changed
 
 - **Page Jeu (#192)** — le temps et les points affichés en préparation sont repris de la question, pour tous les types.
+- **Fin de manche Picto (#194)** — « Trouvé ! » arrête et révèle la manche en une seule action, y compris sur le gong
+  (après « Temps écoulé »). Issues : trouvé, temps écoulé, arrêt, sans mot. La révélation montre le mot seul sur la TV et
+  les tablettes. Le crédit va à l'équipe seule, par la ligne de crédit commune, pré-remplie aux points de la question
+  (crédit manuel, ajustable). La relance de la question remet la manche en préparation. Les LED des buzzers allument
+  l'équipe qui dessine.
 
 ### Security
 
@@ -39,8 +44,6 @@ suit dans un lot suivant.
 
 ### Notes
 
-- Une manche Picto n'est pas encore révélée : la fin de manche (« Trouvé », temps écoulé, abandon, révélation du mot)
-  arrive dans un lot suivant. La relance de la question remet la manche en préparation avec une feuille vierge.
 - **Sécurité** : les mots sont lisibles par qui peut ouvrir la liste des questions ou les pages admin et animateur, qui
   ne demandent pas encore d'authentification. Les tablettes joueurs doivent rester sur un réseau isolé de
   l'administration en attendant la correction prévue avec #259 (voir ADMIN_GUIDE, « Sécurité »).

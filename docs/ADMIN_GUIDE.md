@@ -1276,8 +1276,7 @@ Le champ SSID2/Mot de passe 2 permet de configurer un reseau WiFi de secours :
 ## Question Picto (v13.0.0, #191)
 
 Le type **✏️ Picto** dessine un mot sur une tablette, pour que l'équipe le devine à l'oral. Cette section décrit
-l'éditeur de la question, puis la préparation et le dessin d'une manche. La fin de manche et la révélation arrivent
-avec les lots suivants.
+l'éditeur de la question, la préparation, le dessin, puis la fin de manche et la révélation.
 
 ### Créer une question Picto
 
@@ -1305,8 +1304,24 @@ avec les lots suivants.
 5. Pendant la manche, le dessin apparaît en direct sur la TV, sur cet écran et sur l'écran de l'animateur. La tablette
    du dessinateur retrouve sa feuille et son mot à la reconnexion.
 
-> Le déroulé est en cours de livraison : la manche ne se termine pas encore par une révélation du mot dans cette version.
-> La relance de la question remet la manche en préparation avec une feuille vierge.
+### Terminer une manche Picto
+
+- **« Trouvé ! »** (admin ou animateur) : l'équipe a trouvé le mot. La manche s'arrête et le mot s'affiche sur la TV et les
+  tablettes. Une ligne de crédit est proposée à l'équipe, pré-remplie aux points de la question. Ajustez-la si besoin, puis
+  validez : c'est un crédit manuel.
+- **Temps écoulé** : la manche s'arrête. La TV affiche « Temps écoulé », et le mot n'est **pas** encore affiché. Si la réponse
+  arrive sur le gong, « Trouvé » crédite encore l'équipe. Sinon, **« Révéler »** montre le mot à tous, sans points.
+- **Arrêt** (STOP) : la manche s'arrête, la TV affiche « Manche arrêtée ». Le mot se révèle ensuite avec « Révéler », sans points.
+- **Sans mot** : si la question n'a plus de mot au lancement, la manche s'arrête aussitôt, sans rien envoyer au dessinateur.
+- Dans tous les cas, « Révéler » affiche le **mot seul** sur la TV et les tablettes. Le crédit de l'équipe se voit par
+  l'animation de points commune, sans mention « Trouvé par ».
+
+**Relancer la question** : si le dessinateur décroche ou si la manche est mal partie, sélectionnez de nouveau la question.
+Elle revient en préparation, avec la même équipe et le même dessinateur (modifiables), et une feuille vierge au lancement
+suivant. Le mot est tiré à nouveau au lancement, et il peut ressortir.
+
+**Dessinateur déconnecté** : la manche continue, le chronomètre ne s'arrête pas. Une alerte s'affiche sur l'admin et l'animateur.
+Si le dessinateur revient avec sa tablette, il retrouve sa feuille et son mot.
 
 ### Sécurité — à lire avant un événement
 
