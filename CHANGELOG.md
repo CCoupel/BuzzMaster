@@ -2,6 +2,39 @@
 
 Historique des versions du projet BuzzControl.
 
+## [13.1.0] - 2026-11-24 — Présélection des gagnants au crédit, sécurité des dépendances Go (#321, #322)
+
+À la révélation de la réponse, la page Jeu coche désormais d'office les équipes ou les joueurs que la question désigne.
+Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas sur « Donner les points ».
+
+### Added
+
+- **Présélection des gagnants au crédit (#321)** — à l'entrée en `REVEALED`, la page Jeu coche les unités gagnantes
+  selon le type de question :
+  - **Picto** : l'équipe qui dessine, si la manche est trouvée ;
+  - **Mémoire** : en solo, l'équipe participante ; en multi-équipes, les équipes qui ont un score positif ;
+  - **Rafale** : l'équipe participante en solo, ou les équipes dont le compteur retenu est positif en multi-équipes ;
+  - **QCM** : les équipes ou les joueurs qui ont donné la bonne couleur ;
+  - **Speedy** : le premier buzzeur (son joueur au niveau joueur, son équipe au niveau équipe). L'admin décoche si la réponse était fausse ;
+  - **Ardoise** : les équipes dont la réponse correspond à la réponse attendue (comparaison sans accents, sans casse,
+    espaces compactés). Au niveau joueur, rien n'est coché ;
+  - **Memotion** : voir ci-dessous.
+  Une unité déjà créditée, ou dont le montant est nul ou négatif, n'est jamais cochée. La sélection reste modifiable.
+- **Memotion : gagnant de carte présélectionné (#321)** — le sélecteur de gagnant part sur l'équipe qui a la main, avec
+  « Personne » comme seul autre choix. En solo, l'équipe unique est présélectionnée. Sur l'anim, le geste est en deux
+  temps : choix, puis **VALIDER** ; rien n'est envoyé avant ce clic. Sur l'admin, le choix présélectionné se confirme
+  par **Valider**. Le message envoyé au serveur ne change pas.
+
+### Security
+
+- **Dépendances Go mises à jour (#322)** — `golang.org/x/net` passe de v0.60.0 à v0.62.0, et `golang.org/x/sys` de v0.48.0
+  à v0.49.0 (tiré par `x/net`). Corrige GO-2026-6866 et GO-2026-6860. `govulncheck` ne signale plus ces failles.
+
+### Notes
+
+- Les tests existants de l'attribution groupée ont été **adaptés** : la sélection est désormais pré-cochée, et leurs
+  fixtures repartent d'une sélection vide. Aucune assertion n'a été supprimée ni affaiblie.
+
 ## [13.0.0] - 2026-11-24 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191, #192, #193, #319, #194)
 
 Nouveau type de jeu **Picto** (✏️) : un dessinateur dessine un mot secret sur sa tablette, l'équipe le devine à l'oral.

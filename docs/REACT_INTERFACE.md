@@ -527,7 +527,7 @@ Fichiers : `components/AnimMotionActions.{jsx,css}` (nouveaux). Première occupa
 - **`GRID`** → bandeau rappel équipe active ; pas de bouton (sélection via grille)
 - **`SELECTED`** → boutons `DÉMARRER` (go, vert) + `ANNULER` (optional, bleu)
 - **`QUESTION`** → boutons `STOP CHRONO` (optional) + `RÉVÉLER` (go si chrono ≥0) + `SANS VAINQUEUR` (optional)
-- **`REVEAL`** → boutons équipe courante (go, couleur équipe) + `PERSONNE` (optional)
+- **`REVEAL`** → boutons équipe courante (go, couleur équipe) + `PERSONNE` (optional). **v13.1.0 (#321)** : avec `confirmWinner` (activé par `AnimPage` via `AnimConductPanel.confirmMotionWinner`), le choix d'équipe est présélectionné (`aria-pressed`) et n'est envoyé qu'après le bouton **VALIDER** (`onDoneMotionCard`) ; sans l'option, le geste envoie aussitôt (comportement inchangé). Voir `contracts/award-preselect.md` §4.
 
 **Palette** : boutons `anim-conduct-btn-{go|optional|danger|off}`, réutilisée depuis `AnimConductPanel` (L1).
 
