@@ -1068,4 +1068,4 @@
 .buzzer-mini .award-preview { margin-left: 0; margin-right: 0.4rem; }
 
 /* #321 — chip de gain prévu (équipe cochée) : pénalité en rouge */
-.memory-acquired-badge.award-chip-neg { background: #dc2626; color: #fff; }
+.memory-acquired-badge.award-chip-neg { background: #dc2626; color: #fff; box-shadow: 0 0 6px rgba(220, 38, 38, 0.5); }
