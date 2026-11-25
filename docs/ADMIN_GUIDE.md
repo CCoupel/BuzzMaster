@@ -2493,11 +2493,12 @@ Attribution des points (cliquer une équipe) :
 de la question, avec le même dessinateur du début à la fin. Le mot passe au suivant à chaque « Trouvé » ou « Passer ».
 
 **Réglages de la question** (éditeur Picto) :
-- **Source des mots** : les mots saisis dans la question, ou le Pool Picto (voir ci-dessous). Avec le Pool Picto, les catégories et difficultés se choisissent en sélection multiple ; la catégorie du crédit est la première catégorie du filtre ;
+- **Source des mots** : les mots saisis dans la question, ou le Pool Picto (voir ci-dessous). Pour Rafale Picto avec le Pool Picto, les catégories et difficultés se choisissent en sélection multiple ; la catégorie du crédit est la première catégorie du filtre ;
 - **Passes** : coût de 0 à 100 points par passe (0 = gratuite), et **1 passe** ou **illimitées** ;
 - **Fin de pool** : **🔁 reboucle** (les mots passés reviennent, par ordre d'ancienneté) ou **⏹ fin à la dernière**
   (la manche s'arrête quand il ne reste plus de mot). Un mot trouvé ne revient jamais.
 - **Points** : valeur d'un mot trouvé. **Temps** : durée de la manche, 30 à 300 s.
+- **Mise en page** : pour Rafale Picto, les cartes Mots, Passes et Temps / points sont empilées, une par ligne ; Picto (un mot) garde deux colonnes.
 
 **Conduite pendant la manche** (page Jeu ou anim) :
 1. Préparer comme un Picto : équipe, puis dessinateur (choix ou tirage parmi les joueurs connectés). Le lancement exige un dessinateur connecté.
