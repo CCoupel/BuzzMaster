@@ -2878,21 +2878,22 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 	// RAFALE reservoir (v8.0.0, #197, contract §10) — dedicated flag,
 	// deliberately not piggybacked on "questions": the reservoir is a
 	// separate global pool, not part of the per-quiz Questions directory.
-	includeRafale := r.URL.Query().Get("rafale") == "true"
+	// v13.1.0 (#324): the pools are a list (rafale, picto) — pool_backup.go.
+	includePools := poolFlags(r)
 
 	// If nothing selected, include everything
-	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeMedias && !includeAmbiance && !includeRafale {
+	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeMedias && !includeAmbiance && !anyPoolFlag(includePools) {
 		includeQuestions = true
 		includeTeams = true
 		includeBumpers = true
 		includeHistory = true
 		includeMedias = true
 		includeAmbiance = true
-		includeRafale = true
+		setAllPoolFlags(includePools)
 	}
 
-	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v, rafale=%v",
-		includeQuestions, includeTeams, includeBumpers, includeHistory, includeMedias, includeAmbiance, includeRafale)
+	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v, %s",
+		includeQuestions, includeTeams, includeBumpers, includeHistory, includeMedias, includeAmbiance, poolFlagsLog(includePools))
 
 	// Set headers for TAR download
 	cfg := config.Get()
@@ -3024,16 +3025,8 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 	// silently excluded from a selective backup while still riding along
 	// in a full /fs-backup archive (contract §10) — a discreet, easy-to-miss
 	// gap this dedicated flag closes.
-	if includeRafale {
-		rafaleDir := filepath.Join(filesDir, "rafale")
-		if _, err := os.Stat(rafaleDir); err == nil {
-			h.addDirToTAR(tw, rafaleDir, "files/rafale")
-		}
-		rafaleUsedPath := filepath.Join(configDir, "rafale_used.json")
-		if _, err := os.Stat(rafaleUsedPath); err == nil {
-			h.addFileToTAR(tw, rafaleUsedPath, "config/rafale_used.json")
-		}
-	}
+	// v13.1.0 (#324): every pool of the list (rafale, picto).
+	h.backupPools(tw, includePools, filesDir, configDir)
 
 	log.Printf("[HTTP] Selective backup completed")
 }
@@ -3165,7 +3158,7 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 	resetAmbiance := r.URL.Query().Get("ambiance") == "true"
 	// RAFALE reservoir (v8.0.0, #197) — mirrors handleBackupSelect's
 	// includeRafale, see its doc comment for the rationale.
-	resetRafale := r.URL.Query().Get("rafale") == "true"
+	resetPoolFlags := poolFlags(r) // v13.1.0 (#324): rafale, picto
 	resetAll := r.URL.Query().Get("all") == "true"
 
 	// "all" means reset everything
@@ -3176,11 +3169,11 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		resetHistory = true
 		resetMedias = true
 		resetAmbiance = true
-		resetRafale = true
+		setAllPoolFlags(resetPoolFlags)
 	}
 
-	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v, rafale=%v",
-		resetQuestions, resetTeams, resetBumpers, resetHistory, resetMedias, resetAmbiance, resetRafale)
+	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v, %s",
+		resetQuestions, resetTeams, resetBumpers, resetHistory, resetMedias, resetAmbiance, poolFlagsLog(resetPoolFlags))
 
 	result := make(map[string]bool)
 	configDir := filepath.Join(h.dataDir, "config")
@@ -3316,19 +3309,7 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 	// Reset RAFALE reservoir + "already used" flags (v8.0.0, #197, contract
 	// §10) — purges both the question bank and the used-flag file, mirroring
 	// handleBackupSelect's includeRafale.
-	if resetRafale {
-		rafaleDir := filepath.Join(filesDir, "rafale")
-		if err := os.RemoveAll(rafaleDir); err == nil {
-			os.MkdirAll(rafaleDir, 0755)
-			h.engine.ClearRafaleReservoir()
-			result["rafale"] = true
-			log.Printf("[HTTP] Reset: Rafale reservoir cleared")
-		}
-		rafaleUsedPath := filepath.Join(configDir, "rafale_used.json")
-		os.Remove(rafaleUsedPath)
-		h.engine.ClearRafaleUsed()
-		log.Printf("[HTTP] Reset: Rafale used-flags cleared")
-	}
+	h.resetPools(resetPoolFlags, filesDir, configDir, result)
 
 	// Notify clients of changes
 	if h.OnAction != nil {
@@ -3543,14 +3524,10 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(configDir, "game_state.json")
 				allowed = true
 			}
-		case strings.HasPrefix(tarPath, "files/rafale/"):
-			if detected["rafale"] {
-				targetPath = filepath.Join(h.dataDir, tarPath)
-				allowed = true
-			}
-		case tarPath == "config/rafale_used.json":
-			if detected["rafale"] {
-				targetPath = filepath.Join(configDir, "rafale_used.json")
+		case isPoolArchivePath(tarPath):
+			// v13.1.0 (#324): files/<pool>/ and config/<pool>_used.json, over the pool list.
+			if t, _, ok := h.poolRestoreTarget(tarPath, detected, configDir); ok {
+				targetPath = t
 				allowed = true
 			}
 		// Legacy format: questions directly in root
@@ -3706,21 +3683,8 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if detected["rafale"] {
-		// #197 — reload both stores from the just-extracted files (paths set
-		// once at startup, same ones this handler just wrote into).
-		if err := h.engine.LoadRafale(); err == nil {
-			log.Printf("[HTTP] Restore: Rafale reservoir loaded into engine")
-		} else {
-			log.Printf("[HTTP] Restore: Rafale reservoir extracted but could not be reloaded: %v", err)
-		}
-		if err := h.engine.LoadRafaleUsed(); err == nil {
-			log.Printf("[HTTP] Restore: Rafale used-flags loaded into engine")
-		} else {
-			log.Printf("[HTTP] Restore: Rafale used-flags extracted but could not be reloaded: %v", err)
-		}
-		restoredMap["rafale"] = true
-	}
+	// #197 / #324 — reload every detected pool from the just-extracted files.
+	h.reloadPools(detected, restoredMap)
 
 	log.Printf("[HTTP] Intelligent restore completed")
 
@@ -3745,6 +3709,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"gameConfig":  false, // #150 — game-config.json (default delay + neon effect)
 		"gameState":   false, // #141 — game_state.json (quiz metadata)
 		"rafale":      false, // #197 (v8.0.0) — files/rafale/ + config/rafale_used.json
+		"picto":       false, // #324 (v13.1.0) — files/picto/ + config/picto_used.json
 		"sounds":      false, // v11.0, #229 — files/sounds/ (bruitage d'événement)
 		"effects":     false, // v11.7.0, #223 — files/effects/ (effets lumière de l'utilisateur, sans natifs/)
 	}
@@ -3781,8 +3746,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["gameConfig"] = true
 		case tarPath == "config/game_state.json":
 			detected["gameState"] = true
-		case strings.HasPrefix(tarPath, "files/rafale/"), tarPath == "config/rafale_used.json":
-			detected["rafale"] = true
+		case isPoolArchivePath(tarPath):
+			detectPoolPath(tarPath, detected)
 		}
 	}
 
