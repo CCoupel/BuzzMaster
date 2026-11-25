@@ -126,6 +126,7 @@ export default function PictoEditor({ values, onChange, error, customCategories 
             onChange={onChange}
             keys={{ source: fields.source, categories: fields.categories, difficulties: fields.difficulties }}
             customCategories={customCategories}
+            variant={rafale ? 'rafale' : 'picto'}
             roundTime={rafale ? Number(values.time) || 0 : 1}
             questionTime={rafale ? 10 : 1}
           >

@@ -30,10 +30,12 @@ export function isPictoFilterValid(categories, difficulties) {
  * @param {Array} [props.customCategories] - GET /api/categories
  * @param {number} [props.roundTime] - durée à couvrir (Rafale Picto : TIME) ; défaut 1 (un mot suffit)
  * @param {number} [props.questionTime] - secondes par mot pour estimer le besoin (Rafale Picto : 10) ; défaut 1
+ * @param {'picto'|'rafale'} [props.variant] - « rafale » : sélecteurs identiques à Rafale Speedy (tableaux, libellés par défaut,
+ *   sans étoiles vides) ; « picto » (un mot) garde « Catégories du pool » et les étoiles vides
  * @param {React.ReactNode} props.children - éditeur des mots saisis (affiché quand la source est « WORDS »)
  */
 export default function PictoWordsSource({
-  values, onChange, keys = PICTO_KEYS, customCategories = [], roundTime = 1, questionTime = 1, children,
+  values, onChange, keys = PICTO_KEYS, customCategories = [], roundTime = 1, questionTime = 1, variant = 'picto', children,
 }) {
   const source = values[keys.source] === SOURCE_POOL ? SOURCE_POOL : SOURCE_WORDS
   const categories = useMemo(() => values[keys.categories] || [], [values, keys.categories])
@@ -65,13 +67,15 @@ export default function PictoWordsSource({
         <div className="picto-source-pool">
           <CategoryPicker
             mode="multi"
-            value={categories}
+            {...(variant === 'rafale' ? {} : { label: 'Catégories du pool' })}
+            value={variant === 'rafale' ? categories : new Set(categories)}
             onToggle={(k) => toggle(keys.categories, categories, k)}
             customCategories={customCategories}
           />
           <DifficultyPicker
             mode="multi"
-            value={difficulties}
+            {...(variant === 'rafale' ? {} : { ghost: true })}
+            value={variant === 'rafale' ? difficulties : new Set(difficulties)}
             onToggle={(d) => toggle(keys.difficulties, difficulties, d)}
           />
           <PoolAlert instance="picto" categories={categories} difficulties={difficulties} roundTime={roundTime} questionTime={questionTime} />

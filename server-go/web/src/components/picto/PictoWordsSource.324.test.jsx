@@ -49,3 +49,16 @@ describe('PictoWordsSource', () => {
     expect(isPictoReady(base({ pictoSource: 'WORDS', pictoWords: ['chat'] }))).toBe(true)
   })
 })
+
+describe('PictoWordsSource — variante (cycle 5)', () => {
+  it('Picto (un mot) : libellé « Catégories du pool » et étoiles vides (ghost), comme avant le cycle 5', () => {
+    render(<PictoWordsSource values={base()} onChange={() => {}} customCategories={CATS}><span /></PictoWordsSource>)
+    expect(document.body.textContent).toContain('Catégories du pool')
+    expect(document.body.textContent).toContain('★☆☆')
+  })
+  it('Rafale Picto : libellé par défaut (comme Rafale Speedy) et étoiles pleines seulement', () => {
+    render(<PictoWordsSource variant="rafale" values={base()} onChange={() => {}} customCategories={CATS}><span /></PictoWordsSource>)
+    expect(document.body.textContent).not.toContain('Catégories du pool')
+    expect(document.body.textContent).not.toContain('☆')
+  })
+})
