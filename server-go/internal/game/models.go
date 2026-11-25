@@ -661,18 +661,24 @@ func AllQuestionTypes() []QuestionType {
 	}
 }
 
-// RafaleQuestion is one question in the RAFALE reservoir — a global pool of
-// text-only question/answer pairs, independent from Quiz/MEMOTION questions
-// (contracts/rafale.md §2.4/§3.1, milestone #16, #197). Stored as a single
-// file (data/files/rafale/reservoir.json), never one directory per question:
-// RAFALE questions carry no media (arbitrage D3).
-type RafaleQuestion struct {
+// PoolEntry is one entry of a reservoir (EntryPool, pool_store.go) — a
+// global pool of text-only entries, independent from Quiz/MEMOTION questions
+// (contracts/rafale.md §2.4/§3.1, milestone #16, #197; generalised by
+// contracts/picto-pool.md §2). RAFALE: Question = statement, Answer =
+// expected answer. PICTO (v13.1.0): Question = the word, Answer = always "".
+// Stored as a single file per instance (files/<name>/reservoir.json), never
+// one directory per entry: entries carry no media (arbitrage D3).
+type PoolEntry struct {
 	ID         string           `json:"ID"`         // stable identifier, unique within the reservoir
-	Question   string           `json:"QUESTION"`   // statement, text only
-	Answer     string           `json:"ANSWER"`     // expected answer, text only
+	Question   string           `json:"QUESTION"`   // statement (RAFALE) or word (PICTO), text only
+	Answer     string           `json:"ANSWER"`     // expected answer, text only ("" for PICTO)
 	Category   QuestionCategory `json:"CATEGORY"`   // reuses the existing enum + custom categories on disk
 	Difficulty int              `json:"DIFFICULTY"` // 1..3 — same scale as MotionCard.Difficulty
 }
+
+// RafaleQuestion is the historical name of PoolEntry, kept as an alias so the
+// RAFALE code and its tests are unchanged.
+type RafaleQuestion = PoolEntry
 
 // RafaleSubPhase is the sub-phase of a RAFALE round (GameState.RafaleSubPhase,
 // "" outside a RAFALE question) — contracts/rafale.md §4. Defined here

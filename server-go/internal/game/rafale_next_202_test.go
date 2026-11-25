@@ -222,7 +222,7 @@ func TestRafaleNext_ReleasedOnReadyReplay(t *testing.T) {
 	e.mu.Unlock()
 
 	e.mu.RLock()
-	stillUsed := e.rafaleUsed[forcedID]
+	stillUsed := e.rafalePool.used[forcedID]
 	e.mu.RUnlock()
 	if !stillUsed {
 		t.Fatalf("sanity: expected %q to be marked used after the forced draw", forcedID)
@@ -236,7 +236,7 @@ func TestRafaleNext_ReleasedOnReadyReplay(t *testing.T) {
 	e.Ready("rq2", q2)
 
 	e.mu.RLock()
-	stillUsed = e.rafaleUsed[forcedID]
+	stillUsed = e.rafalePool.used[forcedID]
 	e.mu.RUnlock()
 	if stillUsed {
 		t.Errorf("BUG: Ready() did not release the outstanding pre-fetch (%q still marked used)", forcedID)
