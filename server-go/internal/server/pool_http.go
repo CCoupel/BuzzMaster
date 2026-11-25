@@ -148,6 +148,11 @@ func (h *HTTPServer) isKnownRafaleCategory(key string) bool { return h.isKnownCa
 func (h *HTTPServer) poolQuestions(s *poolHTTPSpec, w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		// The list carries USED: during a Picto round the last USED word is the
+		// secret word in play (review LOT-2, minor 1) — same guard as the writes.
+		if s.refuseIfRound(h, w) {
+			return
+		}
 		h.poolList(s, w, r)
 	case http.MethodPost:
 		if s.refuseIfRound(h, w) {

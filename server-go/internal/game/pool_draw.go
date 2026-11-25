@@ -3,6 +3,7 @@ package game
 import (
 	"log"
 	"math/rand"
+	"strings"
 )
 
 // Stratified draw over an EntryPool — contracts/rafale.md §7.2 to §7.4 (#216),
@@ -50,7 +51,7 @@ func newPoolDrawState(pool *EntryPool, categories []string, difficulties []int) 
 			if len(pool.availableUnsafe([]string{cat}, []int{diff})) > 0 {
 				active = append(active, poolCouple{category: cat, difficulty: diff})
 			} else {
-				log.Printf("[Engine] RAFALE: couple category=%s difficulty=%d has no available question at round start, excluded from the active set (contract §7.3)", cat, diff)
+				log.Printf("[Engine] %s: couple category=%s difficulty=%d has no available question at round start, excluded from the active set (contract §7.3)", pool.logPrefix(), cat, diff)
 			}
 		}
 	}
@@ -114,7 +115,11 @@ func (s *poolDrawState) next(pool *EntryPool) (*PoolEntry, error) {
 		// its first attempt or a later cycle) — remove permanently and keep
 		// trying the remaining couples (contract §7.3: unified with the
 		// pre-round exclusion in newPoolDrawState, never blocks).
-		log.Printf("[Engine] RAFALE: couple category=%s difficulty=%d exhausted mid-round, removed from the active set (contract §7.3)", couple.category, couple.difficulty)
+		log.Printf("[Engine] %s: couple category=%s difficulty=%d exhausted mid-round, removed from the active set (contract §7.3)", pool.logPrefix(), couple.category, couple.difficulty)
 		s.removeCouple(couple)
 	}
 }
+
+// logPrefix is the log tag of the pool instance: "RAFALE" for the RAFALE
+// reservoir (existing log texts unchanged), "PICTO" for the Pool Picto.
+func (p *EntryPool) logPrefix() string { return strings.ToUpper(p.label) }
