@@ -42,7 +42,11 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
 - **TV Rafale Picto (#318)** — grand compteur de mots trouvés ; le mot trouvé s'affiche 1 s sur le dessin, puis la feuille
   est vierge. Une passe n'affiche jamais le mot.
 - **Tablette du dessinateur (#318)** — pas de bouton « Passer » ; un compteur de mots trouvés et la catégorie du mot. Le récapitulatif est sur les autres tablettes.
-- **Source des mots (#318)** — mots saisis dans la question, ou Pool Picto (voir ci-dessous).
+- **Source des mots (#318)** — mots saisis dans la question, ou Pool Picto (voir ci-dessous). Avec le Pool Picto, les
+  catégories et les difficultés se choisissent en sélection multiple, comme Rafale Speedy ; la catégorie du crédit est la
+  première catégorie du filtre. « Ajouter » reste grisé tant que le filtre est incomplet.
+- **Fil des mots (#318)** — admin et anim : rangée de pastilles qui passe à la ligne ; fond de la couleur de l'équipe qui
+  joue (gris `#475569` sans équipe) ; mot en cours en gras, mots passés barrés.
 - **Pool Picto (#324)** — réservoir de mots pour le type Picto, sur le même moteur que le Pool Speedy (deux instances
   d'un même moteur). Onglet « Pool Picto » de la page Questions (`?tab=picto`) : tableau filtrable (catégories,
   difficulté, « Non utilisés »), « Remettre tout disponible », formulaire « Nouveau mot ».

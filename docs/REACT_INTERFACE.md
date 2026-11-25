@@ -2156,10 +2156,12 @@ Le type `RAFALE_PICTO` est une variante de la famille Picto. Les règles de fami
 - **`questionTypeMeta.js`** : `RAFALE_PICTO`, libellé « Rafale Picto », icône 🖍️, non imbriquable.
 - **Éditeur** : `components/picto/PictoEditor.jsx`, bloc « Passes » (coût 0 à 100, « 1 passe » / « Illimitées »,
   « 🔁 reboucle » / « ⏹ fin à la dernière »). Le sous-éditeur « Mots à dessiner » partagé écrit les champs
-  `rafale_picto_*` (`RAFALE_PICTO_*`).
+  `rafale_picto_*` (`RAFALE_PICTO_*`). Avec la source Pool, `PictoWordsSource` ne montre plus le sélecteur unique de
+  catégorie (`variant='rafale'`, sélection multiple comme Rafale Speedy) ; la catégorie du crédit est la première du filtre
+  (`QuestionsPage.jsx`). « Ajouter » est grisé tant que `isPictoReady` est faux (filtre incomplet).
 - **Conduite admin et anim** : `components/picto/PictoRafaleConduct.jsx`. Boutons « ⏭ Passer » (avec le coût, ou « Plus
   de passe disponible ») et « ✅ Trouvé » (« Trouvé sur le gong » après un temps écoulé). Les deux envoient l'époque du mot
-  affiché (`EPOCH`). Le fil des mots montre le mot en cours, les trouvés (✅), les passés (⏭). Aucun mot à venir n'est affiché.
+  affiché (`EPOCH`). Le fil des mots (rangée de pastilles en `flex-wrap`, fond = couleur de l'équipe qui joue, repli `#475569`) montre le mot en cours (gras), les trouvés (✅) et les passés (barrés, ⏭). Aucun mot à venir n'est affiché.
   La variante `anim` a des boutons larges.
 - **Affichage des mots** : `components/picto/pictoRafaleState.js` (`PICTO_FOUND_FLASH_MS = 1000`, états `found`,
   `passed`, `current`, `revealed`).

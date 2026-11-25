@@ -2493,7 +2493,7 @@ Attribution des points (cliquer une équipe) :
 de la question, avec le même dessinateur du début à la fin. Le mot passe au suivant à chaque « Trouvé » ou « Passer ».
 
 **Réglages de la question** (éditeur Picto) :
-- **Source des mots** : les mots saisis dans la question, ou le Pool Picto (voir ci-dessous) ;
+- **Source des mots** : les mots saisis dans la question, ou le Pool Picto (voir ci-dessous). Avec le Pool Picto, les catégories et difficultés se choisissent en sélection multiple ; la catégorie du crédit est la première catégorie du filtre ;
 - **Passes** : coût de 0 à 100 points par passe (0 = gratuite), et **1 passe** ou **illimitées** ;
 - **Fin de pool** : **🔁 reboucle** (les mots passés reviennent, par ordre d'ancienneté) ou **⏹ fin à la dernière**
   (la manche s'arrête quand il ne reste plus de mot). Un mot trouvé ne revient jamais.
