@@ -12,7 +12,7 @@
 .picto-tab-emoji { font-size: 10vh; }
 .picto-tab-title { font-size: 3.4vh; font-weight: 800; }
 .picto-tab-sub { font-size: 2.2vh; opacity: 0.85; }
-.picto-tab-countdown { font-size: clamp(6rem, 22vh, 14rem); line-height: 1; margin-top: 1vh; }
+.picto-tab .picto-tab-countdown { font-size: clamp(6rem, 22vh, 14rem); line-height: 1; margin-top: 1vh; }
 .picto-tab-timer { font-size: 3vh; font-weight: 800; margin-top: 1vh; }
 .picto-tab.drawer { align-items: stretch; }
 .picto-tab-banner { display: flex; flex-direction: column; align-items: center; gap: 0.4vh; font-size: 2vh; }
