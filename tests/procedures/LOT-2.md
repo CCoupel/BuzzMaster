@@ -136,7 +136,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Éditeur d'une question Picto : choisir la source Pool, filtrer catégories et difficultés, observer l'alerte de pool ; enregistrer puis rouvrir ; rouvrir une question Picto v13.0.0 | Source Pool paramétrable (catégories, difficultés) ; alerte « disponibles » lisible ; enregistrement fidèle ; une question v13.0.0 reste en source Mots, sans champ parasite | | |
+| 1 | Éditeur : créer une NOUVELLE question Picto (observer la source proposée d'office), cliquer une catégorie, filtrer difficultés, observer l'alerte de pool ; enregistrer puis rouvrir ; basculer sur « Saisis dans la question » ; rouvrir une question Picto v13.0.0 (créée avant la mise à jour) | Une NOUVELLE question Picto démarre sur la source « 🗂 Pool Picto » avec le filtre = catégorie de la question (éditeur de mots masqué) ; alerte « disponibles » lisible ; enregistrement fidèle (source, catégories, difficultés) ; une question v13.0.0 s'ouvre en mots saisis, ses mots intacts, aucun filtre parasite ; basculer source Mots → Pool → Mots ne perd rien | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
