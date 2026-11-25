@@ -56,7 +56,10 @@
         "issues": [
           318
         ],
-        "status": "planned"
+        "status": "qualif",
+        "qualif": "13.1.0.7",
+        "qa": "_work/reports/qa-20261125-lot3-nr.md",
+        "review": "_work/reports/code-review-lot3-20261125-153039.md"
       }
     }
   },
@@ -64,7 +67,7 @@
   "frozen": false,
   "description": "PICTO RAFALE — pool Picto (moteur généralisé), type Rafale Picto, présélection des gains (#321), x/net (#322)",
   "started_at": "2026-11-24T16:52:12Z",
-  "updated_at": "2026-11-25T14:46:47Z",
+  "updated_at": "2026-11-25T18:12:29Z",
   "phases": {
     "init": {
       "status": "completed"
