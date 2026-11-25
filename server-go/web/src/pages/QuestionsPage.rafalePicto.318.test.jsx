@@ -169,4 +169,40 @@ describe('QuestionsPage — type RAFALE_PICTO (#318)', () => {
     fireEvent.click(submitBtn())
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/PICTO_PASS_INVALID/), { timeout: 2000 })
   })
+
+  // Cycle 5 (retours GATE LOT-3) — catégories multiples comme Rafale Speedy, sans doublon ; cartes empilées
+  it('Pool Picto : un SEUL sélecteur de catégories (multi), pas de second sélecteur unique', () => {
+    openRafalePicto()
+    expect(screen.getAllByTitle('Geographie')).toHaveLength(1)
+  })
+  it('mots saisis : le sélecteur unique de la catégorie du crédit réapparaît (un seul, celui du formulaire)', () => {
+    openRafalePicto()
+    fireEvent.click(screen.getByRole('button', { name: '✍️ Saisis dans la question' }))
+    expect(screen.getAllByTitle('Geographie')).toHaveLength(1)
+  })
+  it('sélection multiple de catégories et de difficultés ; la catégorie du crédit envoyée = la première', async () => {
+    useCategories.mockReturnValue({ categories: [{ key: 'ANIMALS', name: 'Animaux', imageURL: '', isCustom: false }, { key: 'HISTORY', name: 'Histoire', imageURL: '', isCustom: false }], loading: false, error: null, refetch: vi.fn() })
+    openRafalePicto()
+    fillTitle()
+    fireEvent.click(screen.getByTitle('Histoire'))
+    fireEvent.click(screen.getByTitle('Animaux'))
+    fireEvent.click(screen.getByTitle('Difficulte 2'))
+    fireEvent.click(submitBtn())
+    await waitFor(() => expect(postedForm()).not.toBeNull(), { timeout: 2000 })
+    const fd = postedForm()
+    expect(JSON.parse(fd.get('rafale_picto_categories'))).toEqual(['HISTORY', 'ANIMALS'])
+    expect(JSON.parse(fd.get('rafale_picto_difficulties'))).toEqual([1, 3])
+    expect(fd.get('category')).toBe('HISTORY')
+  })
+  it('les cartes Mots à dessiner, Passes et Temps et points sont empilées (une par ligne)', () => {
+    openRafalePicto()
+    expect(document.querySelector('.picto-grid').className).toContain('picto-grid-stacked')
+    const cards = [...document.querySelectorAll('.picto-grid > .picto-card')].map(c => c.querySelector('.picto-lbl').textContent)
+    expect(cards).toEqual(['Mots à dessiner', 'Passes', 'Temps et points'])
+  })
+  it('le type Picto (un mot) garde sa grille 2 colonnes', () => {
+    render(<QuestionsPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Picto' }))
+    expect(document.querySelector('.picto-grid').className).not.toContain('picto-grid-stacked')
+  })
 })

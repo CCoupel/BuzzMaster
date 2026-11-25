@@ -118,7 +118,7 @@ export default function PictoEditor({ values, onChange, error, customCategories 
         {cat && <span className="picto-chip">{cat.icon ? `${cat.icon} ` : ''}{cat.label}</span>}
       </div>
 
-      <div className="picto-grid">
+      <div className={`picto-grid${rafale ? ' picto-grid-stacked' : ''}`}>
         <div className="picto-card">
           <div className="picto-lbl">Mots à dessiner</div>
           <PictoWordsSource

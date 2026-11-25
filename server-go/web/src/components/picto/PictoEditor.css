@@ -30,3 +30,6 @@
 .picto-source-pool { display: flex; flex-direction: column; gap: 0.6rem; }
 
 .picto-lbl-inline { display: block; font-size: 0.8rem; color: var(--gray-700, #374151); margin-bottom: 0.3rem; }
+
+/* #318 — Rafale Picto : cartes Mots / Passes / Temps et points empilées (une par ligne) */
+.picto-grid.picto-grid-stacked { grid-template-columns: 1fr; }

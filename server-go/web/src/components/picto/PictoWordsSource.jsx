@@ -65,15 +65,13 @@ export default function PictoWordsSource({
         <div className="picto-source-pool">
           <CategoryPicker
             mode="multi"
-            label="Catégories du pool"
-            value={new Set(categories)}
+            value={categories}
             onToggle={(k) => toggle(keys.categories, categories, k)}
             customCategories={customCategories}
           />
           <DifficultyPicker
             mode="multi"
-            ghost
-            value={new Set(difficulties)}
+            value={difficulties}
             onToggle={(d) => toggle(keys.difficulties, difficulties, d)}
           />
           <PoolAlert instance="picto" categories={categories} difficulties={difficulties} roundTime={roundTime} questionTime={questionTime} />

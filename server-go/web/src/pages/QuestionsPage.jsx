@@ -1814,8 +1814,11 @@ export default function QuestionsPage() {
     // ROUE : la phrase ne transite jamais par le champ générique « question » (visible TV, contrat roue.md §9)
     data.append('question', formData.type === 'ROUE' ? (formData.rouePresentation.trim() || 'Roue de la Fortune') : formData.question)
     data.append('type', formData.type)
-    if (formData.category) {
-      data.append('category', formData.category)
+    // Rafale Picto sur le pool : pas de sélecteur unique, la catégorie du crédit = première catégorie du filtre
+    const creditCategory = formData.category
+      || (formData.type === 'RAFALE_PICTO' && formData.rafalePictoSource === 'RESERVOIR' ? (formData.rafalePictoCategories || [])[0] : '')
+    if (creditCategory) {
+      data.append('category', creditCategory)
     }
     data.append('points_target', formData.pointsTarget)
     data.append('points', formData.points)
@@ -2698,7 +2701,9 @@ export default function QuestionsPage() {
                     désormais dans la section RAFALE ci-dessous (contrat
                     §3.3). Tous les autres types restent sur ce sélecteur
                     unique, inchangé. */}
-                {formData.type !== 'RAFALE' && (
+                {/* Rafale Picto sur le Pool Picto : les catégories sont celles du filtre (multi, comme Rafale Speedy) — pas de
+                    second sélecteur ; la catégorie du crédit est la première du filtre (voir l'envoi). */}
+                {formData.type !== 'RAFALE' && !(formData.type === 'RAFALE_PICTO' && formData.rafalePictoSource === 'RESERVOIR') && (
                   <div className="form-group">
                     <CategoryPicker
                       mode="single"
