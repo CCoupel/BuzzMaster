@@ -77,3 +77,17 @@ export const errorText = (e) => (e ? (ERROR_TEXT[e.CODE] || e.MESSAGE || e.CODE 
 export function teamCss(color, fallback = '#6b7280') {
   return Array.isArray(color) && color.length === 3 ? `rgb(${color.join(',')})` : (typeof color === 'string' && color ? color : fallback)
 }
+
+/**
+ * Origine des mots d'une question Picto (v13.1.0, picto.md §17.2) : `PICTO_SOURCE = RESERVOIR` → Pool Picto, mots
+ * encore tirables = `PICTO_POOL_AVAILABLE` ; sinon (absent = mots saisis) → nombre de mots de la question.
+ */
+export function pictoWordsInfo(gs) {
+  const q = gs?.question || {}
+  const fromPool = q.PICTO_SOURCE === 'RESERVOIR'
+  return {
+    fromPool,
+    available: gs?.PICTO_POOL_AVAILABLE || 0,
+    words: gs?.PICTO_WORDS_COUNT || (q.PICTO_WORDS || []).length || 0,
+  }
+}

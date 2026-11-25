@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import PictoPrepare from './PictoPrepare'
-import { canPictoFound, errorText, isDrawing, isPreparing, outcomeLabel, pictoShownWord, teamCss } from './pictoState'
+import { canPictoFound, errorText, isDrawing, isPreparing, outcomeLabel, pictoShownWord, pictoWordsInfo, teamCss } from './pictoState'
 import { categoryMeta } from '../../utils/categoryUtils'
 import './PictoPanel.css'
 
@@ -36,7 +36,7 @@ export function PictoDisconnectAlert({ gs }) {
 export default function PictoPanel({ gameState: gs, actions, error, teamList = [], pictoWord = null, customCategories = [] }) {
   const q = gs.question || {}
   const cat = categoryMeta(q.CATEGORY, customCategories)
-  const words = gs.PICTO_WORDS_COUNT || (q.PICTO_WORDS || []).length || 0
+  const { fromPool, available, words } = pictoWordsInfo(gs)
   const word = pictoShownWord(gs, pictoWord)
   const team = teamList.find(t => t.name === gs.PICTO_TEAM)
   const revealed = gs.phase === 'REVEALED'
@@ -48,7 +48,9 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
         ✏️ Picto — {isPreparing(gs.phase) ? 'préparation' : revealed ? `révélé${gs.PICTO_OUTCOME ? ` · ${outcomeLabel(gs)}` : ''}` : 'manche en cours'}
       </div>
       <p className="picto-muted">
-        ✍️ <b>{words} mot{words > 1 ? 's' : ''}</b> dans la question
+        {fromPool
+          ? <>🗂 <b>Pool Picto</b> · {available} mot{available > 1 ? 's' : ''} disponible{available > 1 ? 's' : ''}</>
+          : <>✍️ <b>{words} mot{words > 1 ? 's' : ''}</b> dans la question</>}
         {cat ? ` · ${cat.icon ? `${cat.icon} ` : ''}${cat.label}` : ''} · un mot tiré au lancement
       </p>
       {isPreparing(gs.phase) && <PictoPrepare gs={gs} teamList={teamList} actions={actions} />}

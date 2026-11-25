@@ -8,7 +8,7 @@
 import PictoCanvasView from './PictoCanvasView'
 import PictoPrepare from './PictoPrepare'
 import { PictoDisconnectAlert, PictoErrorLine } from './PictoPanel'
-import { canPictoFound, isDrawing, isPreparing, makePictoActions, outcomeLabel, pictoShownWord } from './pictoState'
+import { canPictoFound, isDrawing, isPreparing, makePictoActions, outcomeLabel, pictoShownWord, pictoWordsInfo } from './pictoState'
 import { categoryMeta } from '../../utils/categoryUtils'
 import { useGame } from '../../hooks/GameContext'
 import { useCategories } from '../../hooks/useCategories'
@@ -20,7 +20,7 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
   const q = gs.question || {}
   // v13.1.0 : indice = catégorie du mot en cours (pool Picto), sinon celle de la question (crédit)
   const cat = categoryMeta(gs.PICTO_WORD_CATEGORY || q.CATEGORY, customCategories)
-  const words = gs.PICTO_WORDS_COUNT || (q.PICTO_WORDS || []).length || 0
+  const { fromPool, available, words } = pictoWordsInfo(gs)
   const word = pictoShownWord(gs, pictoWord)
   // Mêmes équipes que la zone équipes de l'anim : celles qui ont au moins un joueur
   const withPlayers = new Set(Object.values(bumpers || {}).filter(b => b.TEAM).map(b => b.TEAM))
@@ -33,7 +33,9 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
       <div className="anim-picto-bar">
         <span className="picto-chip">✏️ <b>Picto</b></span>
         {cat && <span className="picto-chip">{cat.icon ? `${cat.icon} ` : ''}{cat.label}</span>}
-        <span className="picto-chip">✍️ <b>{words}</b> mot{words > 1 ? 's' : ''} dans la question</span>
+        {fromPool
+          ? <span className="picto-chip">🗂 <b>Pool Picto</b> · {available} mot{available > 1 ? 's' : ''} disponible{available > 1 ? 's' : ''}</span>
+          : <span className="picto-chip">✍️ <b>{words}</b> mot{words > 1 ? 's' : ''} dans la question</span>}
         {q.TIME ? <span className="picto-chip">⏱ {q.TIME} s</span> : null}
         {points ? <span className="picto-chip">🏆 {points} pts</span> : null}
       </div>
@@ -56,7 +58,7 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
                   <span className="picto-lbl">Mot à faire deviner</span>
                 )}
                 <div className="picto-word" data-testid="anim-picto-word">{word || '—'}</div>
-                {cat && <p className="picto-muted">{cat.label} · tiré parmi les {words} mot{words > 1 ? 's' : ''} de la question</p>}
+                {cat && <p className="picto-muted">{cat.label} · {fromPool ? 'tiré dans le Pool Picto' : <>tiré parmi les {words} mot{words > 1 ? 's' : ''} de la question</>}</p>}
               </div>
               {gs.phase === 'STOPPED' && gs.PICTO_OUTCOME === 'TIMEOUT' && (
                 <p className="picto-muted">Réponse donnée sur le gong ? « Trouvé » crédite encore l'équipe. Sinon, « Révéler » montre le mot à tous, sans points.</p>
