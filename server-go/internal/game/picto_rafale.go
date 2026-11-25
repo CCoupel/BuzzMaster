@@ -133,6 +133,10 @@ func (e *Engine) rafalePictoCheckEpochUnsafe(epoch *int) *PictoError {
 //   - STOPPED after TIMEOUT, word still in play: the gong answer — counted once, then REVEALED in the same
 //     action (§17.7); the outcome stays TIMEOUT.
 func (e *Engine) rafalePictoFoundLocked(epoch *int) (PictoStepResult, error) {
+	if e.pictoRound == nil { // no round in progress (same guard as PictoPass): never dereference the round state
+		e.mu.Unlock()
+		return PictoStepResult{}, pictoErr(PictoErrWrongPhase, "aucune manche Rafale Picto en cours")
+	}
 	ph := e.state.Phase
 	gong := ph == PhaseStopped && e.state.PictoOutcome == PictoOutcomeTimeout && e.pictoWord != ""
 	if ph != PhaseStarted && ph != PhasePaused && !gong {

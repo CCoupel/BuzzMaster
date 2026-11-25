@@ -223,3 +223,14 @@ func TestRafalePicto318_Reservoir_EmptyPoolAtStart_NoWord(t *testing.T) {
 		t.Errorf("pool vide au START : outcome=%q (attendu NO_WORD)", r.st().PictoOutcome)
 	}
 }
+
+func TestRafalePicto318_Found_WithoutRoundState_RefusedWrongPhase_EngineNotBlocked(t *testing.T) {
+	r := newRafalePictoRig(t, wordsTC(0, 0, false, "a", "b"), "10")
+	ep := r.epoch()
+	r.e.mu.Lock()
+	r.e.pictoRound = nil // état de manche absent alors que la phase est STARTED
+	r.e.mu.Unlock()
+	_, err := r.e.PictoFoundAt(ep)
+	wantPictoErr(t, err, PictoErrWrongPhase)
+	_ = r.e.GetState() // le verrou du moteur a bien été relâché
+}
