@@ -228,10 +228,11 @@ describe('Attribution groupée — sélection manuelle et envoi (scénarios 13 e
     expect(game.teamPointsBatch).toHaveBeenCalledTimes(1)
   })
 
-  it('aperçu du montant sur chaque carte sélectionnée', () => {
+  it('montant visible en chip « +3 pts » sur chaque carte sélectionnée (plus de petit « +N », #321)', () => {
     show()
     fireEvent.click(answerBtn('La Seine'))
-    expect(screen.getAllByText('+3').length).toBe(4)
+    expect(screen.getAllByText('+3 pts').length).toBe(4)
+    expect(screen.queryAllByText('+3').length).toBe(0)
   })
 })
 

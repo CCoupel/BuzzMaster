@@ -31,14 +31,15 @@ describe('TeamCard — awardChip (#321)', () => {
     expect(screen.getByText('+20 pts')).toBeTruthy()
     expect(screen.queryByText('+9 pts')).toBeNull()
   })
-  it('chip affiché : le petit award-preview « +N » redondant n’est pas rendu', () => {
-    const { container } = r({ awardChip: 3, selectable: true, selected: true, awardPreview: 3 })
+  it('niveau ÉQUIPE : plus de petit « +N » (award-preview), seule la chip porte le montant', () => {
+    const { container } = r({ awardChip: 3, selectable: true, selected: true })
     expect(container.querySelectorAll('.award-chip').length).toBe(1)
     expect(container.querySelector('.award-preview')).toBeNull()
   })
-  it('chip dédié (MEMORY) à sa place : award-preview conservé', () => {
-    const { container } = r({ awardChip: 20, selectable: true, selected: true, awardPreview: 20, memoryStats: { pairs: 2, errors: 0, totalPairs: 4, pointsPerPair: 10 } })
-    expect(container.querySelector('.award-preview')).not.toBeNull()
+  it('chip dédié (MEMORY) : pas de award-preview non plus au niveau équipe', () => {
+    const { container } = r({ selectable: true, selected: true, memoryStats: { pairs: 2, errors: 0, totalPairs: 4, pointsPerPair: 10 } })
+    expect(screen.getByText('+20 pts')).toBeTruthy()
+    expect(container.querySelector('.award-preview')).toBeNull()
   })
   it('niveau JOUEUR : le montant reste sur la ligne du joueur (pas de chip d’équipe)', () => {
     const { container } = r({

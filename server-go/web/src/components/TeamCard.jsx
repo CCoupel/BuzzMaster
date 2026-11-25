@@ -395,7 +395,6 @@ export default function TeamCard({
   selected = false,
   onSelectChange = null,
   awardedInfo = null, // { POINTS } si l'équipe est dans AWARDED_TEAMS
-  awardPreview = null, // montant prévu (équipe sélectionnée)
   awardChip = null, // #321 — chip « +N pts » (équipe cochée, sans chip dédié) ; null = rien
   // #254 — attribution au niveau JOUEUR : cases sur les lignes de joueurs (pas de case d'équipe).
   // { selected(mac), onChange(mac, checked), awarded(mac) → {POINTS}|null, preview(mac) → number|null }
@@ -462,11 +461,6 @@ export default function TeamCard({
     if (isComplete) points += (memoryStats.completionBonus || 0)
     return Math.max(0, points)
   }, [memoryStats])
-
-  // #321 — le chip de gain prévu est réellement affiché (aucun chip dédié MEMORY/QCM/RAFALE avant lui) :
-  // le petit « +N » award-preview devient redondant et n'est pas rendu.
-  const awardChipShown = awardChip !== null && gamePhase === 'REVEALED' && !rafaleStats
-    && memoryAcquiredPoints === null && qcmAcquiredPoints === null
 
   // Detect if team has an active VPlayer
   const teamHasVPlayer = useMemo(() => {
@@ -591,11 +585,6 @@ export default function TeamCard({
         {selectable && awardedInfo && (
           <span className="award-done-chip">
             ✓ déjà créditée {awardedInfo.POINTS > 0 ? '+' : ''}{awardedInfo.POINTS}
-          </span>
-        )}
-        {selectable && !awardedInfo && selected && awardPreview !== null && !awardChipShown && (
-          <span className={`award-preview${awardPreview < 0 ? ' neg' : ''}`}>
-            {awardPreview > 0 ? '+' : ''}{awardPreview}
           </span>
         )}
         {/* Score decomposition tooltip */}
