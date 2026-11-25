@@ -21,6 +21,9 @@ const REFUSAL_LABELS = {
   POOL_FULL: 'pool plein',
 }
 // Types de question dont une manche en cours verrouille le Pool Picto (écritures refusées, contrat §4).
+// Chargement refusé pendant une manche Picto (409 picto_round_in_progress) : message dédié, pas une erreur générique.
+const ROUND_LOCKED = 'ROUND_LOCKED'
+const ROUND_LOCKED_TEXT = 'Pool indisponible pendant une manche Picto'
 const PICTO_ROUND_TYPES = ['PICTO', 'RAFALE_PICTO']
 
 const EMPTY_FORM = { ID: null, QUESTION: '', ANSWER: '', CATEGORY: '', DIFFICULTY: 1 }
@@ -160,6 +163,7 @@ export default function PoolPage({ instance = 'rafale' }) {
     setError(null)
     fetch(urls.list)
       .then(res => {
+        if (res.status === 409) throw new Error(ROUND_LOCKED)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return res.json()
       })
@@ -462,7 +466,7 @@ export default function PoolPage({ instance = 'rafale' }) {
           {loading ? (
             <p className="rafale-status">Chargement...</p>
           ) : error ? (
-            <p className="rafale-status rafale-status-error">Erreur : {error}</p>
+            <p className="rafale-status rafale-status-error" role={error === ROUND_LOCKED ? 'status' : undefined}>{error === ROUND_LOCKED ? ROUND_LOCKED_TEXT : `Erreur : ${error}`}</p>
           ) : filteredQuestions.length === 0 ? (
             <p className="rafale-status">{L.emptyFilter}</p>
           ) : (

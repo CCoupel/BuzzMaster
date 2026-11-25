@@ -143,3 +143,21 @@ describe('PoolPage — Pool Picto : manche Picto en cours', () => {
     useOptionalGame.mockReturnValue(null)
   })
 })
+
+describe('PoolPage — Pool Picto : chargement refusé pendant une manche (409)', () => {
+  it('GET /words → 409 : « Pool indisponible pendant une manche Picto », pas « Erreur : … »', async () => {
+    global.fetch = vi.fn((url) => (url === '/api/picto/words'
+      ? Promise.resolve({ ok: false, status: 409, json: () => Promise.resolve({ code: 'picto_round_in_progress' }), text: () => Promise.resolve('') })
+      : json([])))
+    render(<PoolPage instance="picto" />)
+    expect(await screen.findByText('Pool indisponible pendant une manche Picto')).toBeTruthy()
+    expect(screen.queryByText(/^Erreur :/)).toBeNull()
+  })
+  it('autre échec (500) : message d\'erreur générique conservé', async () => {
+    global.fetch = vi.fn((url) => (url === '/api/picto/words'
+      ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}), text: () => Promise.resolve('') })
+      : json([])))
+    render(<PoolPage instance="picto" />)
+    expect(await screen.findByText('Erreur : HTTP 500')).toBeTruthy()
+  })
+})
