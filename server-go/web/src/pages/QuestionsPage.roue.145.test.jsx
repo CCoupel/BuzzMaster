@@ -72,9 +72,10 @@ describe('QuestionsPage — type ROUE (#145)', () => {
     render(<QuestionsPage />)
     const labels = Array.from(document.querySelectorAll('.type-filter-row')[0].querySelectorAll('.type-btn')).map(b => b.textContent)
     expect(labels).toContain('Roue')
-    // v13.0.0 (#191, picto.md §4) : PICTO est ajouté après ROUE — « Roue » reste l'avant-dernier.
-    expect(labels[labels.length - 2]).toBe('Roue')
-    expect(labels[labels.length - 1]).toBe('Picto')
+    // v13.0.0 (#191) : PICTO après ROUE ; v13.1.0 (#318) : RAFALE_PICTO après PICTO — « Roue » est l'antépénultième.
+    expect(labels[labels.length - 3]).toBe('Roue')
+    expect(labels[labels.length - 2]).toBe('Picto')
+    expect(labels[labels.length - 1]).toBe('Rafale Picto')
   })
 
   it('choisir Roue monte l\'éditeur ROUE', () => {

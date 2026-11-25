@@ -28,6 +28,7 @@ import { usePointsAward } from '../hooks/usePointsAward'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 import '../styles/entracte.css'
+import { isPictoFamily } from '../utils/pictoFamily'
 
 // QCM answer colors
 const QCM_COLORS = {
@@ -715,7 +716,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // ROUE (v12.0.0, #144, contrat roue.md) — dispatch positif, jamais de repli sur le bloc SPEEDY générique.
   const isRoue = gameState.question?.TYPE === 'ROUE'
   // PICTO (v13.0.0, #192/#193, contrat picto.md) — dispatch positif aussi : jamais de repli sur le bloc SPEEDY générique.
-  const isPicto = gameState.question?.TYPE === 'PICTO'
+  const isPicto = isPictoFamily(gameState.question?.TYPE)
   // Tablette du dessinateur : écran « C'est toi qui dessines ! » à la place des écrans génériques de préparation (maquette M4)
   const pictoDrawerPrep = isPicto && isVPlayer && !!playerId && playerId === gameState.PICTO_DRAWER && ['PREPARE', 'READY', 'COUNTDOWN'].includes(gameState.phase)
   const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale || isEntracte || isRoue || isPicto

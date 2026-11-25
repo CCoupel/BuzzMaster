@@ -83,7 +83,9 @@ describe('QuestionsPage — type PICTO (#191)', () => {
   it('le sélecteur propose « Picto » en dernier et monte l\'éditeur PICTO', () => {
     render(<QuestionsPage />)
     const labels = Array.from(document.querySelectorAll('.type-filter-row')[0].querySelectorAll('.type-btn')).map(b => b.textContent)
-    expect(labels[labels.length - 1]).toBe('Picto')
+    // v13.1.0 (#318) : « Rafale Picto » est ajouté après « Picto »
+    expect(labels[labels.length - 2]).toBe('Picto')
+    expect(labels[labels.length - 1]).toBe('Rafale Picto')
     expect(screen.queryByLabelText(/Mots de la question/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Picto' }))
     chooseWordsSource()

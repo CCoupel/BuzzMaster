@@ -56,6 +56,7 @@ import PictoPanel from '../components/picto/PictoPanel'
 import { makePictoActions, pictoLaunchBlocked, pictoLaunchReason } from '../components/picto/pictoState'
 import './GamePage.css'
 import '../styles/entracte.css'
+import { isPictoFamily } from '../utils/pictoFamily'
 
 // #172/C2 (v11.1.0.6, retour QUALIF #219/#236/#237) — un motif de blocage
 // PREPARE par ligne (prepareWaitReasons.js peut désormais en renvoyer
@@ -1285,7 +1286,7 @@ export default function GamePage() {
         })()}
 
         {/* PICTO (v13.0.0, #192/#193, maquette M2) — équipe + dessinateur (PREPARE/READY), puis mot secret et alerte de déconnexion */}
-        {gameState.question?.TYPE === 'PICTO' && (() => {
+        {isPictoFamily(gameState.question?.TYPE) && (() => {
           const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
           return (
             <PictoPanel

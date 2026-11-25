@@ -15,6 +15,8 @@
  * ci-dessous — sur /anim) : ce module applique les règles de pénalité/bonus
  * par-dessus, il ne choisit pas la source.
  */
+import { isPictoFamily } from './pictoFamily'
+
 
 /**
  * Pénalité QCM par joueur, pour un nombre d'indices donné au moment du buzz
@@ -184,8 +186,8 @@ export function resolvePointsTarget(question) {
  */
 export function resolveAwardLevel(question) {
   const type = question?.TYPE
-  // PICTO (v13.0.0, contrat picto.md §7) : équipe seule, pas de score individuel pour le dessinateur
-  if (type === 'MEMORY' || type === 'MEMOTION' || type === 'RAFALE' || type === 'PICTO') return 'TEAM'
+  // PICTO et RAFALE_PICTO (famille Picto, contrat picto.md §7 et §17) : équipe seule, pas de score individuel pour le dessinateur
+  if (type === 'MEMORY' || type === 'MEMOTION' || type === 'RAFALE' || isPictoFamily(type)) return 'TEAM'
   const target = question?.POINTS_TARGET
   if (target === 'TEAM' || target === 'PLAYER') return target
   // QCM, ARDOISE : TEAM ; SPEEDY (et tout type inconnu / absent, jamais servi par le serveur) : PLAYER

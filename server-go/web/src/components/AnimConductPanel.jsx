@@ -22,6 +22,7 @@ import AnimSoundActions from './AnimSoundActions'
 import './AnimConductPanel.css'
 import AnimRoue from './roue/AnimRoue'
 import AnimPicto from './picto/AnimPicto'
+import { isPictoFamily } from '../utils/pictoFamily'
 
 // L1 — cinq emplacements FIXES (#166/F5) : la liste ne varie jamais dans
 // son nombre d'entrées, seul l'état de chaque bouton varie par phase.
@@ -235,7 +236,7 @@ export default function AnimConductPanel({
   // ROUE (v12.0.0, #144, maquette M7) — l'animateur commande la manche : panneau dédié en L3 (aucun geste de mode en L2)
   const isRoue = question?.TYPE === 'ROUE'
   // PICTO (v13.0.0, #192/#193, maquette M1) — panneau dédié en L3 (préparation, dessin en direct), aucun geste de mode en L2
-  const isPicto = question?.TYPE === 'PICTO'
+  const isPicto = isPictoFamily(question?.TYPE)
   // #219 (v11.1) — SPEEDY/QCM/ARDOISE porteurs d'un son : occupe L2 comme
   // MEMOTION/RAFALE ci-dessus, mais par PRÉSENCE d'un son plutôt que par
   // TYPE (le champ est structurellement commun à tous les types, plan

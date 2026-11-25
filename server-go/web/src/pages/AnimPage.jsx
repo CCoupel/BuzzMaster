@@ -31,6 +31,7 @@ import AnimArdoiseList from '../components/AnimArdoiseList'
 import RafaleTimers from '../components/RafaleTimers'
 import './AnimPage.css'
 import '../styles/entracte.css'
+import { isPictoFamily } from '../utils/pictoFamily'
 
 // #158/F3 — phases où la liste ARDOISE remplace les cartes équipe. Mêmes
 // phases que les critères d'acceptation du plan (STARTED/PAUSED/STOPPED/
@@ -1068,8 +1069,8 @@ export default function AnimPage() {
           // bumpers, sans objet ici) : une équipe hors
           // MEMORY_PARTICIPATING_TEAMS ne se voit proposer que "0 pt".
           // PICTO (#194, contrat picto.md §7) : « +N pts » seulement pour l'équipe qui a trouvé (issue FOUND), « 0 pt » pour toutes les autres
-          const isPictoQuestion = question?.TYPE === 'PICTO'
-          const attempted = isPictoQuestion ? (gameState.PICTO_OUTCOME === 'FOUND' && gameState.PICTO_TEAM === team.name) : isMemoryQuestion ? memoryParticipating : isRafaleQuestion ? rafaleParticipating : canAwardPoints(question, bumpersByTeam[team.name])
+          const isPictoQuestion = isPictoFamily(question?.TYPE)
+          const attempted = isPictoQuestion ? (gameState.PICTO_TEAM === team.name && (question?.TYPE === 'RAFALE_PICTO' ? (gameState.PICTO_ROUND_POINTS || 0) > 0 : gameState.PICTO_OUTCOME === 'FOUND')) : isMemoryQuestion ? memoryParticipating : isRafaleQuestion ? rafaleParticipating : canAwardPoints(question, bumpersByTeam[team.name])
           const teamCreditAmount = attempted ? getTeamAward(team.name).amount : null
           const noAttemptLabel = question?.TYPE === 'QCM' ? 'pas de réponse' : 'pas de buzz'
           const hasExtra = reactionTime || qcmAnswer || creditEnabled || memoryStat || motionStat || rafaleStat

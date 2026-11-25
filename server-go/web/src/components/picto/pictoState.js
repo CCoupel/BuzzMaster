@@ -2,8 +2,10 @@
  * pictoState — helpers purs des écrans PICTO (contrat picto.md §5, §6, §9). Aucune règle de jeu ici : le serveur reste
  * seul juge (`PICTO_ERROR`), ces fonctions ne servent qu'à l'affichage et à griser les boutons.
  */
+import { isPictoFamily } from '../../utils/pictoFamily'
 
-export const isPictoQuestion = (gs) => gs?.question?.TYPE === 'PICTO'
+
+export const isPictoQuestion = (gs) => isPictoFamily(gs?.question?.TYPE)
 
 /** Fabrique des actions de préparation (§9.1) au-dessus d'un `sendMessage(action, payload)`. */
 export function makePictoActions(sendMessage) {

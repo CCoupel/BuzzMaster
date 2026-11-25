@@ -79,6 +79,9 @@ export const QUESTION_TYPES = [
   // (PICTO_WORDS). Ni imbriquable en carte MEMOTION ni générable par IA (voir
   // GENERABLE_TYPES : génération des mots reportée en v13.1.0).
   { key: 'PICTO', label: 'Picto', icon: '✏️', color: '#0891b2', nestable: false },
+  // RAFALE_PICTO (v13.1.0, #318, picto.md §17) — « Rafale Picto » : un type à part entière de la famille Picto (une équipe
+  // fait deviner le plus de mots possible, avec des passes). Ni imbriquable en carte MEMOTION ni générable par IA.
+  { key: 'RAFALE_PICTO', label: 'Rafale Picto', icon: '🖍️', color: '#0891b2', nestable: false },
 ]
 
 export const QUESTION_TYPE_META = QUESTION_TYPES.reduce((acc, t) => {
@@ -121,7 +124,7 @@ export const GENERABLE_TYPES = (() => {
   // silencieusement dans AIGenerateModal.jsx dès son ajout à QUESTION_TYPES
   // ci-dessus — exactement le type de divergence que ce fichier existe pour
   // éliminer (#183).
-  const generableBase = QUESTION_TYPES.filter(t => t.key !== 'RAFALE' && t.key !== 'ENTRACTE' && t.key !== 'ROUE' && t.key !== 'PICTO')
+  const generableBase = QUESTION_TYPES.filter(t => t.key !== 'RAFALE' && t.key !== 'ENTRACTE' && t.key !== 'ROUE' && t.key !== 'PICTO' && t.key !== 'RAFALE_PICTO')
   const memotionIndex = generableBase.findIndex(t => t.key === 'MEMOTION')
   const withMemotionPlus = [...generableBase]
   withMemotionPlus.splice(memotionIndex + 1, 0, {

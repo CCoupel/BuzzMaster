@@ -41,7 +41,7 @@ const KNOWN_TYPES = ['SPEEDY', 'QCM', 'MEMORY', 'MEMOTION', 'ARDOISE']
 // ALL_TYPES — les 7 types réellement enregistrés dans QUESTION_TYPES depuis
 // RAFALE (v8.0.0, #16, contrat rafale.md §2.1) et ENTRACTE (#214, milestone
 // v9.0.0, second déclencheur du mécanisme ENTRACTE existant #119).
-const ALL_TYPES = [...KNOWN_TYPES, 'RAFALE', 'ENTRACTE', 'ROUE', 'PICTO'] // + PICTO (v13.0.0, #191, picto.md §4)
+const ALL_TYPES = [...KNOWN_TYPES, 'RAFALE', 'ENTRACTE', 'ROUE', 'PICTO', 'RAFALE_PICTO'] // + PICTO (v13.0.0, #191, picto.md §4) + RAFALE_PICTO (v13.1.0, #318, picto.md §17)
 
 // ---------------------------------------------------------------------------
 // 1. Le registre — 7 types connus, forme attendue.
@@ -50,8 +50,8 @@ const ALL_TYPES = [...KNOWN_TYPES, 'RAFALE', 'ENTRACTE', 'ROUE', 'PICTO'] // + P
 describe('questionTypeMeta — registre QUESTION_TYPES / QUESTION_TYPE_META', () => {
   it('QUESTION_TYPES contient exactement les 8 types connus, une fois chacun', () => {
     const keys = QUESTION_TYPES.map(t => t.key)
-    expect(keys).toHaveLength(9)
-    expect(new Set(keys).size).toBe(9)
+    expect(keys).toHaveLength(10)
+    expect(new Set(keys).size).toBe(10)
     ALL_TYPES.forEach(type => expect(keys).toContain(type))
   })
 
@@ -127,7 +127,7 @@ describe('questionTypeMeta — nestable (#184/B-F4, miroir de NestableInMotionCa
 
 describe('GENERABLE_TYPES — pseudo-type MEMOTION_PLUS, séparé de QUESTION_TYPES (#196)', () => {
   it('QUESTION_TYPES contient TOUJOURS exactement 9 entrées — MEMOTION_PLUS ne doit JAMAIS y fuiter', () => {
-    expect(QUESTION_TYPES).toHaveLength(9)
+    expect(QUESTION_TYPES).toHaveLength(10)
     expect(QUESTION_TYPES.some(t => t.key === 'MEMOTION_PLUS')).toBe(false)
   })
 
