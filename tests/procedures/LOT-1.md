@@ -40,7 +40,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Question Picto, équipe choisie ; l'équipe trouve le mot (« Trouvé ») puis révélation | L'équipe qui dessinait est cochée d'office ; montant = barème. Avec une manche en TIMEOUT / STOPPED / NO_WORD : aucune case cochée ; chip « +N pts » sur l'équipe cochée ; décochée ou aucune case : pas de chip | | |
+| 1 | Question Picto, équipe choisie ; l'équipe trouve le mot (« Trouvé ») puis révélation | L'équipe qui dessinait est cochée d'office ; montant = barème. Avec une manche en TIMEOUT / STOPPED / NO_WORD : aucune case cochée ; équipe cochée : chip « +N pts » = montant attribué RÉEL (suit le champ « Points » : 3 → 7) ; décochée ou aucune case : chip habituelle (PRET) ; plus de petit « +N » à droite des points d'équipe, quel que soit le type | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -68,7 +68,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | MEMORY à 3 équipes : une équipe sans paire, une avec paires, une dont les erreurs ramènent le score à 0 | Seules les équipes de score > 0 sont cochées ; les équipes MEMORY gardent leur chip et leur aperçu | | |
+| 1 | MEMORY à 3 équipes : une équipe sans paire, une avec paires, une dont les erreurs ramènent le score à 0 | Seules les équipes de score > 0 sont cochées ; équipe cochée : chip « +N pts » = montant réel, prioritaire sur la chip MEMORY ; décochée : chip MEMORY habituelle ; plus de petit « +N » à droite des points d'équipe, quel que soit le type | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -82,7 +82,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Manche en SOLO avec compteur > 0, puis une seconde fois avec compteur 0 | Équipe cochée si compteur retenu > 0, sinon rien ; les cartes RAFALE gardent leur chip et leur aperçu | | |
+| 1 | Manche en SOLO avec compteur > 0, puis une seconde fois avec compteur 0 | Équipe cochée si compteur retenu > 0, sinon rien ; équipe cochée : chip « +N pts » = montant réel, prioritaire sur la chip RAFALE ; décochée : chip RAFALE habituelle ; plus de petit « +N » à droite des points d'équipe, quel que soit le type | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -96,7 +96,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | 3 équipes, compteurs différents dont un à 0 ; refaire en MAILLON_FAIBLE (compteur retombé à 0 mais meilleur > 0) | Équipes à compteur retenu > 0 cochées (RAFALE_TEAM_BEST en MAILLON_FAIBLE) ; les cartes RAFALE gardent leur chip et leur aperçu | | |
+| 1 | 3 équipes, compteurs différents dont un à 0 ; refaire en MAILLON_FAIBLE (compteur retombé à 0 mais meilleur > 0) | Équipes à compteur retenu > 0 cochées (RAFALE_TEAM_BEST en MAILLON_FAIBLE) ; équipe cochée : chip « +N pts » = montant réel, prioritaire sur la chip RAFALE ; décochée : chip RAFALE habituelle ; plus de petit « +N » à droite des points d'équipe, quel que soit le type | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -110,7 +110,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | QCM, plusieurs équipes répondent juste et faux ; révéler. Refaire avec POINTS_TARGET = PLAYER | Équipes (puis joueurs) ayant donné la bonne couleur cochés ; aucune bonne réponse → rien ; couleur assignée sans réponse ignorée ; les cartes QCM gardent leur chip et leur aperçu (+ chip « +N pts » sur les équipes cochées) | | |
+| 1 | QCM, plusieurs équipes répondent juste et faux ; révéler. Refaire avec POINTS_TARGET = PLAYER | Équipes (puis joueurs) ayant donné la bonne couleur cochés ; aucune bonne réponse → rien ; couleur assignée sans réponse ignorée ; équipe cochée : chip « +N pts » = montant réel (suit le champ « Points »), prioritaire sur la chip QCM ; décochée : chip QCM habituelle ; niveau JOUEUR : montant sur la ligne du joueur ; plus de petit « +N » à droite des points d'équipe, quel que soit le type | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -124,7 +124,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | SPEEDY, 3 buzzeurs, révéler ; refaire sans aucun buzz | Seul le premier buzzeur (joueur, ou son équipe au niveau équipe) est coché ; l'admin peut le décocher ; sans buzz rien n'est coché ; chip « +N pts » sur l'équipe/joueur coché ; décoché → la chip disparaît (retour PRET ou rien) | | |
+| 1 | SPEEDY, 3 buzzeurs, révéler ; refaire sans aucun buzz | Seul le premier buzzeur (joueur, ou son équipe au niveau équipe) est coché ; l'admin peut le décocher ; sans buzz rien n'est coché ; équipe cochée : chip « +N pts » = montant réel (au niveau JOUEUR : montant sur la ligne du joueur, pénalité en rouge) ; décochée → chip habituelle (PRET) ; plus de petit « +N » à droite des points d'équipe, quel que soit le type | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -138,7 +138,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | ARDOISE, réponse attendue « Éléphant » ; équipes : « elephant », « ÉLÉPHANT », « girafe », « Le Éléphant » | Les deux premières cochées (repli accents/casse/espaces), les autres non. ANSWER vide → rien ; chip « +N pts » sur les équipes cochées | | |
+| 1 | ARDOISE, réponse attendue « Éléphant » ; équipes : « elephant », « ÉLÉPHANT », « girafe », « Le Éléphant » | Les deux premières cochées (repli accents/casse/espaces), les autres non. ANSWER vide → rien ; équipes cochées : chip « +N pts » = montant réel ; décochées : chip habituelle (PRET) ; plus de petit « +N » à droite des points d'équipe, quel que soit le type | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -166,7 +166,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Sur un QCM : décocher une équipe, « Tout sélectionner », modifier le champ Points ; créditer une équipe puis revenir ; changer de question | Sélection toujours modifiable ; modifier « Points » ne recoche ni ne décoche ; équipe déjà créditée jamais cochée ; sélection vidée au changement de question ; rien n'est envoyé avant « Attribuer les points » ; chip « +N pts » en en-tête de carte pour chaque équipe cochée non créditée (montant ≠ 0), qui disparaît à la décoche (retour PRET/rien) ; un montant négatif (pénalité) s'affiche en rouge ; une équipe déjà créditée n'a pas de chip ; la chip « +N pts » est le SEUL affichage du gain d'équipe au niveau équipe (plus de petit « +N » à côté des points) ; au niveau JOUEUR, le montant est sur la ligne du joueur | | |
+| 1 | Sur un QCM : décocher une équipe, « Tout sélectionner », modifier le champ Points ; créditer une équipe puis revenir ; changer de question | Sélection toujours modifiable ; modifier « Points » ne recoche ni ne décoche ; équipe déjà créditée jamais cochée ; sélection vidée au changement de question ; rien n'est envoyé avant « Attribuer les points » ; chip « +N pts » en en-tête de carte pour chaque équipe cochée non créditée, = montant attribué RÉEL (suit le champ « Points » : 3 → 7) ; pénalité en rouge ; chip prioritaire sur MEMORY/QCM/RAFALE ; équipe décochée : chip habituelle (MEMORY/QCM/RAFALE/PRET) ; équipe déjà créditée : pas de chip « +N pts » ; la chip est le SEUL affichage du gain d'équipe (plus de petit « +N » à côté des points) ; niveau JOUEUR : montant sur la ligne du joueur | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
