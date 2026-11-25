@@ -1757,7 +1757,7 @@ Diffusés aux clients web (admin, anim, TV, tablettes) ; jamais aux buzzers.
 | `PICTO_DRAWER_CONNECTED` | bool | Le dessinateur a une connexion `/ws/player` liée |
 | `PICTO_CANDIDATES` | `{ID, NAME, CONNECTED}[]` | VJoueurs de l'équipe ; seuls les connectés sont désignables |
 | `PICTO_WORDS_COUNT` | int | Nombre de mots de la question (affiché en préparation) |
-| `PICTO_CANVAS_EPOCH` | int | Époque de la feuille : +1 à chaque `START` d'une manche PICTO ; en Rafale Picto, +1 à chaque mot (`START` puis chaque « Trouvé » ou « Passer ») ; 0 avant la première |
+| `PICTO_CANVAS_EPOCH` | int | Époque de la feuille : +1 à chaque `START` d'une manche PICTO ; en Rafale Picto, +1 à chaque nouveau mot tiré (`START`, puis chaque « Trouvé » ou « Passer » qui amène un mot ; un « Trouvé » ou « Passer » qui termine le pool, et un « Trouvé » sur le gong, ne l'incrémentent pas) ; 0 avant la première |
 | `PICTO_OUTCOME` | string | `""` \| `FOUND` \| `TIMEOUT` \| `STOPPED` \| `NO_WORD` \| `POOL_END` (Rafale Picto) (issues de fin de manche, voir GAME_STATE_MACHINE « Fin de manche ») |
 | `PICTO_REVEALED_WORD` | string | Mot de la manche, **seulement en `REVEALED`** ; `""` sinon |
 | `PICTO_REVEALED_CATEGORY` | string | Catégorie du crédit, en `REVEALED` ; `""` sinon |
