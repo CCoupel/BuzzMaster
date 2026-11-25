@@ -31,4 +31,21 @@ describe('TeamCard — awardChip (#321)', () => {
     expect(screen.getByText('+20 pts')).toBeTruthy()
     expect(screen.queryByText('+9 pts')).toBeNull()
   })
+  it('chip affiché : le petit award-preview « +N » redondant n’est pas rendu', () => {
+    const { container } = r({ awardChip: 3, selectable: true, selected: true, awardPreview: 3 })
+    expect(container.querySelectorAll('.award-chip').length).toBe(1)
+    expect(container.querySelector('.award-preview')).toBeNull()
+  })
+  it('chip dédié (MEMORY) à sa place : award-preview conservé', () => {
+    const { container } = r({ awardChip: 20, selectable: true, selected: true, awardPreview: 20, memoryStats: { pairs: 2, errors: 0, totalPairs: 4, pointsPerPair: 10 } })
+    expect(container.querySelector('.award-preview')).not.toBeNull()
+  })
+  it('niveau JOUEUR : le montant reste sur la ligne du joueur (pas de chip d’équipe)', () => {
+    const { container } = r({
+      awardChip: null, selectable: false, buzzers: [{ mac: 'm1', name: 'Paul', score: 0 }],
+      playerAward: { selected: () => true, onChange: () => {}, awarded: () => null, preview: () => 3 },
+    })
+    expect(container.querySelectorAll('.award-chip').length).toBe(0)
+    expect(container.querySelector('.buzzer-mini .award-preview')).not.toBeNull()
+  })
 })

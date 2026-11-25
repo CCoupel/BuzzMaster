@@ -463,6 +463,11 @@ export default function TeamCard({
     return Math.max(0, points)
   }, [memoryStats])
 
+  // #321 — le chip de gain prévu est réellement affiché (aucun chip dédié MEMORY/QCM/RAFALE avant lui) :
+  // le petit « +N » award-preview devient redondant et n'est pas rendu.
+  const awardChipShown = awardChip !== null && gamePhase === 'REVEALED' && !rafaleStats
+    && memoryAcquiredPoints === null && qcmAcquiredPoints === null
+
   // Detect if team has an active VPlayer
   const teamHasVPlayer = useMemo(() => {
     return buzzers.some(b => b.isVPlayer === true)
@@ -588,7 +593,7 @@ export default function TeamCard({
             ✓ déjà créditée {awardedInfo.POINTS > 0 ? '+' : ''}{awardedInfo.POINTS}
           </span>
         )}
-        {selectable && !awardedInfo && selected && awardPreview !== null && (
+        {selectable && !awardedInfo && selected && awardPreview !== null && !awardChipShown && (
           <span className={`award-preview${awardPreview < 0 ? ' neg' : ''}`}>
             {awardPreview > 0 ? '+' : ''}{awardPreview}
           </span>
