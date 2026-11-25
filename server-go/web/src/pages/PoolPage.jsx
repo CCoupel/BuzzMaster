@@ -12,6 +12,17 @@ import Button from '../components/Button'
 import Card from '../components/Card'
 import './RafalePage.css'
 
+// Refus du collage / de l'ajout (contrat picto-pool.md §4) — codes serveur → libellé.
+const REFUSAL_LABELS = {
+  WORD_INVALID: 'mot non valide',
+  DUPLICATE: 'déjà dans la catégorie',
+  CATEGORY_UNKNOWN: 'catégorie inconnue',
+  DIFFICULTY_INVALID: 'difficulté invalide',
+  POOL_FULL: 'pool plein',
+}
+// Types de question dont une manche en cours verrouille le Pool Picto (écritures refusées, contrat §4).
+const PICTO_ROUND_TYPES = ['PICTO', 'RAFALE_PICTO']
+
 const EMPTY_FORM = { ID: null, QUESTION: '', ANSWER: '', CATEGORY: '', DIFFICULTY: 1 }
 
 // #203 (v8.1.0) — plafonds de longueur du réservoir, contrat
@@ -69,6 +80,14 @@ export default function PoolPage({ instance = 'rafale' }) {
   const [formError, setFormError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // Collage d'une liste (Pool Picto seulement, M1 A) : « Un mot » / « Une liste ».
+  const [entryMode, setEntryMode] = useState('one') // 'one' | 'list'
+  const [listText, setListText] = useState('')
+  const [listCategory, setListCategory] = useState('')
+  const [listDifficulty, setListDifficulty] = useState(1)
+  const [listReport, setListReport] = useState(null) // { created: [{ID,QUESTION}], refused: [{QUESTION,CODE}] }
+  const listLines = useMemo(() => listText.split('\n').map(l => l.trim()).filter(Boolean), [listText])
+
   // Remise à disponible du flag « déjà utilisée » (contrat rafale.md §9,
   // dev-backend SHA 77e0d5ea, issue #197) — n'affecte JAMAIS le réservoir
   // lui-même (aucune question créée/modifiée/supprimée), seulement
@@ -87,6 +106,11 @@ export default function PoolPage({ instance = 'rafale' }) {
   // y lèverait. aiJob/cancelAiGeneration retombent alors sur leurs valeurs
   // par défaut ci-dessous, sans rien changer au comportement déjà testé.
   const game = useOptionalGame()
+  // Manche Picto en cours (STARTED / PAUSED) : le serveur refuse écritures, remises à zéro et génération (409
+  // picto_round_in_progress) — l'interface les grise et l'explique (contrat picto-pool.md §4, maquette M1).
+  const gs = game?.gameState
+  const roundLocked = inst.key === 'picto' && PICTO_ROUND_TYPES.includes(gs?.question?.TYPE)
+    && ['STARTED', 'PAUSED'].includes(gs?.phase)
   const aiJob = game?.aiJob ?? null
   const cancelAiGeneration = game?.cancelAiGeneration
   const [showAIModal, setShowAIModal] = useState(false)
@@ -210,6 +234,38 @@ export default function PoolPage({ instance = 'rafale' }) {
   const handleEdit = (q) => {
     setForm({ ID: q.ID, QUESTION: q.QUESTION, ANSWER: q.ANSWER, CATEGORY: q.CATEGORY, DIFFICULTY: q.DIFFICULTY })
     setFormError(null)
+  }
+
+  // Ajout d'une liste collée : POST /words/batch, compte rendu des refus (jamais tronqués).
+  const handleSubmitList = async (e) => {
+    e.preventDefault()
+    setFormError(null)
+    setListReport(null)
+    if (listLines.length === 0) { setFormError(L.required); return }
+    if (!listCategory) { setFormError('Selectionnez une categorie.'); return }
+    if (listLines.length > 200) { setFormError('200 mots maximum par liste.'); return }
+    setSubmitting(true)
+    try {
+      const res = await fetch(urls.batch, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ CATEGORY: listCategory, DIFFICULTY: listDifficulty, WORDS: listLines }),
+      })
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '')
+        throw new Error(detail || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      setListReport({ created: data?.CREATED ?? [], refused: data?.REFUSED ?? [] })
+      // Les refusés restent dans la zone pour correction ; les créés en sortent.
+      const refusedSet = new Set((data?.REFUSED ?? []).map(r => r.QUESTION))
+      setListText(listLines.filter(l => refusedSet.has(l)).join('\n'))
+      loadQuestions()
+    } catch (err) {
+      setFormError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleDelete = async (id) => {
@@ -338,12 +394,17 @@ export default function PoolPage({ instance = 'rafale' }) {
               variant="primary"
               size="sm"
               onClick={() => setShowAIModal(true)}
-              disabled={!canOpenAiModal}
+              disabled={!canOpenAiModal || roundLocked}
               title={canOpenAiModal ? L.aiButtonTitle : 'Configurer une clé API dans Paramètres pour activer la génération IA'}
             >
               ✨ Générer via IA
             </Button>
           </div>
+          {roundLocked && (
+            <p className="rafale-status rafale-status-error" role="status">
+              ⏸ Manche Picto en cours : le pool ne peut pas être modifié ni complété par l'IA avant la fin de la manche.
+            </p>
+          )}
           {!canOpenAiModal && (
             <p className="ai-generate-hint">
               <span className="ai-generate-hint-dot" aria-hidden="true">●</span>
@@ -389,7 +450,7 @@ export default function PoolPage({ instance = 'rafale' }) {
                   type="button"
                   className="rafale-chip rafale-reset-all-btn"
                   onClick={handleResetAll}
-                  disabled={resettingAll}
+                  disabled={resettingAll || roundLocked}
                   title={L.resetAllTitle}
                 >
                   ↺ Remettre tout disponible ({usedCount})
@@ -439,13 +500,13 @@ export default function PoolPage({ instance = 'rafale' }) {
                             type="button"
                             className="rafale-row-btn"
                             onClick={() => handleResetOne(q.ID)}
-                            disabled={resettingId === q.ID}
+                            disabled={resettingId === q.ID || roundLocked}
                             title="Remettre disponible"
                           >
                             ↺
                           </button>
                         )}
-                        <button type="button" className="rafale-row-btn rafale-row-btn-danger" onClick={() => handleDelete(q.ID)} title="Supprimer">🗑</button>
+                        <button type="button" className="rafale-row-btn rafale-row-btn-danger" onClick={() => handleDelete(q.ID)} disabled={roundLocked} title="Supprimer">🗑</button>
                       </td>
                     </tr>
                   ))}
@@ -471,76 +532,137 @@ export default function PoolPage({ instance = 'rafale' }) {
               <span className="section-icon">{form.ID ? '✎' : '➕'}</span>
             </div>
 
-            <form onSubmit={handleSubmit} className="rafale-form">
-              <div className="form-group">
-                <label>{L.entryField}</label>
-                <textarea
-                  value={form.QUESTION}
-                  onChange={e => setForm(prev => ({ ...prev, QUESTION: e.target.value }))}
-                  rows={3}
-                  required
-                />
-                {/* #203 (tâche 13) — compteur de caractères (en runes, comme
-                    la validation serveur) pour que le 400 de POST
-                    /api/rafale/questions (plafond 100, contrat §5.3) ne soit
-                    jamais atteint par surprise. */}
-                <span className={`rafale-char-count ${questionOverLimit ? 'over' : ''}`}>
-                  {questionRuneCount}/{inst.maxEntryRunes}
-                </span>
+            {inst.pasteList && !form.ID && (
+              <div className="rafale-entry-mode" role="group" aria-label="Mode de saisie">
+                <button type="button" className={`rafale-chip ${entryMode === 'one' ? 'on' : ''}`} aria-pressed={entryMode === 'one'} onClick={() => setEntryMode('one')}>Un mot</button>
+                <button type="button" className={`rafale-chip ${entryMode === 'list' ? 'on' : ''}`} aria-pressed={entryMode === 'list'} onClick={() => setEntryMode('list')}>Une liste</button>
               </div>
-              {inst.hasAnswer && (
+            )}
+
+            {inst.pasteList && !form.ID && entryMode === 'list' ? (
+              <form onSubmit={handleSubmitList} className="rafale-form" data-testid="pool-list-form">
                 <div className="form-group">
-                  <label>{L.answerField}</label>
-                  <input
-                    type="text"
-                    value={form.ANSWER}
-                    onChange={e => setForm(prev => ({ ...prev, ANSWER: e.target.value }))}
+                  <label>Mots — un par ligne</label>
+                  <textarea
+                    value={listText}
+                    onChange={e => setListText(e.target.value)}
+                    rows={8}
+                    placeholder={'Tortue\nLion\nZèbre'}
+                  />
+                </div>
+                <div className="form-group">
+                  <CategoryPicker
+                    mode="single"
+                    value={listCategory}
+                    onChange={setListCategory}
+                    customCategories={customCategories}
+                  />
+                </div>
+                <div className="form-group">
+                  <DifficultyPicker
+                    mode="single"
+                    label="Difficulté du lot"
+                    value={listDifficulty}
+                    onChange={setListDifficulty}
+                  />
+                </div>
+
+                {formError && <p className="rafale-status rafale-status-error">{formError}</p>}
+
+                {listReport && (
+                  <div className="rafale-list-report" role="status">
+                    <p><b>{listReport.created.length} ajouté{listReport.created.length > 1 ? 's' : ''}</b>{listReport.created.length > 0 ? ` — ${listReport.created.map(c => c.QUESTION).join(', ')}` : ''}</p>
+                    {listReport.refused.length > 0 && (
+                      <>
+                        <p><b>{listReport.refused.length} refusé{listReport.refused.length > 1 ? 's' : ''}</b></p>
+                        <ul>
+                          {listReport.refused.map((r, i) => (
+                            <li key={`${r.QUESTION}-${i}`}>« {r.QUESTION} » : {REFUSAL_LABELS[r.CODE] || r.CODE}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="section-actions">
+                  <Button type="submit" variant="primary" disabled={submitting || roundLocked || listLines.length === 0} loading={submitting}>
+                    {`Ajouter les ${listLines.length} ligne${listLines.length > 1 ? 's' : ''}`}
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleSubmit} className="rafale-form">
+                <div className="form-group">
+                  <label>{L.entryField}</label>
+                  <textarea
+                    value={form.QUESTION}
+                    onChange={e => setForm(prev => ({ ...prev, QUESTION: e.target.value }))}
+                    rows={3}
                     required
                   />
-                  <span className={`rafale-char-count ${answerOverLimit ? 'over' : ''}`}>
-                    {answerRuneCount}/{inst.maxAnswerRunes}
+                  {/* #203 (tâche 13) — compteur de caractères (en runes, comme
+                      la validation serveur) pour que le 400 de POST
+                      /api/rafale/questions (plafond 100, contrat §5.3) ne soit
+                      jamais atteint par surprise. */}
+                  <span className={`rafale-char-count ${questionOverLimit ? 'over' : ''}`}>
+                    {questionRuneCount}/{inst.maxEntryRunes}
                   </span>
                 </div>
-              )}
-              <div className="form-group">
-                {/* CategoryPicker (#221, ex-CategorySelector v8.0.0 #16/#197) — même
-                    composant que l'éditeur de question standard (QuestionsPage.jsx). */}
-                <CategoryPicker
-                  mode="single"
-                  value={form.CATEGORY}
-                  onChange={(key) => setForm(prev => ({ ...prev, CATEGORY: key }))}
-                  customCategories={customCategories}
-                />
-              </div>
-              <div className="form-group">
-                <DifficultyPicker
-                  mode="single"
-                  label="Difficulté"
-                  chipTitle={(d) => `Difficulte de la question : ${d}`}
-                  value={form.DIFFICULTY}
-                  onChange={(d) => setForm(prev => ({ ...prev, DIFFICULTY: d }))}
-                />
-              </div>
-
-              {formError && <p className="rafale-status rafale-status-error">{formError}</p>}
-
-              <div className="section-actions">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={submitting || questionOverLimit || (inst.hasAnswer && answerOverLimit)}
-                  loading={submitting}
-                  title={questionOverLimit || (inst.hasAnswer && answerOverLimit) ? 'Raccourcissez le champ en dépassement avant d\'enregistrer' : undefined}
-                >
-                  {form.ID ? 'Enregistrer' : 'Ajouter'}
-                </Button>
-                {form.ID && (
-                  <Button type="button" variant="secondary" onClick={resetForm} disabled={submitting}>
-                    Annuler
-                  </Button>
+                {inst.hasAnswer && (
+                  <div className="form-group">
+                    <label>{L.answerField}</label>
+                    <input
+                      type="text"
+                      value={form.ANSWER}
+                      onChange={e => setForm(prev => ({ ...prev, ANSWER: e.target.value }))}
+                      required
+                    />
+                    <span className={`rafale-char-count ${answerOverLimit ? 'over' : ''}`}>
+                      {answerRuneCount}/{inst.maxAnswerRunes}
+                    </span>
+                  </div>
                 )}
-              </div>
-            </form>
+                <div className="form-group">
+                  {/* CategoryPicker (#221, ex-CategorySelector v8.0.0 #16/#197) — même
+                      composant que l'éditeur de question standard (QuestionsPage.jsx). */}
+                  <CategoryPicker
+                    mode="single"
+                    value={form.CATEGORY}
+                    onChange={(key) => setForm(prev => ({ ...prev, CATEGORY: key }))}
+                    customCategories={customCategories}
+                  />
+                </div>
+                <div className="form-group">
+                  <DifficultyPicker
+                    mode="single"
+                    label="Difficulté"
+                    chipTitle={(d) => `Difficulte de la question : ${d}`}
+                    value={form.DIFFICULTY}
+                    onChange={(d) => setForm(prev => ({ ...prev, DIFFICULTY: d }))}
+                  />
+                </div>
+
+                {formError && <p className="rafale-status rafale-status-error">{formError}</p>}
+
+                <div className="section-actions">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={submitting || roundLocked || questionOverLimit || (inst.hasAnswer && answerOverLimit)}
+                    loading={submitting}
+                    title={questionOverLimit || (inst.hasAnswer && answerOverLimit) ? 'Raccourcissez le champ en dépassement avant d\'enregistrer' : undefined}
+                  >
+                    {form.ID ? 'Enregistrer' : 'Ajouter'}
+                  </Button>
+                  {form.ID && (
+                    <Button type="button" variant="secondary" onClick={resetForm} disabled={submitting}>
+                      Annuler
+                    </Button>
+                  )}
+                </div>
+              </form>
+            )}
           </Card>
         </motion.div>
       </div>

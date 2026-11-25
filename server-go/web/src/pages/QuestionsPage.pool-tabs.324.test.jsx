@@ -13,6 +13,7 @@ import QuestionsPage from './QuestionsPage'
 
 vi.mock('../hooks/GameContext', () => ({
   useGame: vi.fn(),
+  useOptionalGame: () => null,
   GameProvider: ({ children }) => children,
 }))
 

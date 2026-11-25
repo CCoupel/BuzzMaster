@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import PoolPage from './PoolPage'
+import { useOptionalGame } from '../hooks/GameContext'
+
+vi.mock('../hooks/GameContext', () => ({ useOptionalGame: vi.fn(() => null), useGame: vi.fn() }))
 
 // #324 (v13.1.0, LOT-2 T13 générique) — PoolPage paramétrée : instance `picto` (colonne « Mot », pas de réponse,
 // chemins /api/picto/words*) ; l'instance `rafale` (défaut) est couverte par RafalePage.*.test.jsx, inchangés.
@@ -71,5 +74,72 @@ describe('PoolPage — instance par défaut', () => {
     render(<PoolPage />)
     await waitFor(() => expect(screen.getByRole('columnheader', { name: 'Reponse' })).toBeTruthy())
     expect(global.fetch).toHaveBeenCalledWith('/api/rafale/questions')
+  })
+})
+
+describe('PoolPage — Pool Picto : collage d\'une liste (M1 A)', () => {
+  function mockBatch(created, refused) {
+    return vi.fn((url, options = {}) => {
+      if (url === '/api/picto/words/batch') return json({ CREATED: created, REFUSED: refused })
+      if (url === '/api/picto/words') return json({ QUESTIONS: WORDS, TOTAL: 2 })
+      return json([])
+    })
+  }
+  const openList = async () => {
+    await waitFor(() => expect(screen.getByText('chat')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Une liste' }))
+    return screen.getByTestId('pool-list-form')
+  }
+
+  it('« Un mot » / « Une liste » proposés pour Picto, absents pour le Pool Speedy', async () => {
+    global.fetch = mockBatch([], [])
+    const { unmount } = render(<PoolPage instance="picto" />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Une liste' })).toBeTruthy())
+    unmount()
+    global.fetch = vi.fn((u) => json(u === '/api/categories' ? [] : { QUESTIONS: [], TOTAL: 0 }))
+    render(<PoolPage instance="rafale" />)
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Une liste' })).toBeNull())
+  })
+
+  it('collage : POST /words/batch {CATEGORY, DIFFICULTY, WORDS}, compte rendu des ajoutés et des refus listés', async () => {
+    global.fetch = mockBatch([{ ID: 'p-3', QUESTION: 'Tortue' }, { ID: 'p-4', QUESTION: 'Lion' }], [{ QUESTION: 'chat', CODE: 'DUPLICATE' }, { QUESTION: 'a/b', CODE: 'WORD_INVALID' }])
+    render(<PoolPage instance="picto" />)
+    const form = await openList()
+    fireEvent.change(within(form).getByRole('textbox'), { target: { value: 'Tortue\n  Lion  \n\nchat\na/b' } })
+    expect(within(form).getByRole('button', { name: 'Ajouter les 4 lignes' })).toBeTruthy()
+    fireEvent.click(within(form).getByTitle('Geographie'))
+    fireEvent.click(within(form).getByRole('button', { name: 'Ajouter les 4 lignes' }))
+    await waitFor(() => expect(screen.getByText(/2 ajoutés/)).toBeTruthy())
+    const call = global.fetch.mock.calls.find(c => c[0] === '/api/picto/words/batch')
+    expect(JSON.parse(call[1].body)).toEqual({ CATEGORY: 'GEOGRAPHY', DIFFICULTY: 1, WORDS: ['Tortue', 'Lion', 'chat', 'a/b'] })
+    expect(screen.getByText('2 refusés')).toBeTruthy()
+    expect(screen.getByText('« chat » : déjà dans la catégorie')).toBeTruthy()
+    expect(screen.getByText('« a/b » : mot non valide')).toBeTruthy()
+    // Les refusés restent dans la zone pour correction
+    expect(within(form).getByRole('textbox').value).toBe('chat\na/b')
+  })
+
+  it('catégorie manquante : aucun envoi', async () => {
+    global.fetch = mockBatch([], [])
+    render(<PoolPage instance="picto" />)
+    const form = await openList()
+    fireEvent.change(within(form).getByRole('textbox'), { target: { value: 'Tortue' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Ajouter les 1 ligne' }))
+    expect(await screen.findByText('Selectionnez une categorie.')).toBeTruthy()
+    expect(global.fetch.mock.calls.some(c => c[0] === '/api/picto/words/batch')).toBe(false)
+  })
+})
+
+describe('PoolPage — Pool Picto : manche Picto en cours', () => {
+  it('écritures, remises à zéro et IA grisées avec message explicite', async () => {
+    useOptionalGame.mockReturnValue({ gameState: { phase: 'STARTED', question: { TYPE: 'PICTO' } }, aiJob: null })
+    global.fetch = mockFetch()
+    render(<PoolPage instance="picto" />)
+    await waitFor(() => expect(screen.getByText('chat')).toBeTruthy())
+    expect(screen.getByText(/Manche Picto en cours : le pool ne peut pas être modifié/)).toBeTruthy()
+    screen.getAllByTitle('Supprimer').forEach(b => expect(b.disabled).toBe(true))
+    expect(screen.getByTitle('Remettre disponible').disabled).toBe(true)
+    expect(screen.getByText('Ajouter').closest('button').disabled).toBe(true)
+    useOptionalGame.mockReturnValue(null)
   })
 })

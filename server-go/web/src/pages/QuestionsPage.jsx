@@ -37,7 +37,7 @@ import RoundDeleteDialog from '../components/RoundDeleteDialog'
 import RoundAmbianceDialog from '../components/RoundAmbianceDialog'
 import { overriddenFields, describeOverride, fileOverrides } from '../utils/ambianceSettings'
 import { cueMeta } from '../utils/soundCues'
-import RafalePage from './RafalePage'
+import PoolPage from './PoolPage'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 import '../styles/sliders.css'
@@ -68,7 +68,7 @@ export default function QuestionsPage() {
   // lu ici en état initial uniquement (pas de synchronisation continue avec
   // l'URL au clic sur un onglet : même patron que BackstagePage.jsx).
   const [searchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') === 'rafale' ? 'rafale' : 'questions')
+  const [activeTab, setActiveTab] = useState(['rafale', 'picto'].includes(searchParams.get('tab')) ? searchParams.get('tab') : 'questions')
   const [isUploading, setIsUploading] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const fileInputRef = useRef(null)
@@ -2222,12 +2222,23 @@ export default function QuestionsPage() {
               plus cohérente que l'éclair ⚡ de la maquette (déjà pris par
               SPEEDY dans ce même registre). */}
           <span className="page-tab-icon" aria-hidden="true">🌀</span>
-          Rafale
+          Pool Speedy
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'picto'}
+          className={`page-tab ${activeTab === 'picto' ? 'active' : ''}`}
+          onClick={() => setActiveTab('picto')}
+        >
+          {/* ✏️ — même icône que le type PICTO (utils/questionTypeMeta.js) ; ce pool alimente Picto et Rafale Picto. */}
+          <span className="page-tab-icon" aria-hidden="true">✏️</span>
+          Pool Picto
         </button>
       </div>
 
-      {activeTab === 'rafale' ? (
-        <RafalePage />
+      {activeTab === 'rafale' || activeTab === 'picto' ? (
+        <PoolPage instance={activeTab} />
       ) : (
         <>
 

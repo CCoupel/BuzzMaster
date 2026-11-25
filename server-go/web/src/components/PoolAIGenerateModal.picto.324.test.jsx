@@ -15,14 +15,14 @@ describe('PoolAIGenerateModal', () => {
     renderModal(props({ instance: 'picto' }))
     ;[10, 20, 50].forEach((n) => expect(screen.getByRole('button', { name: String(n) })).toBeTruthy())
     ;[100, 200].forEach((n) => expect(screen.queryByRole('button', { name: String(n) })).toBeNull())
-    expect(screen.getAllByText(/Générer des mots Picto via IA/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Générer des mots pour le Pool Picto/).length).toBeGreaterThan(0)
     expect(screen.getByText("Ce qu'on ajoute au Pool Picto")).toBeTruthy()
   })
   it('instance par défaut (rafale) : paliers 10..200 et libellés « réservoir » inchangés', () => {
     renderModal(props())
     ;[10, 20, 50, 100, 200].forEach((n) => expect(screen.getByRole('button', { name: String(n) })).toBeTruthy())
     expect(screen.getByText("Ce qu'on ajoute au réservoir")).toBeTruthy()
-    expect(screen.getAllByText(/Générer des questions RAFALE via IA/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Générer des questions pour le Pool Speedy/).length).toBeGreaterThan(0)
   })
   it('maxQuestions filtre aussi les paliers Picto', () => {
     renderModal(props({ instance: 'picto', maxQuestions: 20 }))
