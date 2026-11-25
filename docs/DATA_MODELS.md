@@ -83,7 +83,7 @@ interface Team {
 ## Niveau d'attribution et QCM_WRONG_PENALTY — v11.2 (#254)
 
 - **`Question.POINTS_TARGET`** (`TEAM` ou `PLAYER`) : défaut au chargement (`game.DefaultPointsTarget`). `TEAM` pour QCM,
-  ARDOISE, MEMORY, MEMOTION et RAFALE ; `PLAYER` pour SPEEDY. Une valeur enregistrée est respectée pour SPEEDY, QCM et ARDOISE.
+  ARDOISE, MEMORY, MEMOTION, RAFALE, PICTO et RAFALE_PICTO ; `PLAYER` pour SPEEDY. Une valeur enregistrée est respectée pour SPEEDY, QCM et ARDOISE.
   **Changement** : une ancienne question ARDOISE sans `POINTS_TARGET` passe de `PLAYER` à `TEAM`.
 - **`Question.QCM_WRONG_PENALTY`** (question QCM seulement) : entier de −100 à 0, **0 = aucune pénalité** (défaut). Absent,
   invalide ou non entier → 0, sans faire échouer le chargement de la question. Aucune réécriture des fichiers existants.
@@ -1720,8 +1720,9 @@ RafalePictoPoolEnd      string   `json:"RAFALE_PICTO_POOL_END,omitempty"`     //
 
 - **Champs propres** : le registre impose un champ par type (`OwnedFields`). `PICTO_*` reste à `PICTO`.
 - **`TIME`, `POINTS` (par mot trouvé) et `CATEGORY` (crédit)** sont réutilisés.
+- **Crédit** : `game.DefaultPointsTarget` renvoie `TEAM` pour la famille Picto, `RAFALE_PICTO` compris.
 - **Registre** : `OwnedFields` = les 7 champs ci-dessus, `MediaSlots` = aucun, `NestableInMotionCard` = `false`,
-  `HasPlayerInput` = `true`. `DefaultPointsTarget` = équipe.
+  `HasPlayerInput` = `true`.
 - **Enregistrement** (`POST /questions`, multipart `rafale_picto_*`) : refus `400` préfixé par son code
   (`PICTO_SOURCE_INVALID`, `PICTO_FILTER_INVALID`, `PICTO_WORDS_INVALID`, `PICTO_PASS_INVALID`, `PICTO_POOL_END_INVALID`).
   `PICTO_PASS_INVALID` : coût hors de 0 à 100, ou limite autre que 0 et 1.
@@ -1756,11 +1757,11 @@ Diffusés aux clients web (admin, anim, TV, tablettes) ; jamais aux buzzers.
 | `PICTO_DRAWER_CONNECTED` | bool | Le dessinateur a une connexion `/ws/player` liée |
 | `PICTO_CANDIDATES` | `{ID, NAME, CONNECTED}[]` | VJoueurs de l'équipe ; seuls les connectés sont désignables |
 | `PICTO_WORDS_COUNT` | int | Nombre de mots de la question (affiché en préparation) |
-| `PICTO_CANVAS_EPOCH` | int | Époque de la feuille : +1 à chaque `START` d'une manche PICTO ; 0 avant la première |
+| `PICTO_CANVAS_EPOCH` | int | Époque de la feuille : +1 à chaque `START` d'une manche PICTO ; en Rafale Picto, +1 à chaque mot (`START` puis chaque « Trouvé » ou « Passer ») ; 0 avant la première |
 | `PICTO_OUTCOME` | string | `""` \| `FOUND` \| `TIMEOUT` \| `STOPPED` \| `NO_WORD` \| `POOL_END` (Rafale Picto) (issues de fin de manche, voir GAME_STATE_MACHINE « Fin de manche ») |
 | `PICTO_REVEALED_WORD` | string | Mot de la manche, **seulement en `REVEALED`** ; `""` sinon |
 | `PICTO_REVEALED_CATEGORY` | string | Catégorie du crédit, en `REVEALED` ; `""` sinon |
-| `PICTO_POOL_AVAILABLE` | int | Mots encore tirables : pool filtré et non utilisé (source `RESERVOIR`), mots saisis (source `WORDS`) — v13.1.0, #324 |
+| `PICTO_POOL_AVAILABLE` | int | Mots encore tirables : pool filtré et non utilisé (source `RESERVOIR`), mots saisis (source `WORDS`) — v13.1.0, #324. En manche Rafale Picto : mots jamais montrés, plus les passés en attente si `RAFALE_PICTO_POOL_END = LOOP` |
 | `PICTO_WORD_CATEGORY` | string | Catégorie du mot en cours (pool), sinon celle de la question — indice TV / anim, jamais le mot — v13.1.0, #324 |
 
 - **Remise à vide** : la préparation (`PICTO_TEAM`, `PICTO_DRAWER`, `PICTO_CANDIDATES`) au changement de question, à

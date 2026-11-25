@@ -632,7 +632,7 @@ manche, `PICTO_WORD` au dessinateur, à l'admin et à l'anim, puis `UPDATE`.
 
 1. Pas de mot frais :
    - `RAFALE_PICTO_POOL_END = LOOP` et file des passés non vide → le plus ancien mot passé revient (FIFO). Un mot trouvé ne revient jamais ;
-   - sinon → `PICTO_OUTCOME = POOL_END`, `STOPPED`, puis `REVEALED`.
+   - sinon → `PICTO_OUTCOME = POOL_END`, `STOPPED` ; la révélation est un geste de l'admin ou de l'anim (« Révéler »).
 2. Aucun mot au tout premier tirage : `NO_WORD`, comme en Picto.
 
 ### Issues et révélation

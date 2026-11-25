@@ -2166,7 +2166,7 @@ Le type `RAFALE_PICTO` est une variante de la famille Picto. Les règles de fami
 - **TV** : `components/picto/PictoTv.jsx` et `components/picto/useRafaleFlash.js`. Le grand compteur de mots trouvés ; le
   mot trouvé reste 1 s sur le dessin, en surimpression, puis la feuille vierge. Une passe ne montre jamais le mot.
   Le récapitulatif est une ligne, tronquée au-delà d'une dizaine de mots.
-- **Tablette du dessinateur** : pas de bouton « Passer » ; un compteur et le récapitulatif.
+- **Tablette du dessinateur** (`PictoDrawerScreen`) : pas de bouton « Passer » ; un compteur de mots trouvés et la catégorie du mot, sans récapitulatif. Le récapitulatif (`PictoGuesserScreen`) est sur les autres tablettes.
 - **Crédit** : `pages/GamePage.jsx` pré-remplit le champ « Points » à `PICTO_ROUND_POINTS` à l'entrée en `REVEALED`
   (équipe présélectionnée, #321). `pages/AnimPage.jsx` (`getTeamAward`) donne la même valeur.
 

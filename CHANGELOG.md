@@ -2,7 +2,9 @@
 
 Historique des versions du projet BuzzControl.
 
-## [13.1.0] - 2026-11-24 — Présélection des gagnants au crédit, sécurité des dépendances Go (#321, #322)
+## [13.1.0] - 2026-11-24 — Rafale Picto, Pool Picto, présélection des gagnants au crédit, sécurité des dépendances Go (#318, #321, #322, #324, #326)
+
+Cette version ajoute le type Rafale Picto (#318) et le Pool Picto avec génération IA (#324), corrige le décompte Picto sur la tablette du dessinateur (#326), et ajoute la présélection des gagnants au crédit (#321) ; la mise à jour x/net est en #322.
 
 À la révélation de la réponse, la page Jeu coche désormais d'office les équipes ou les joueurs que la question désigne.
 Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas sur « Attribuer les points ».
@@ -13,7 +15,7 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
   selon le type de question :
   - **Picto** : l'équipe qui dessine, si la manche est trouvée ;
   - **Mémoire** : en solo, l'équipe participante ; en multi-équipes, les équipes qui ont un score positif ;
-  - **Rafale** : en solo, l'équipe participante si son compteur retenu est positif ; en multi-équipes, les équipes dont le compteur retenu est positif ;
+  - **Rafale Speedy** : en solo, l'équipe participante si son compteur retenu est positif ; en multi-équipes, les équipes dont le compteur retenu est positif ;
   - **QCM** : les équipes ou les joueurs qui ont donné la bonne couleur ;
   - **Speedy** : le premier buzzeur (son joueur au niveau joueur, son équipe au niveau équipe). L'admin décoche si la réponse était fausse ;
   - **Ardoise** : les équipes dont la réponse correspond à la réponse attendue (comparaison sans accents, sans casse,
@@ -33,13 +35,13 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
 - **Passes (#318)** — le dessinateur annonce la passe à voix haute ; l'animateur ou l'admin la déclenche, jamais la
   tablette. Coût par passe de 0 à 100 points (0 = gratuite), et limite à **1 passe** ou **illimitées**, au choix de la
   question.
-- **Fin de pool (#318)** — au choix : **reboucler** sur les mots passés (défaut de l'éditeur), ou **finir la manche** à
-  la dernière passe. Un mot trouvé ne revient jamais.
+- **Fin de pool (#318)** — au choix : **reboucler** sur les mots passés (défaut de l'éditeur), ou **finir la manche** quand il
+  n'y a plus de mot. Un mot trouvé ne revient jamais.
 - **Crédit Rafale Picto (#318)** — le crédit manuel est pré-rempli à `mots trouvés × points − passes × coût`, plancher 0
   (les passes ne débitent jamais le score). L'équipe est présélectionnée, et le montant reste modifiable.
 - **TV Rafale Picto (#318)** — grand compteur de mots trouvés ; le mot trouvé s'affiche 1 s sur le dessin, puis la feuille
   est vierge. Une passe n'affiche jamais le mot.
-- **Tablette du dessinateur (#318)** — pas de bouton « Passer » ; un compteur et un récapitulatif.
+- **Tablette du dessinateur (#318)** — pas de bouton « Passer » ; un compteur de mots trouvés et la catégorie du mot. Le récapitulatif est sur les autres tablettes.
 - **Source des mots (#318)** — mots saisis dans la question, ou Pool Picto (voir ci-dessous).
 - **Pool Picto (#324)** — réservoir de mots pour le type Picto, sur le même moteur que le Pool Speedy (deux instances
   d'un même moteur). Onglet « Pool Picto » de la page Questions (`?tab=picto`) : tableau filtrable (catégories,

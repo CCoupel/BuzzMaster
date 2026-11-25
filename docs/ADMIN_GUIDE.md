@@ -2504,8 +2504,8 @@ de la question, avec le même dessinateur du début à la fin. Le mot passe au s
 2. **START** : le premier mot part au dessinateur (sa tablette) ; le chrono global démarre.
 3. Le dessinateur dessine. Quand l'équipe trouve : **✅ Trouvé** (le mot suivant arrive, la TV affiche le mot 1 s).
 4. Quand le dessinateur **annonce une passe à voix haute** : **⏭ Passer** (le coût est affiché sur le bouton). Le mot passé
-   ne réapparaîtra qu'avec le rebouclage. Quand la passe est épuisée, le bouton est désactivé.
-5. Au temps écoulé : si le mot est en cours, un **Trouvé sur le gong** reste possible une fois. Sinon la manche s'arrête.
+   ne réapparaîtra qu'avec le rebouclage. Le bouton est désactivé quand la passe est épuisée, et hors de la manche en cours (pause, arrêt).
+5. Au temps écoulé, la manche s'arrête (`STOPPED`). Si le mot en cours a été donné sur le gong, **Trouvé sur le gong** (une seule fois) le compte et révèle ; sinon, **Révéler**.
 6. **Fin** : la révélation montre le mot en cours (s'il n'a pas été trouvé). Les mots passés ne sont jamais montrés.
 
 **Crédit** : le champ « Points » est pré-rempli à `mots trouvés × points − passes × coût`, sans descendre sous 0.

@@ -2183,8 +2183,9 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 - `QUESTION.PICTO_WORDS` et `QUESTION.RAFALE_PICTO_WORDS` sont retirés des messages `/ws/tv` et `/ws/player` (les trois sites
   de sérialisation, liste partagée `SecretQuestionFields`). Ils restent
   présents pour `/ws/admin` et `/ws/anim`.
-- Le mot de la manche n'est dans aucun `UPDATE` ni message à la TV ou à une tablette non dessinatrice ; il n'apparaît dans
-  `GameState` qu'en `REVEALED`, avec `PICTO_REVEALED_WORD` (et `PICTO_REVEALED_CATEGORY`). Les `UPDATE` de la TV et des
+- Le mot en cours et les mots passés n'apparaissent dans aucun `UPDATE` ni message à la TV ou à une tablette non dessinatrice.
+  Le mot en cours n'entre dans `GameState` qu'en `REVEALED`, avec `PICTO_REVEALED_WORD` (et `PICTO_REVEALED_CATEGORY`).
+  En Rafale Picto, seuls les mots trouvés (`PICTO_FOUND_WORDS`) sont publics en cours de manche (dits à voix haute). Les `UPDATE` de la TV et des
   tablettes portent le mot seul, sans payload de « Trouvé par ».
 
 ## References
