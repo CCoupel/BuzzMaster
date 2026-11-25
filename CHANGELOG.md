@@ -73,8 +73,8 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
   `rafale_used.json`, routes `/api/rafale/*`). Une archive v13.0.0 se restaure sans `files/picto` ; les questions Picto
   v13.0.0 restent en source « mots saisis ».
 - **Sécurité (#324)** : les routes `/api/picto/*` n'ont pas d'authentification, comme le reste de l'administration
-  (dette #259). Le mot tiré n'est envoyé qu'au dessinateur, à l'admin et à l'anim, jamais à la TV ; la liste des mots reste lisible
-  par qui peut joindre le serveur.
+  (dette #259). Le mot tiré n'est envoyé qu'au dessinateur, à l'admin et à l'anim, jamais à la TV avant la révélation ; la liste des
+  mots reste lisible par qui peut joindre le serveur, hors manche (la lecture est refusée en `409` pendant une manche Picto).
 
 ## [13.0.0] - 2026-11-24 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191, #192, #193, #319, #194)
 

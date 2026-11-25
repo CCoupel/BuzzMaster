@@ -2131,13 +2131,15 @@ Le réservoir Picto réutilise l'interface du réservoir Speedy : une seule page
   « Un mot » / « Une liste » (chips `rafale-chip`) ; la liste passe par `POST /api/picto/words/batch`. Les refus par
   ligne sont affichés dans le formulaire.
 - **Génération IA** : `components/PoolAIGenerateModal.jsx` paramétré (titre, paliers, `TARGET`). Une
-  erreur `409 picto_round_in_progress` est traduite en message « Pool indisponible pendant une manche Picto »
-  (`role="status"`), et non en erreur HTTP brute. `PoolAlert.jsx` est l'alerte commune, reprise par `RafalePoolAlert.jsx`.
+  erreur `409 picto_round_in_progress` est traduite en « Génération refusée : une manche Picto est en cours. Réessayez
+  une fois la manche terminée. » (`aiJobHelpers.js`). Le chargement de la liste, lui, affiche « Pool indisponible pendant
+  une manche Picto » (`role="status"`, `PoolPage.jsx`), au lieu d'une erreur HTTP brute. `PoolAlert.jsx` est l'alerte commune, reprise par `RafalePoolAlert.jsx`.
 - **Source du type Picto** : `components/picto/PictoWordsSource.jsx` (`SOURCE_POOL = 'RESERVOIR'`) affiche le choix
   « Pool Picto » / mots saisis, le filtre catégories × difficultés et l'alerte. Une nouvelle question prend « Pool Picto ».
-- **Page Jeu et TV** : `pictoWordsInfo` (`components/picto/pictoState.js`) affiche « 🗂 Pool Picto · N mot(s) disponible(s) »
-  à partir de `PICTO_POOL_AVAILABLE`. L'indice de catégorie vient de `PICTO_WORD_CATEGORY` (TV `PlayerDisplay.jsx`,
-  anim `AnimPicto.jsx`). Le mot n'est jamais lu depuis ces champs.
+- **Page Jeu et anim** : `pictoWordsInfo` (`components/picto/pictoState.js`, utilisé par `PictoPanel.jsx` et `AnimPicto.jsx`)
+  affiche « 🗂 Pool Picto · N mot(s) disponible(s) » à partir de `PICTO_POOL_AVAILABLE`.
+- **TV et anim** : l'indice de catégorie vient de `PICTO_WORD_CATEGORY` (TV `PlayerDisplay.jsx`, anim `AnimPicto.jsx`).
+  Ce champ ne contient jamais le mot.
 - **Sauvegarde** : `BackupPage.jsx`, catégorie « Pools » à trois états (`POOL_OPTIONS = { rafale: 'Pool Speedy', picto: 'Pool Picto' }`).
 
 Contrats : `contracts/picto-pool.md` (rév. 2) §4 à §7.

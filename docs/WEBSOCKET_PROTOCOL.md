@@ -2164,6 +2164,7 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 | `NOT_DRAWER` | trame ou synchronisation d'un VJoueur qui n'est pas le dessinateur |
 | `INVALID_STROKES` | forme de trame non valable |
 | `CANVAS_FULL` | journal plein (6 000 traits ou 60 000 points) : trame refusée, rien relayé |
+| `POOL_EMPTY` | `START` refusé : le filtre du Pool Picto n'a aucun mot disponible (source `RESERVOIR`) |
 | `RATE_LIMITED` | débit dépassé : 40 trames/s pour `PICTO_STROKES`, 2/s pour `PICTO_CANVAS_SYNC` ; une erreur au plus par seconde |
 
 ### Relais et rattrapage

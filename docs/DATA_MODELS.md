@@ -1684,8 +1684,8 @@ PictoWords []string `json:"PICTO_WORDS,omitempty"` // 1 à 20 mots, secret (reti
 - **`PICTO_WORDS`** : format d'un mot = espaces de début et de fin retirés, espaces internes compactés, 1 à 40 caractères
   (lettres accentuées, chiffres, espace, apostrophe, tiret). Aucun doublon de clé repliée dans une même question
   (« Éléphant » et « elephant » sont un doublon). Une seule implémentation, côté serveur (`server-go/internal/game/picto_words.go`).
-- **Registre** : `OwnedFields` = `PICTO_WORDS`, `MediaSlots` = aucun, `NestableInMotionCard` = `false`, `HasPlayerInput` = `true`.
-- **Enregistrement** (`POST /questions`) : un refus renvoie HTTP 400 préfixé par son code (`PICTO_WORDS_INVALID`, `PICTO_TIME_INVALID`) ; rien n'est écrit.
+- **Registre** : `OwnedFields` = `PICTO_WORDS`, `PICTO_SOURCE`, `PICTO_CATEGORIES`, `PICTO_DIFFICULTIES`, `MediaSlots` = aucun, `NestableInMotionCard` = `false`, `HasPlayerInput` = `true`.
+- **Enregistrement** (`POST /questions`) : un refus renvoie HTTP 400 préfixé par son code (`PICTO_WORDS_INVALID`, `PICTO_TIME_INVALID`, `PICTO_SOURCE_INVALID`, `PICTO_FILTER_INVALID`) ; rien n'est écrit.
 
 ### Source Pool Picto — v13.1.0, #324 (contracts/picto.md §17.2, contracts/picto-pool.md §2 à §4)
 
@@ -1697,8 +1697,8 @@ PictoDifficulties []int    `json:"PICTO_DIFFICULTIES,omitempty"` // filtre du po
 
 - **`PICTO_SOURCE`** : `WORDS` (ou absent) garde le comportement v13.0.0 (mots saisis, tirage libre) ; `RESERVOIR`
   tire un mot du Pool Picto. Une autre valeur est refusée à l'enregistrement (`POST /questions`, `PICTO_SOURCE_INVALID`).
-- **Filtre** : exigé avec `RESERVOIR` (`PICTO_FILTER_INVALID` si vide ou hors plage) ; il n'est pas secret.
-- **Pool vide** : `POOL_EMPTY` au lancement de la manche quand aucun mot n'est disponible pour le filtre.
+- **Filtre** : exigé avec `RESERVOIR` (`PICTO_FILTER_INVALID` si vide, hors plage, ou si une catégorie est inconnue) ; il n'est pas secret.
+- **Pool vide** : `START` est refusé par `POOL_EMPTY` (renvoyé en `PICTO_ERROR`) quand aucun mot n'est disponible pour le filtre. `READY` ne renvoie pas ce code : le blocage de la préparation passe par la conformité des participants.
 - **Pool Picto** (`files/picto/reservoir.json`, marquage `config/picto_used.json`) : entrées `p-NNN`, `QUESTION` = mot, `ANSWER`
   toujours vide, `CATEGORY`, `DIFFICULTY`. Plafond : 5 000 entrées (`POOL_FULL`). Doublon interdit par catégorie, clé repliée
   (`DUPLICATE`).

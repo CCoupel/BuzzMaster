@@ -2490,7 +2490,7 @@ Attribution des points (cliquer une équipe) :
 ### Pool Picto — réservoir de mots (v13.1.0, #324)
 
 Le **Pool Picto** est un réservoir de mots pour le type de question Picto. Il se gère dans la page Questions, onglet
-**Pool Picto** (`/admin/questions?tab=picto`). Il a la même présentation que le **Pool Speedy** (onglet « Pool Speedy »,
+**Pool Picto** (`/admin/quiz?tab=picto`). Il a la même présentation que le **Pool Speedy** (onglet « Pool Speedy »,
 ex-« Rafale »).
 
 - **Ajouter un mot** : « Un mot » (une saisie) ou « Une liste » (collage de 1 à 200 mots, une par ligne). Les lignes valides
@@ -2509,10 +2509,10 @@ ex-« Rafale »).
 - **Sauvegarde** : la catégorie « Pools » de la sauvegarde et de la réinitialisation contient « Pool Speedy » et
   « Pool Picto ». Une archive antérieure à v13.1.0 se restaure à l'identique.
 - **Indice** : la catégorie du mot en cours s'affiche sur la TV et sur l'anim. Le mot tiré n'est envoyé qu'au dessinateur,
-  à l'admin et à l'anim, jamais à la TV.
+  à l'admin et à l'anim, jamais à la TV avant la révélation (il s'affiche sur la TV en `REVEALED`).
 
 > ⚠️ Les routes `/api/picto/*` n'ont pas encore d'authentification (dette #259) : la liste des mots reste lisible par qui peut
-> joindre le serveur. Gardez le serveur sur un réseau d'administration isolé.
+> joindre le serveur, y compris hors manche (seule la lecture pendant `STARTED`/`PAUSED` est refusée en `409`). Gardez le serveur sur un réseau d'administration isolé.
 
 ### Gestion du réservoir (`/admin/rafale`)
 
