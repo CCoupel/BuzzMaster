@@ -29,7 +29,7 @@
   },
   "intensite_depart": "complet",
   "lots": {
-    "current": "LOT-2",
+    "current": "LOT-3",
     "items": {
       "LOT-1": {
         "issues": [
@@ -44,9 +44,13 @@
       },
       "LOT-2": {
         "issues": [
-          "324"
+          324
         ],
-        "status": "planned"
+        "status": "validated",
+        "qualif": "13.1.0.6",
+        "qa": "_work/reports/qa-20261125-lot2.md",
+        "review": "_work/reports/code-review-lot2-r1-20261125-142249.md",
+        "note": "scenarios 4 et 5 (IA) non testables, valides par l utilisateur ; a rejouer a la QUALIF finale"
       },
       "LOT-3": {
         "issues": [
@@ -60,7 +64,7 @@
   "frozen": false,
   "description": "PICTO RAFALE — pool Picto (moteur généralisé), type Rafale Picto, présélection des gains (#321), x/net (#322)",
   "started_at": "2026-11-24T16:52:12Z",
-  "updated_at": "2026-11-25T13:28:35Z",
+  "updated_at": "2026-11-25T14:46:47Z",
   "phases": {
     "init": {
       "status": "completed"
@@ -76,7 +80,7 @@
     },
     "dev": {
       "status": "in_progress",
-      "lot": "LOT-2"
+      "lot": "LOT-3"
     }
   }
 }
