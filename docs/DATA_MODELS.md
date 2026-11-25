@@ -1687,6 +1687,22 @@ PictoWords []string `json:"PICTO_WORDS,omitempty"` // 1 à 20 mots, secret (reti
 - **Registre** : `OwnedFields` = `PICTO_WORDS`, `MediaSlots` = aucun, `NestableInMotionCard` = `false`, `HasPlayerInput` = `true`.
 - **Enregistrement** (`POST /questions`) : un refus renvoie HTTP 400 préfixé par son code (`PICTO_WORDS_INVALID`, `PICTO_TIME_INVALID`) ; rien n'est écrit.
 
+### Source Pool Picto — v13.1.0, #324 (contracts/picto.md §17.2, contracts/picto-pool.md §2 à §4)
+
+```go
+PictoSource       string   `json:"PICTO_SOURCE,omitempty"`       // "" / "WORDS" = mots saisis ; "RESERVOIR" = Pool Picto
+PictoCategories   []string `json:"PICTO_CATEGORIES,omitempty"`   // filtre du pool (catégories)
+PictoDifficulties []int    `json:"PICTO_DIFFICULTIES,omitempty"` // filtre du pool (1 à 3)
+```
+
+- **`PICTO_SOURCE`** : `WORDS` (ou absent) garde le comportement v13.0.0 (mots saisis, tirage libre) ; `RESERVOIR`
+  tire un mot du Pool Picto. Une autre valeur est refusée à l'enregistrement (`POST /questions`, `PICTO_SOURCE_INVALID`).
+- **Filtre** : exigé avec `RESERVOIR` (`PICTO_FILTER_INVALID` si vide ou hors plage) ; il n'est pas secret.
+- **Pool vide** : `POOL_EMPTY` au lancement de la manche quand aucun mot n'est disponible pour le filtre.
+- **Pool Picto** (`files/picto/reservoir.json`, marquage `config/picto_used.json`) : entrées `p-NNN`, `QUESTION` = mot, `ANSWER`
+  toujours vide, `CATEGORY`, `DIFFICULTY`. Plafond : 5 000 entrées (`POOL_FULL`). Doublon interdit par catégorie, clé repliée
+  (`DUPLICATE`).
+
 ### GameState PICTO_* — v13.0.0, #192 (contracts/picto.md §5)
 
 Tous présents dans chaque `UPDATE`, **sans `omitempty`**, tableaux jamais `null`. **Jamais persistés** (`state_persistence.go`).
@@ -1705,6 +1721,8 @@ Diffusés aux clients web (admin, anim, TV, tablettes) ; jamais aux buzzers.
 | `PICTO_OUTCOME` | string | `""` \| `FOUND` \| `TIMEOUT` \| `STOPPED` \| `NO_WORD` (issues de fin de manche, voir GAME_STATE_MACHINE « Fin de manche ») |
 | `PICTO_REVEALED_WORD` | string | Mot de la manche, **seulement en `REVEALED`** ; `""` sinon |
 | `PICTO_REVEALED_CATEGORY` | string | Catégorie du crédit, en `REVEALED` ; `""` sinon |
+| `PICTO_POOL_AVAILABLE` | int | Mots encore tirables : pool filtré et non utilisé (source `RESERVOIR`), mots saisis (source `WORDS`) — v13.1.0, #324 |
+| `PICTO_WORD_CATEGORY` | string | Catégorie du mot en cours (pool), sinon celle de la question — indice TV / anim, jamais le mot — v13.1.0, #324 |
 
 - **Remise à vide** : la préparation (`PICTO_TEAM`, `PICTO_DRAWER`, `PICTO_CANDIDATES`) au changement de question, à
   `InitGameWith` et à `NEW_GAME`. Elle est conservée entre `PREPARE` et `READY`, et à la relance de la même question.

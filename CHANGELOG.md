@@ -27,9 +27,30 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
   « Personne » comme seul autre choix (libellé « Perdu » sur l'admin). En solo, l'équipe unique est présélectionnée. Sur l'anim,
   le geste est en deux temps : choix, puis **VALIDER** ; rien n'est envoyé avant ce clic. Sur l'admin, le choix
   présélectionné se confirme par **Valider**. Le message envoyé au serveur ne change pas.
+- **Pool Picto (#324)** — réservoir de mots pour le type Picto, sur le même moteur que le Pool Speedy (deux instances
+  d'un même moteur). Onglet « Pool Picto » de la page Questions (`?tab=picto`) : tableau filtrable (catégories,
+  difficulté, « Non utilisés »), « Remettre tout disponible », formulaire « Nouveau mot ».
+- **Saisie d'une liste de mots (#324)** — « Une liste » dans le formulaire du Pool Picto : collage d'1 à 200 mots en une
+  seule création. Les lignes valides sont créées ; les refus par ligne (`WORD_INVALID`, `DUPLICATE`, `POOL_FULL`) sont
+  listés, jamais tronqués.
+- **Génération IA de mots (#324)** — « ✨ Générer via IA » sur le Pool Picto, en volumes de 10, 20 ou 50 mots, filtrés par
+  `ai.max_questions`. Les mots doivent être dessinables (3 mots au plus, ni nom propre ni marque). Un seul job de génération
+  à la fois : `409 generation_in_progress` si un autre est en cours.
+- **Source « Pool Picto » du type Picto (#324)** — `PICTO_SOURCE = RESERVOIR` : la manche tire un mot du pool filtré par
+  catégories et difficultés, en tirage stratifié, et le mot tiré est marqué « utilisé ». Une nouvelle question prend cette
+  source par défaut. Les questions Picto v13.0.0 gardent leurs mots saisis (`WORDS`).
+- **Indice de catégorie (#324)** — la catégorie du mot en cours (`PICTO_WORD_CATEGORY`) s'affiche comme indice sur la TV
+  et sur l'anim, sans le mot.
+- **Verrou de manche Picto (#324)** — pendant une manche Picto (`STARTED` / `PAUSED`), le Pool Picto est verrouillé :
+  écritures, remises à zéro, génération IA et lecture de la liste répondent `409 picto_round_in_progress`. La page affiche
+  « Pool indisponible pendant une manche Picto ».
+- **Sauvegarde « Pools » à trois états (#324)** — la catégorie « Pools » de la sauvegarde et de la réinitialisation déplie
+  « Pool Speedy » et « Pool Picto ». Elle est cochée, vide ou intermédiaire selon ses sous-cases.
 
 ### Changed
 
+- **Libellés (#324)** — « Rafale » devient « Rafale Speedy » (type, pages, interface), et le réservoir « Pool Speedy ».
+  Les identifiants techniques ne changent pas (`RAFALE`, `/api/rafale/*`, clé de sauvegarde `rafale`, fichiers).
 - **Petit « +N » supprimé au niveau équipe (#321)** — le petit « +N » à côté des points de l'équipe n'est plus affiché,
   pour aucun type : seule la chip « +N pts » porte le montant. Le niveau joueur est inchangé.
 
@@ -48,6 +69,12 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
 
 - Les tests existants de l'attribution groupée ont été **adaptés** : la sélection est désormais pré-cochée, et leurs
   fixtures repartent d'une sélection vide. Aucune assertion n'a été supprimée ni affaiblie.
+- **Compatibilité (#324)** : le format disque et l'API du Pool Speedy ne changent pas (`reservoir.json`,
+  `rafale_used.json`, routes `/api/rafale/*`). Une archive v13.0.0 se restaure sans `files/picto` ; les questions Picto
+  v13.0.0 restent en source « mots saisis ».
+- **Sécurité (#324)** : les routes `/api/picto/*` n'ont pas d'authentification, comme le reste de l'administration
+  (dette #259). Le mot tiré n'est envoyé qu'au dessinateur, à l'admin et à l'anim, jamais à la TV ; la liste des mots reste lisible
+  par qui peut joindre le serveur.
 
 ## [13.0.0] - 2026-11-24 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191, #192, #193, #319, #194)
 

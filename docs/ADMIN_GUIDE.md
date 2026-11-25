@@ -2487,6 +2487,33 @@ Attribution des points (cliquer une équipe) :
 
 **Important** : aucun point n'est attribué pendant la manche, seuls les compteurs visibles. L'attribution manuelle en fin de manche est **l'étape décisive**.
 
+### Pool Picto — réservoir de mots (v13.1.0, #324)
+
+Le **Pool Picto** est un réservoir de mots pour le type de question Picto. Il se gère dans la page Questions, onglet
+**Pool Picto** (`/admin/questions?tab=picto`). Il a la même présentation que le **Pool Speedy** (onglet « Pool Speedy »,
+ex-« Rafale »).
+
+- **Ajouter un mot** : « Un mot » (une saisie) ou « Une liste » (collage de 1 à 200 mots, une par ligne). Les lignes valides
+  sont créées ; chaque refus est listé avec sa raison (`WORD_INVALID`, `DUPLICATE`, `POOL_FULL`). Un mot doit faire 1 à 40
+  caractères, sans doublon dans la même catégorie (casse et accents ignorés).
+- **Générer via IA** : « ✨ Générer via IA » propose 10, 20 ou 50 mots, à choisir par catégorie et difficulté. Les mots
+  doivent être dessinables (3 mots au plus, ni nom propre ni marque). Une seule génération à la fois.
+- **Utiliser le Pool Picto dans une question** : dans l'éditeur Picto, la source « Pool Picto » tire un mot du pool, filtré par
+  catégories et difficultés. Une nouvelle question prend cette source par défaut. Les questions Picto déjà créées gardent
+  leurs mots saisis.
+- **Un mot tiré est marqué « utilisé »**, comme pour le Pool Speedy. « Remettre tout disponible » remet les mots
+  utilisés à l'état disponible.
+- **Pendant une manche Picto**, le Pool Picto est verrouillé : ajout, remise à zéro, génération et lecture de la liste
+  sont refusés (`409 picto_round_in_progress`). La page affiche « Pool indisponible pendant une manche Picto ».
+  La page ne se recharge pas seule à la fin de la manche : rouvrez l'onglet.
+- **Sauvegarde** : la catégorie « Pools » de la sauvegarde et de la réinitialisation contient « Pool Speedy » et
+  « Pool Picto ». Une archive antérieure à v13.1.0 se restaure à l'identique.
+- **Indice** : la catégorie du mot en cours s'affiche sur la TV et sur l'anim. Le mot tiré n'est envoyé qu'au dessinateur,
+  à l'admin et à l'anim, jamais à la TV.
+
+> ⚠️ Les routes `/api/picto/*` n'ont pas encore d'authentification (dette #259) : la liste des mots reste lisible par qui peut
+> joindre le serveur. Gardez le serveur sur un réseau d'administration isolé.
+
 ### Gestion du réservoir (`/admin/rafale`)
 
 **Avant les premières manches** :

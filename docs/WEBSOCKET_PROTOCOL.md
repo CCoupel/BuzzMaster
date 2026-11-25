@@ -2145,7 +2145,7 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 
 | Action | Destinataires | Payload |
 |---|---|---|
-| `UPDATE` (existant) | tous les clients web | `GameState` avec les champs `PICTO_*` (sans le mot) |
+| `UPDATE` (existant) | tous les clients web | `GameState` avec les champs `PICTO_*` (sans le mot). v13.1.0 (#324) : `PICTO_POOL_AVAILABLE` et `PICTO_WORD_CATEGORY` (indice de catégorie, jamais le mot) |
 | `PICTO_WORD` | dessinateur seul, admin, anim | `{ "WORD": string, "CATEGORY": string, "EPOCH": int }` |
 | `PICTO_STROKES` | tv, admin, anim (envoi non bloquant) | `{ "EPOCH": int, "SEQ": int, "STROKES": [...] }` |
 | `PICTO_CANVAS` | le demandeur seul | `{ "EPOCH": int, "SEQ": int, "STROKES": [...] }` (feuille entière de l'époque) |
