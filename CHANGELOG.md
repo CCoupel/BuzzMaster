@@ -28,6 +28,18 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
   le geste est en deux temps : choix, puis **VALIDER** ; rien n'est envoyé avant ce clic. Sur l'admin, le choix
   présélectionné se confirme par **Valider**. Le message envoyé au serveur ne change pas.
 
+### Changed
+
+- **Chip « +N pts » et petit aperçu (#321)** — sur une équipe cochée où la chip « +N pts » s'affiche, le petit « +N » à
+  côté des points n'est plus affiché, pour éviter le doublon. Mémoire, QCM et Rafale gardent leur chip et leur aperçu.
+  Le niveau joueur est inchangé.
+
+### Fixed
+
+- **Décompte Picto sur la tablette du dessinateur (#326)** — le décompte 3-2-1 / GO! qui précède le chronomètre
+  s'affiche aussi sur la tablette du dessinateur, pendant l'écran de préparation. Affichage seulement : aucune
+  modification serveur.
+
 ### Security
 
 - **Dépendances Go mises à jour (#322)** — `golang.org/x/net` passe de v0.60.0 à v0.62.0, et `golang.org/x/sys` de v0.48.0
