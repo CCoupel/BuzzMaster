@@ -7,6 +7,7 @@
 **Maquettes** : `_work/mockup/v13.1.0/ui/` (M3 éditeur, M4 TV, M5 tablettes, M6 anim, M7 admin), `conception/game_state_picto_rafale__words.html` (M8)
 **Tests automatiques** : `tests/INDEX.md` (lignes #318)
 
+> **Cycle 5 (13.1.0.8)** : les scénarios 1 à 11 ont été validés OK en 13.1.0.7 ; à revérifier sur les points modifiés (éditeur, fil des mots, zone de jeu admin).
 > Sauvegarder `data/` avant. Prévoir un Pool Picto de 10 mots au moins, 3 équipes avec joueurs, une tablette de dessinateur, TV, `/admin` et `/anim` ouverts.
 
 ## Prérequis
@@ -39,7 +40,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Page Quiz : nouvelle question, choisir « 🖍️ Rafale Picto » ; observer la grille, le sous-éditeur « Mots à dessiner » (source Pool / Mots saisis, filtre, alerte) et le bloc Passes (coût, 1 passe / illimitées, fin de pool) ; enregistrer puis rouvrir ; essayer coût 101, mot invalide, source Pool sans catégorie | Type « Rafale Picto » 🖍️ (Picto reste « Picto » ✏️) ; défauts : source Pool Picto, coût 0, passes illimitées, fin de pool = reboucler ; points = par mot trouvé ; refus lisibles (coût > 100, mot invalide, filtre vide) ; enregistrement fidèle des 7 champs ; une question Picto v13.0.0 n'est pas modifiée | | |
+| 1 | Page Quiz : nouvelle question, choisir « 🖍️ Rafale Picto » ; observer la grille, le sous-éditeur « Mots à dessiner » (source Pool / Mots saisis, filtre, alerte) et le bloc Passes (coût, 1 passe / illimitées, fin de pool) ; enregistrer puis rouvrir ; essayer coût 101, mot invalide, source Pool sans catégorie | Type « Rafale Picto » 🖍️ (Picto reste « Picto » ✏️) ; défauts : source Pool Picto, coût 0, passes illimitées, fin de pool = reboucler ; points = par mot trouvé ; refus lisibles (coût > 100, mot invalide, filtre vide) ; enregistrement fidèle des 7 champs ; une question Picto v13.0.0 n'est pas modifiée ; cycle 5 : catégories et difficultés en sélection multiple comme Rafale Speedy, un seul sélecteur de catégories (jamais en double), « Ajouter » grisé tant qu'aucune catégorie n'est choisie, crédit = 1re catégorie du filtre, cartes Mots / Passes / Temps et points empilées (Picto un mot garde ses 2 colonnes et son double sélecteur, inchangé) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -67,7 +68,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Lancer une manche (TIME 120). Le dessinateur dessine ; l'équipe devine à voix haute ; l'animateur appuie sur « Trouvé » (anim), puis l'admin sur « Trouvé » (admin) pour le mot suivant ; essayer d'appuyer en même temps sur les deux | Chaque « Trouvé » donne le mot suivant dans la même action, la feuille repart vierge (nouvelle époque), le compteur grandit sur la TV, l'anim et l'admin ; deux appuis simultanés n'avancent que d'un mot (l'autre est ignoré avec un message) ; le fil des mots montre le mot en cours et les mots trouvés, jamais de mots à venir ; aucune action « Trouvé » ni « Passer » sur les tablettes | | |
+| 1 | Lancer une manche (TIME 120). Le dessinateur dessine ; l'équipe devine à voix haute ; l'animateur appuie sur « Trouvé » (anim), puis l'admin sur « Trouvé » (admin) pour le mot suivant ; essayer d'appuyer en même temps sur les deux | Chaque « Trouvé » donne le mot suivant dans la même action, la feuille repart vierge (nouvelle époque), le compteur grandit sur la TV, l'anim et l'admin ; deux appuis simultanés n'avancent que d'un mot (l'autre est ignoré avec un message) ; le fil des mots montre le mot en cours et les mots trouvés, jamais de mots à venir ; aucune action « Trouvé » ni « Passer » sur les tablettes ; fil des mots (admin et anim, cycle 5) : rangée compacte (retour à la ligne), fond de la couleur de l'équipe qui joue, mot en cours en gras et plus grand, mots passés barrés, jamais de mot à venir ; zone de jeu de l'admin plus grande (cycle 5) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -109,7 +110,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Regarder la TV pendant une manche : « Trouvé » sur un mot avec le dessin tracé, puis « Passer » | Au « Trouvé » le mot s'affiche 1 s en surimpression (« ✅ mot ») sur le dessin, sans « Trouvé par » ni points, puis feuille vierge ; les traits du mot suivant tracés pendant cette seconde ne sont pas perdus ; le grand compteur s'incrémente ; une passe vide la feuille avec un repère « ⏭ » discret, jamais le mot ; aucune animation de points à chaque mot ; TV sans défilement | | |
+| 1 | Regarder la TV pendant une manche : « Trouvé » sur un mot avec le dessin tracé, puis « Passer » | Au « Trouvé » le mot s'affiche 1 s en surimpression (« ✅ mot ») sur le dessin, sans « Trouvé par » ni points, puis feuille vierge ; les traits du mot suivant tracés pendant cette seconde ne sont pas perdus ; le grand compteur s'incrémente ; une passe vide la feuille avec un repère « ⏭ » discret, jamais le mot ; aucune animation de points à chaque mot ; TV sans défilement ; fil des mots sur l'écran de jeu (cycle 5) : rangée compacte (retour à la ligne), fond de la couleur de l'équipe qui joue, mot en cours en gras et plus grand, mots passés barrés, jamais de mot à venir | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -165,7 +166,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Relancer la même question après la fin ; en manche, fermer la tablette du dessinateur puis la rouvrir ; recharger /admin pendant la manche | Relance : compteurs, passes et mots trouvés remis à zéro, équipe et dessinateur conservés, limite de passes rendue ; dessinateur déconnecté : la manche continue, l'admin et l'anim jouent Trouvé / Passer, alerte « déconnecté(e) » ; à la reconnexion (tablette ou admin) le mot en cours et la feuille sont renvoyés | | |
+| 1 | Relancer la même question après la fin ; en manche, fermer la tablette du dessinateur puis la rouvrir ; recharger /admin pendant la manche | Relance : compteurs, passes et mots trouvés remis à zéro, équipe et dessinateur conservés, limite de passes rendue ; dessinateur déconnecté : la manche continue, l'admin et l'anim jouent Trouvé / Passer, alerte « déconnecté(e) » ; à la reconnexion (tablette ou admin) le mot en cours et la feuille sont renvoyés ; fil des mots (admin et anim, cycle 5) : rangée compacte (retour à la ligne), fond de la couleur de l'équipe qui joue, mot en cours en gras et plus grand, mots passés barrés, jamais de mot à venir | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
