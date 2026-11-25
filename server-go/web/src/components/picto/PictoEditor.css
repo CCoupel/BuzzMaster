@@ -21,3 +21,10 @@
 .picto-inline { display: flex; gap: 0.4rem; align-items: center; }
 .picto-input-error { border-color: var(--error, #dc2626); background: #fee2e2; }
 @media (max-width: 760px) { .picto-grid { grid-template-columns: 1fr; } }
+
+/* #324 — sous-éditeur partagé PictoWordsSource : source des mots (pool / saisis) */
+.picto-source { display: flex; flex-direction: column; gap: 0.6rem; }
+.picto-source-toggle { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.picto-source-btn { border: 1px solid var(--gray-300, #d1d5db); background: #fff; border-radius: 999px; padding: 0.25rem 0.75rem; font-size: 0.8rem; cursor: pointer; }
+.picto-source-btn.on { background: #cffafe; border-color: #0891b2; color: #0e7490; font-weight: 700; }
+.picto-source-pool { display: flex; flex-direction: column; gap: 0.6rem; }

@@ -11,6 +11,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { categoryMeta } from '../../utils/categoryUtils'
+import PictoWordsSource, { SOURCE_POOL, isPictoFilterValid } from './PictoWordsSource'
 import './PictoEditor.css'
 
 export const PICTO_WORDS_MAX = 20
@@ -38,8 +39,11 @@ export function pictoRefusalText(raw) {
 export const validPictoTime = (t) => /^\d+$/.test(String(t ?? '').trim()) && Number(t) >= PICTO_TIME_MIN && Number(t) <= PICTO_TIME_MAX
 
 export function isPictoReady(values) {
+  if (!validPictoTime(values.time)) return false
+  // Source « Pool Picto » (v13.1.0) : un filtre catégories × difficultés valide remplace la liste de mots.
+  if (values.pictoSource === SOURCE_POOL) return isPictoFilterValid(values.pictoCategories, values.pictoDifficulties)
   const n = (values.pictoWords || []).length
-  return n >= 1 && n <= PICTO_WORDS_MAX && validPictoTime(values.time)
+  return n >= 1 && n <= PICTO_WORDS_MAX
 }
 
 export default function PictoEditor({ values, onChange, error, customCategories = [] }) {
@@ -50,6 +54,7 @@ export default function PictoEditor({ values, onChange, error, customCategories 
   const emitted = useRef(words)
   useEffect(() => { if (words !== emitted.current) setIgnored(0) }, [words])
   const full = words.length >= PICTO_WORDS_MAX
+  const fromPool = values.pictoSource === SOURCE_POOL
   const timeOk = validPictoTime(values.time)
   const cat = values.category ? categoryMeta(values.category, customCategories) : null
 
@@ -85,54 +90,58 @@ export default function PictoEditor({ values, onChange, error, customCategories 
       <div className="picto-summary" aria-label="Résumé de la question">
         <span className="picto-chip">⏱ {timeOk ? `${values.time} s` : '— s'}</span>
         <span className="picto-chip">🏆 {values.points || '—'} pts</span>
-        <span className="picto-chip">✍️ {words.length} mot{words.length > 1 ? 's' : ''}</span>
+        {fromPool
+          ? <span className="picto-chip">🗂 Pool Picto</span>
+          : <span className="picto-chip">✍️ {words.length} mot{words.length > 1 ? 's' : ''}</span>}
         {cat && <span className="picto-chip">{cat.icon ? `${cat.icon} ` : ''}{cat.label}</span>}
       </div>
 
       <div className="picto-grid">
         <div className="picto-card">
-          <div className="picto-lbl">Mot à dessiner</div>
-          <div className="form-group">
-            <label htmlFor="picto-word-input">
-              Mots de la question <span className="picto-muted">— 1 à {PICTO_WORDS_MAX}, un par ligne</span>
-            </label>
-            <div className="picto-words">
-              {words.map((w, i) => (
-                <span className="picto-chip" key={`${w}-${i}`}>
-                  {w}
-                  <button type="button" className="picto-chip-x" aria-label={`Retirer « ${w} »`} onClick={() => removeWord(i)}>✕</button>
-                </span>
-              ))}
-              <input
-                id="picto-word-input"
-                type="text"
-                className="picto-word-input"
-                value={draft}
-                maxLength={200}
-                disabled={full}
-                placeholder={full ? `${PICTO_WORDS_MAX} mots au maximum` : '＋ mot…'}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={onKeyDown}
-                onBlur={() => addWords(draft)}
-                onPaste={(e) => {
-                  const t = e.clipboardData?.getData('text') || ''
-                  if (/[\n,;]/.test(t)) { e.preventDefault(); addWords(draft + t) }
-                }}
-              />
+          <div className="picto-lbl">Mots à dessiner</div>
+          <PictoWordsSource values={values} onChange={onChange} customCategories={customCategories}>
+            <div className="form-group">
+              <label htmlFor="picto-word-input">
+                Mots de la question <span className="picto-muted">— 1 à {PICTO_WORDS_MAX}, un par ligne</span>
+              </label>
+              <div className="picto-words">
+                {words.map((w, i) => (
+                  <span className="picto-chip" key={`${w}-${i}`}>
+                    {w}
+                    <button type="button" className="picto-chip-x" aria-label={`Retirer « ${w} »`} onClick={() => removeWord(i)}>✕</button>
+                  </span>
+                ))}
+                <input
+                  id="picto-word-input"
+                  type="text"
+                  className="picto-word-input"
+                  value={draft}
+                  maxLength={200}
+                  disabled={full}
+                  placeholder={full ? `${PICTO_WORDS_MAX} mots au maximum` : '＋ mot…'}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  onBlur={() => addWords(draft)}
+                  onPaste={(e) => {
+                    const t = e.clipboardData?.getData('text') || ''
+                    if (/[\n,;]/.test(t)) { e.preventDefault(); addWords(draft + t) }
+                  }}
+                />
+              </div>
+              <p className="picto-hint">
+                Un mot est tiré au hasard à chaque lancement ou relance, parmi tous les mots ; le même peut ressortir.
+                Avec un seul mot, c'est toujours ce mot. Ces mots ne sont jamais montrés sur la TV ni sur les tablettes.
+              </p>
             </div>
-            <p className="picto-hint">
-              Un mot est tiré au hasard à chaque lancement ou relance, parmi tous les mots ; le même peut ressortir.
-              Avec un seul mot, c'est toujours ce mot. Ces mots ne sont jamais montrés sur la TV ni sur les tablettes.
-            </p>
-          </div>
-          {ignored > 0 && (
-            <p className="picto-hint err" role="alert">
-              {ignored} mot{ignored > 1 ? 's' : ''} ignoré{ignored > 1 ? 's' : ''} : {PICTO_WORDS_MAX} mots au maximum par question.
-            </p>
-          )}
-          {words.length === 0 && <p className="picto-hint err">Saisissez au moins un mot.</p>}
+            {ignored > 0 && (
+              <p className="picto-hint err" role="alert">
+                {ignored} mot{ignored > 1 ? 's' : ''} ignoré{ignored > 1 ? 's' : ''} : {PICTO_WORDS_MAX} mots au maximum par question.
+              </p>
+            )}
+            {words.length === 0 && <p className="picto-hint err">Saisissez au moins un mot.</p>}
+          </PictoWordsSource>
           {error && <div className="picto-error" role="alert">{pictoRefusalText(error)}</div>}
-          <p className="picto-hint">La catégorie (une seule) ci-dessus est l'indice affiché sur la TV.</p>
+          <p className="picto-hint">La catégorie (une seule) ci-dessus {fromPool ? 'est le crédit de la question ; l\'indice TV est la catégorie du mot tiré.' : 'est l\'indice affiché sur la TV.'}</p>
         </div>
 
         <div className="picto-card">

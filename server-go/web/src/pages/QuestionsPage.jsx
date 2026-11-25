@@ -131,6 +131,9 @@ export default function QuestionsPage() {
     rafaleWheelLayout: 'strip',
     // ROUE fields (v12.0.0, #145, contrat roue.md §3)
     pictoWords: [], // PICTO (v13.0.0, #191) : mots de la question (contrat picto.md §4)
+    pictoSource: 'RESERVOIR', // v13.1.0 : source des mots, défaut d'une NOUVELLE question = Pool Picto (picto.md §17.2)
+    pictoCategories: [],
+    pictoDifficulties: [1, 2, 3],
     rouePhrase: '',
     rouePresentation: '',
     roueMode: 'TANT_QUE_JE_GAGNE',
@@ -1236,6 +1239,10 @@ export default function QuestionsPage() {
       rafaleWheelLayout: question.RAFALE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip',
       // ROUE (#145) — ROUE_SHOW_LETTERS absent = true (le champ n'est écrit que pour false)
       pictoWords: Array.isArray(question.PICTO_WORDS) ? question.PICTO_WORDS : [],
+      // Absent = WORDS : une question v13.0.0 reste « mots saisis » (picto.md §17.2)
+      pictoSource: question.PICTO_SOURCE === 'RESERVOIR' ? 'RESERVOIR' : 'WORDS',
+      pictoCategories: Array.isArray(question.PICTO_CATEGORIES) ? question.PICTO_CATEGORIES : [],
+      pictoDifficulties: Array.isArray(question.PICTO_DIFFICULTIES) && question.PICTO_DIFFICULTIES.length ? question.PICTO_DIFFICULTIES : [1, 2, 3],
       rouePhrase: question.ROUE_PHRASE || '',
       rouePresentation: question.ROUE_PRESENTATION || '',
       roueMode: question.ROUE_MODE || 'TANT_QUE_JE_GAGNE',
@@ -1413,6 +1420,9 @@ export default function QuestionsPage() {
       rafaleAlphabetical: false,
       rafaleWheelLayout: 'strip',
       pictoWords: [],
+      pictoSource: 'RESERVOIR',
+      pictoCategories: [],
+      pictoDifficulties: [1, 2, 3],
       // ROUE fields (#145) — voir état initial
       rouePhrase: '',
       rouePresentation: '',
@@ -2023,7 +2033,15 @@ export default function QuestionsPage() {
       data.append('answer', `${formData.rafaleCategories.join('/') || '?'} - ${formData.rafaleDifficulties.map(d => '★'.repeat(d)).join(', ')}`)
     } else if (formData.type === 'PICTO') {
       // PICTO (#191, contrat picto.md §11) — un mot par ligne, relus à chaque enregistrement (sinon détruits côté serveur)
-      data.append('picto_words', (formData.pictoWords || []).join('\n'))
+      // v13.1.0 : source des mots. `picto_source` n'est écrit que pour le Pool Picto (absent = WORDS : round-trip des
+      // questions v13.0.0) ; les mots ne sont écrits que pour la source « mots saisis » (picto.md §17.2).
+      const pictoFromPool = formData.pictoSource === 'RESERVOIR'
+      data.append('picto_source', pictoFromPool ? 'RESERVOIR' : '')
+      data.append('picto_words', pictoFromPool ? '' : (formData.pictoWords || []).join('\n'))
+      if (pictoFromPool) {
+        data.append('picto_categories', JSON.stringify(formData.pictoCategories || []))
+        data.append('picto_difficulties', JSON.stringify(formData.pictoDifficulties || []))
+      }
       data.append('answer', '—')
     } else if (formData.type === 'ROUE') {
       // ROUE (#145, contrat roue.md §11.1) — tous les champs sont envoyés à chaque enregistrement (un champ non lu serait perdu)

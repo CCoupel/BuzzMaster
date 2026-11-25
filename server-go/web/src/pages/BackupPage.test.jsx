@@ -77,9 +77,8 @@ describe('BackupPage', () => {
   describe('Backup Options State', () => {
     it('should have all backup options checked by default', () => {
       renderBackupPage()
-      // #152 — 7 cases par section depuis l'ajout de "Questions RAFALE"
-      // (questions, teams, bumpers, history, medias, ambiance, rafale)
-      const backupCheckboxes = screen.getAllByRole('checkbox').slice(0, 7)
+      // v13.1.0 (#324) — 9 cases par section : 6 simples + « Pools » (parent à trois états) + « Pool Speedy » + « Pool Picto »
+      const backupCheckboxes = screen.getAllByRole('checkbox').slice(0, 9)
       backupCheckboxes.forEach(checkbox => {
         expect(checkbox).toBeChecked()
       })
@@ -97,9 +96,9 @@ describe('BackupPage', () => {
   describe('Reset Options State', () => {
     it('should have all reset options unchecked by default', () => {
       renderBackupPage()
-      // #152 — 7 cases par section (voir commentaire ci-dessus)
+      // v13.1.0 (#324) — 9 cases par section (voir commentaire ci-dessus)
       const allCheckboxes = screen.getAllByRole('checkbox')
-      const resetCheckboxes = allCheckboxes.slice(7, 14)
+      const resetCheckboxes = allCheckboxes.slice(9, 18)
       resetCheckboxes.forEach(checkbox => {
         expect(checkbox).not.toBeChecked()
       })
@@ -108,7 +107,7 @@ describe('BackupPage', () => {
     it('should toggle reset checkbox state', () => {
       renderBackupPage()
       const allCheckboxes = screen.getAllByRole('checkbox')
-      const firstResetCheckbox = allCheckboxes[7]
+      const firstResetCheckbox = allCheckboxes[9]
       expect(firstResetCheckbox).not.toBeChecked()
       fireEvent.click(firstResetCheckbox)
       expect(firstResetCheckbox).toBeChecked()

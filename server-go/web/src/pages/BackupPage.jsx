@@ -1,9 +1,70 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import './BackupPage.css'
+
+// Cases simples (clé → libellé). Les pools sont rendus à part : case parente « Pools » à trois états (M2 B).
+const PLAIN_OPTIONS = {
+  questions: 'Questions',
+  teams: 'Equipes',
+  bumpers: 'Joueurs',
+  history: 'Historique',
+  medias: 'Médias & Catégories',
+  ambiance: 'Réglages de jeu',
+}
+// Pools (v13.1.0, #324) : clés serveur `rafale` (inchangée, archives existantes) et `picto`.
+const POOL_OPTIONS = { rafale: 'Pool Speedy', picto: 'Pool Picto' }
+const OPTION_LABELS = { ...PLAIN_OPTIONS, ...POOL_OPTIONS }
+
+/** Case à trois états : cochée si tous les enfants le sont, indéterminée si une partie seulement. */
+function ParentCheckbox({ label, checked, indeterminate, onChange }) {
+  const ref = useRef(null)
+  useEffect(() => { if (ref.current) ref.current.indeterminate = indeterminate }, [indeterminate])
+  return (
+    <label className="checkbox-item">
+      <input ref={ref} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>{label}</span>
+    </label>
+  )
+}
+
+/** Groupe de cases : options simples, puis « Pools » (parent à trois états) qui déplie Pool Speedy et Pool Picto. */
+function OptionGroup({ options, setOptions }) {
+  const poolKeys = Object.keys(POOL_OPTIONS)
+  const poolsOn = poolKeys.filter(k => options[k]).length
+  return (
+    <div className="checkbox-group">
+      {Object.entries(PLAIN_OPTIONS).map(([key, label]) => (
+        <label key={key} className="checkbox-item">
+          <input
+            type="checkbox"
+            checked={options[key]}
+            onChange={(e) => setOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+          />
+          <span>{label}</span>
+        </label>
+      ))}
+      <ParentCheckbox
+        label="Pools"
+        checked={poolsOn === poolKeys.length}
+        indeterminate={poolsOn > 0 && poolsOn < poolKeys.length}
+        onChange={(checked) => setOptions(prev => ({ ...prev, ...Object.fromEntries(poolKeys.map(k => [k, checked])) }))}
+      />
+      {Object.entries(POOL_OPTIONS).map(([key, label]) => (
+        <label key={key} className="checkbox-item checkbox-item-child">
+          <input
+            type="checkbox"
+            checked={options[key]}
+            onChange={(e) => setOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+          />
+          <span>{label}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
 
 export default function BackupPage() {
   const { sendMessage } = useGame()
@@ -22,6 +83,7 @@ export default function BackupPage() {
     medias: true,
     ambiance: true,
     rafale: true,
+    picto: true,
   })
 
   // Reset options
@@ -33,6 +95,7 @@ export default function BackupPage() {
     medias: false,
     ambiance: false,
     rafale: false,
+    picto: false,
   })
 
   const handleBackup = async () => {
@@ -46,6 +109,7 @@ export default function BackupPage() {
       if (backupOptions.medias) params.append('medias', 'true')
       if (backupOptions.ambiance) params.append('ambiance', 'true')
       if (backupOptions.rafale) params.append('rafale', 'true')
+      if (backupOptions.picto) params.append('picto', 'true')
 
       const response = await fetch(`/backup-select?${params.toString()}`)
       const blob = await response.blob()
@@ -70,15 +134,7 @@ export default function BackupPage() {
       return
     }
 
-    const labels = {
-      questions: 'Questions',
-      teams: 'Equipes',
-      bumpers: 'Joueurs',
-      history: 'Historique',
-      medias: 'Médias & Catégories',
-      ambiance: 'Réglages de jeu',
-      rafale: 'Questions RAFALE'
-    }
+    const labels = OPTION_LABELS
     const selectedLabels = selected.map(k => labels[k]).join(', ')
 
     if (!window.confirm(`Reinitialiser: ${selectedLabels} ?`)) return
@@ -139,26 +195,7 @@ export default function BackupPage() {
               Selectionnez les elements a sauvegarder et generez un fichier archive.
             </p>
 
-            <div className="checkbox-group">
-              {Object.entries({
-                questions: 'Questions',
-                teams: 'Equipes',
-                bumpers: 'Joueurs',
-                history: 'Historique',
-                medias: 'Médias & Catégories',
-                ambiance: 'Réglages de jeu',
-                rafale: 'Questions RAFALE'
-              }).map(([key, label]) => (
-                <label key={key} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={backupOptions[key]}
-                    onChange={(e) => setBackupOptions(prev => ({ ...prev, [key]: e.target.checked }))}
-                  />
-                  <span>{label}</span>
-                </label>
-              ))}
-            </div>
+            <OptionGroup options={backupOptions} setOptions={setBackupOptions} />
 
             <div className="section-actions">
               <Button variant="primary" onClick={handleBackup}>
@@ -217,26 +254,7 @@ export default function BackupPage() {
               Reinitialiser selectivement les donnees du systeme.
             </p>
 
-            <div className="checkbox-group">
-              {Object.entries({
-                questions: 'Questions',
-                teams: 'Equipes',
-                bumpers: 'Joueurs',
-                history: 'Historique',
-                medias: 'Médias & Catégories',
-                ambiance: 'Réglages de jeu',
-                rafale: 'Questions RAFALE'
-              }).map(([key, label]) => (
-                <label key={key} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={resetOptions[key]}
-                    onChange={(e) => setResetOptions(prev => ({ ...prev, [key]: e.target.checked }))}
-                  />
-                  <span>{label}</span>
-                </label>
-              ))}
-            </div>
+            <OptionGroup options={resetOptions} setOptions={setResetOptions} />
 
             <div className="section-actions">
               <Button variant="danger" onClick={handleSelectiveReset}>

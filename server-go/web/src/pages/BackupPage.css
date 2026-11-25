@@ -212,3 +212,6 @@
     transform: translateY(0);
   }
 }
+
+/* #324 — pools dépliés sous la case parente « Pools » */
+.checkbox-item-child { margin-left: 1.5rem; }
