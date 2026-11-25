@@ -27,6 +27,20 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
   « Personne » comme seul autre choix (libellé « Perdu » sur l'admin). En solo, l'équipe unique est présélectionnée. Sur l'anim,
   le geste est en deux temps : choix, puis **VALIDER** ; rien n'est envoyé avant ce clic. Sur l'admin, le choix
   présélectionné se confirme par **Valider**. Le message envoyé au serveur ne change pas.
+- **Type de question « Rafale Picto » 🖍️ (#318)** — nouveau type à part entière, comme « Rafale Speedy » : une équipe
+  fait deviner le **plus de mots possible** pendant le temps de la question, avec le même dessinateur pour toute la
+  manche. Le mot en cours est remplacé à chaque « Trouvé » ou « Passer ».
+- **Passes (#318)** — le dessinateur annonce la passe à voix haute ; l'animateur ou l'admin la déclenche, jamais la
+  tablette. Coût par passe de 0 à 100 points (0 = gratuite), et limite à **1 passe** ou **illimitées**, au choix de la
+  question.
+- **Fin de pool (#318)** — au choix : **reboucler** sur les mots passés (défaut de l'éditeur), ou **finir la manche** à
+  la dernière passe. Un mot trouvé ne revient jamais.
+- **Crédit Rafale Picto (#318)** — le crédit manuel est pré-rempli à `mots trouvés × points − passes × coût`, plancher 0
+  (les passes ne débitent jamais le score). L'équipe est présélectionnée, et le montant reste modifiable.
+- **TV Rafale Picto (#318)** — grand compteur de mots trouvés ; le mot trouvé s'affiche 1 s sur le dessin, puis la feuille
+  est vierge. Une passe n'affiche jamais le mot.
+- **Tablette du dessinateur (#318)** — pas de bouton « Passer » ; un compteur et un récapitulatif.
+- **Source des mots (#318)** — mots saisis dans la question, ou Pool Picto (voir ci-dessous).
 - **Pool Picto (#324)** — réservoir de mots pour le type Picto, sur le même moteur que le Pool Speedy (deux instances
   d'un même moteur). Onglet « Pool Picto » de la page Questions (`?tab=picto`) : tableau filtrable (catégories,
   difficulté, « Non utilisés »), « Remettre tout disponible », formulaire « Nouveau mot ».
@@ -49,6 +63,9 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
 
 ### Changed
 
+- **Famille Picto (#318)** — les types « Picto » et « Rafale Picto » partagent la manche dessinée : préparation, relais de
+  dessin, confidentialité du mot, LED, ambiance, buzzers ignorés et crédit au niveau équipe. Le type « Picto » (un mot)
+  est inchangé.
 - **Libellés (#324)** — « Rafale » devient « Rafale Speedy » (type, pages, interface), et le réservoir « Pool Speedy ».
   Les identifiants techniques ne changent pas (`RAFALE`, `/api/rafale/*`, clé de sauvegarde `rafale`, fichiers).
 - **Petit « +N » supprimé au niveau équipe (#321)** — le petit « +N » à côté des points de l'équipe n'est plus affiché,
@@ -69,6 +86,7 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
 
 - Les tests existants de l'attribution groupée ont été **adaptés** : la sélection est désormais pré-cochée, et leurs
   fixtures repartent d'une sélection vide. Aucune assertion n'a été supprimée ni affaiblie.
+- **Entracte (#318)** : `PICTO_PASS` est refusé pendant une entracte, comme `PICTO_FOUND`.
 - **Compatibilité (#324)** : le format disque et l'API du Pool Speedy ne changent pas (`reservoir.json`,
   `rafale_used.json`, routes `/api/rafale/*`). Une archive v13.0.0 se restaure sans `files/picto` ; les questions Picto
   v13.0.0 restent en source « mots saisis ».

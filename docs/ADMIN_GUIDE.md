@@ -2487,6 +2487,34 @@ Attribution des points (cliquer une équipe) :
 
 **Important** : aucun point n'est attribué pendant la manche, seuls les compteurs visibles. L'attribution manuelle en fin de manche est **l'étape décisive**.
 
+### Rafale Picto — conduire une manche (v13.1.0, #318)
+
+« Rafale Picto » (🖍️) est un type de question : une équipe fait deviner **le plus de mots possible** pendant le temps
+de la question, avec le même dessinateur du début à la fin. Le mot passe au suivant à chaque « Trouvé » ou « Passer ».
+
+**Réglages de la question** (éditeur Picto) :
+- **Source des mots** : les mots saisis dans la question, ou le Pool Picto (voir ci-dessous) ;
+- **Passes** : coût de 0 à 100 points par passe (0 = gratuite), et **1 passe** ou **illimitées** ;
+- **Fin de pool** : **🔁 reboucle** (les mots passés reviennent, par ordre d'ancienneté) ou **⏹ fin à la dernière**
+  (la manche s'arrête quand il ne reste plus de mot). Un mot trouvé ne revient jamais.
+- **Points** : valeur d'un mot trouvé. **Temps** : durée de la manche, 30 à 300 s.
+
+**Conduite pendant la manche** (page Jeu ou anim) :
+1. Préparer comme un Picto : équipe, puis dessinateur (choix ou tirage parmi les joueurs connectés). Le lancement exige un dessinateur connecté.
+2. **START** : le premier mot part au dessinateur (sa tablette) ; le chrono global démarre.
+3. Le dessinateur dessine. Quand l'équipe trouve : **✅ Trouvé** (le mot suivant arrive, la TV affiche le mot 1 s).
+4. Quand le dessinateur **annonce une passe à voix haute** : **⏭ Passer** (le coût est affiché sur le bouton). Le mot passé
+   ne réapparaîtra qu'avec le rebouclage. Quand la passe est épuisée, le bouton est désactivé.
+5. Au temps écoulé : si le mot est en cours, un **Trouvé sur le gong** reste possible une fois. Sinon la manche s'arrête.
+6. **Fin** : la révélation montre le mot en cours (s'il n'a pas été trouvé). Les mots passés ne sont jamais montrés.
+
+**Crédit** : le champ « Points » est pré-rempli à `mots trouvés × points − passes × coût`, sans descendre sous 0.
+L'équipe est présélectionnée. Vous pouvez modifier le montant avant « Attribuer les points ». Les passes ne débitent
+jamais le score : elles réduisent seulement le montant suggéré.
+
+> ℹ️ Le dessinateur ne voit jamais de bouton « Passer » : c'est vous ou l'animateur qui déclenchez la passe. Si l'admin
+> et l'anim cliquent en même temps, un seul mot avance : le second geste, daté d'un mot déjà remplacé, est refusé.
+
 ### Pool Picto — réservoir de mots (v13.1.0, #324)
 
 Le **Pool Picto** est un réservoir de mots pour le type de question Picto. Il se gère dans la page Questions, onglet

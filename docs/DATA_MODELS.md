@@ -1703,6 +1703,45 @@ PictoDifficulties []int    `json:"PICTO_DIFFICULTIES,omitempty"` // filtre du po
   toujours vide, `CATEGORY`, `DIFFICULTY`. Plafond : 5 000 entrées (`POOL_FULL`). Doublon interdit par catégorie, clé repliée
   (`DUPLICATE`).
 
+### Question RAFALE_PICTO — v13.1.0, #318 (contracts/picto.md §17.2)
+
+Type « Rafale Picto » (🖍️), famille Picto. Hôte de question uniquement, non imbriquable, hors générateur IA.
+`PictoConfig()` lit les champs `RAFALE_PICTO_*` (le moteur ne lit jamais le préfixe).
+
+```go
+RafalePictoSource       string   `json:"RAFALE_PICTO_SOURCE,omitempty"`       // WORDS | RESERVOIR
+RafalePictoWords        []string `json:"RAFALE_PICTO_WORDS,omitempty"`        // SECRET : retiré des messages TV et tablette
+RafalePictoCategories   []string `json:"RAFALE_PICTO_CATEGORIES,omitempty"`
+RafalePictoDifficulties []int    `json:"RAFALE_PICTO_DIFFICULTIES,omitempty"`
+RafalePictoPassCost     int      `json:"RAFALE_PICTO_PASS_COST,omitempty"`    // 0 à 100 points retirés par passe ; 0 = gratuite
+RafalePictoPassLimit    int      `json:"RAFALE_PICTO_PASS_LIMIT,omitempty"`   // 0 = illimitées ; 1 = une seule passe
+RafalePictoPoolEnd      string   `json:"RAFALE_PICTO_POOL_END,omitempty"`     // END (absent = END) | LOOP
+```
+
+- **Champs propres** : le registre impose un champ par type (`OwnedFields`). `PICTO_*` reste à `PICTO`.
+- **`TIME`, `POINTS` (par mot trouvé) et `CATEGORY` (crédit)** sont réutilisés.
+- **Registre** : `OwnedFields` = les 7 champs ci-dessus, `MediaSlots` = aucun, `NestableInMotionCard` = `false`,
+  `HasPlayerInput` = `true`. `DefaultPointsTarget` = équipe.
+- **Enregistrement** (`POST /questions`, multipart `rafale_picto_*`) : refus `400` préfixé par son code
+  (`PICTO_SOURCE_INVALID`, `PICTO_FILTER_INVALID`, `PICTO_WORDS_INVALID`, `PICTO_PASS_INVALID`, `PICTO_POOL_END_INVALID`).
+  `PICTO_PASS_INVALID` : coût hors de 0 à 100, ou limite autre que 0 et 1.
+
+### GameState de manche Rafale Picto — v13.1.0, #318 (contracts/picto.md §17.4)
+
+Champs de la famille, sans `omitempty`, remis à vide au `START`, au changement de question, à la relance, à
+`InitGameWith` et à `NEW_GAME`. Ils survivent à `stopUnsafe` et restent en `REVEALED`.
+
+| Champ | Type | Contenu |
+|---|---|---|
+| `PICTO_FOUND_COUNT` | int | Mots trouvés dans la manche (0 en Picto) |
+| `PICTO_FOUND_WORDS` | string[] | Mots **trouvés**, dans l'ordre (publics : dits à voix haute). Jamais un mot passé |
+| `PICTO_PASS_COUNT` | int | Passes utilisées |
+| `PICTO_PASSES_LEFT` | int | Passes restantes ; **−1 = illimité** (et valeur de Picto) |
+| `PICTO_ROUND_POINTS` | int | Crédit suggéré : `max(0, PICTO_FOUND_COUNT × POINTS − PICTO_PASS_COUNT × RAFALE_PICTO_PASS_COST)`, calculé par le serveur |
+
+- **`PICTO_OUTCOME`** gagne `POOL_END` (Rafale Picto : plus de mot frais et rien à reboucler). `PICTO_REVEALED_WORD` vaut
+  alors `""`.
+
 ### GameState PICTO_* — v13.0.0, #192 (contracts/picto.md §5)
 
 Tous présents dans chaque `UPDATE`, **sans `omitempty`**, tableaux jamais `null`. **Jamais persistés** (`state_persistence.go`).
@@ -1718,7 +1757,7 @@ Diffusés aux clients web (admin, anim, TV, tablettes) ; jamais aux buzzers.
 | `PICTO_CANDIDATES` | `{ID, NAME, CONNECTED}[]` | VJoueurs de l'équipe ; seuls les connectés sont désignables |
 | `PICTO_WORDS_COUNT` | int | Nombre de mots de la question (affiché en préparation) |
 | `PICTO_CANVAS_EPOCH` | int | Époque de la feuille : +1 à chaque `START` d'une manche PICTO ; 0 avant la première |
-| `PICTO_OUTCOME` | string | `""` \| `FOUND` \| `TIMEOUT` \| `STOPPED` \| `NO_WORD` (issues de fin de manche, voir GAME_STATE_MACHINE « Fin de manche ») |
+| `PICTO_OUTCOME` | string | `""` \| `FOUND` \| `TIMEOUT` \| `STOPPED` \| `NO_WORD` \| `POOL_END` (Rafale Picto) (issues de fin de manche, voir GAME_STATE_MACHINE « Fin de manche ») |
 | `PICTO_REVEALED_WORD` | string | Mot de la manche, **seulement en `REVEALED`** ; `""` sinon |
 | `PICTO_REVEALED_CATEGORY` | string | Catégorie du crédit, en `REVEALED` ; `""` sinon |
 | `PICTO_POOL_AVAILABLE` | int | Mots encore tirables : pool filtré et non utilisé (source `RESERVOIR`), mots saisis (source `WORDS`) — v13.1.0, #324 |
