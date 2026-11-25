@@ -148,3 +148,18 @@ describe('Préparation et type Picto un mot', () => {
     expect(document.body.textContent).toContain('Pool Picto')
   })
 })
+
+describe('Fin de pool : champ absent = END (picto.md §17.2)', () => {
+  const { RAFALE_PICTO_POOL_END: _drop, ...Qabsent } = Q
+  it('champ absent : pas de mention de rebouclage', () => {
+    admin(gs({ question: Qabsent }))
+    expect(screen.getByTestId('picto-thread').textContent).not.toContain('rebouclage')
+  })
+  it('END explicite : pas de mention ; LOOP : mention', () => {
+    const { unmount } = admin(gs({ question: { ...Q, RAFALE_PICTO_POOL_END: 'END' } }))
+    expect(screen.getByTestId('picto-thread').textContent).not.toContain('rebouclage')
+    unmount()
+    admin(gs({ question: { ...Q, RAFALE_PICTO_POOL_END: 'LOOP' } }))
+    expect(screen.getByTestId('picto-thread').textContent).toContain('rebouclage')
+  })
+})

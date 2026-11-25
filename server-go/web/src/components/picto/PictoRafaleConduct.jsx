@@ -90,7 +90,7 @@ export default function PictoRafaleConduct({ gs, word, thread = [], actions, var
               </li>
             ))}
           </ol>
-          {(gs.question?.RAFALE_PICTO_POOL_END !== 'END') && <p className="picto-muted">Les mots passés reviennent en fin de pool (rebouclage).</p>}
+          {(gs.question?.RAFALE_PICTO_POOL_END === 'LOOP') && <p className="picto-muted">Les mots passés reviennent en fin de pool (rebouclage).</p>}
         </div>
       )}
     </div>

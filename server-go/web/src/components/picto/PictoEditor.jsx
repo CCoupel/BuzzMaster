@@ -111,7 +111,7 @@ export default function PictoEditor({ values, onChange, error, customCategories 
             ⏭ passe −{values[fields.passCost] || 0} pts · {Number(values[fields.passLimit]) === 1 ? '1 passe' : 'illimitées'}
           </span>
         )}
-        {rafale && <span className="picto-chip">{values[fields.poolEnd] === 'END' ? '⏹ fin à la dernière' : '🔁 reboucle'}</span>}
+        {rafale && <span className="picto-chip">{values[fields.poolEnd] === 'LOOP' ? '🔁 reboucle' : '⏹ fin à la dernière'}</span>}
         {fromPool
           ? <span className="picto-chip">🗂 Pool Picto</span>
           : <span className="picto-chip">✍️ {words.length} mot{words.length > 1 ? 's' : ''}</span>}
@@ -206,9 +206,9 @@ export default function PictoEditor({ values, onChange, error, customCategories 
             <div className="form-group">
               <span className="picto-lbl-inline">Quand il n'y a plus de mot</span>
               <div className="picto-source-toggle" role="group" aria-label="Fin du pool">
-                <button type="button" className={`picto-source-btn ${values[fields.poolEnd] !== 'END' ? 'on' : ''}`} aria-pressed={values[fields.poolEnd] !== 'END'}
+                <button type="button" className={`picto-source-btn ${values[fields.poolEnd] === 'LOOP' ? 'on' : ''}`} aria-pressed={values[fields.poolEnd] === 'LOOP'}
                   onClick={() => onChange(fields.poolEnd, 'LOOP')}>🔁 Reboucler sur les passés</button>
-                <button type="button" className={`picto-source-btn ${values[fields.poolEnd] === 'END' ? 'on' : ''}`} aria-pressed={values[fields.poolEnd] === 'END'}
+                <button type="button" className={`picto-source-btn ${values[fields.poolEnd] !== 'LOOP' ? 'on' : ''}`} aria-pressed={values[fields.poolEnd] !== 'LOOP'}
                   onClick={() => onChange(fields.poolEnd, 'END')}>⏹ Finir la manche</button>
               </div>
             </div>

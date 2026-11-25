@@ -1259,7 +1259,8 @@ export default function QuestionsPage() {
       rafalePictoDifficulties: Array.isArray(question.RAFALE_PICTO_DIFFICULTIES) && question.RAFALE_PICTO_DIFFICULTIES.length ? question.RAFALE_PICTO_DIFFICULTIES : [1, 2, 3],
       rafalePictoPassCost: question.RAFALE_PICTO_PASS_COST || 0,
       rafalePictoPassLimit: question.RAFALE_PICTO_PASS_LIMIT === 1 ? 1 : 0,
-      rafalePictoPoolEnd: question.RAFALE_PICTO_POOL_END === 'END' ? 'END' : 'LOOP',
+      // absent = END (picto.md §17.2) : une question sans le champ est rechargée en « Finir la manche »
+      rafalePictoPoolEnd: question.RAFALE_PICTO_POOL_END === 'LOOP' ? 'LOOP' : 'END',
       pictoSource: question.PICTO_SOURCE === 'RESERVOIR' ? 'RESERVOIR' : 'WORDS',
       pictoCategories: Array.isArray(question.PICTO_CATEGORIES) ? question.PICTO_CATEGORIES : [],
       pictoDifficulties: Array.isArray(question.PICTO_DIFFICULTIES) && question.PICTO_DIFFICULTIES.length ? question.PICTO_DIFFICULTIES : [1, 2, 3],
@@ -2082,7 +2083,7 @@ export default function QuestionsPage() {
       }
       data.append('rafale_picto_pass_cost', String(Number(formData.rafalePictoPassCost) || 0))
       data.append('rafale_picto_pass_limit', String(Number(formData.rafalePictoPassLimit) === 1 ? 1 : 0))
-      data.append('rafale_picto_pool_end', formData.rafalePictoPoolEnd === 'END' ? 'END' : 'LOOP')
+      data.append('rafale_picto_pool_end', formData.rafalePictoPoolEnd === 'LOOP' ? 'LOOP' : 'END')
       data.append('answer', '—')
     } else if (formData.type === 'ROUE') {
       // ROUE (#145, contrat roue.md §11.1) — tous les champs sont envoyés à chaque enregistrement (un champ non lu serait perdu)
