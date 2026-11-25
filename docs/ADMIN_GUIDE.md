@@ -2512,7 +2512,7 @@ ex-« Rafale »).
   à l'admin et à l'anim, jamais à la TV avant la révélation (il s'affiche sur la TV en `REVEALED`).
 
 > ⚠️ Les routes `/api/picto/*` n'ont pas encore d'authentification (dette #259) : la liste des mots reste lisible par qui peut
-> joindre le serveur, y compris hors manche (seule la lecture pendant `STARTED`/`PAUSED` est refusée en `409`). Gardez le serveur sur un réseau d'administration isolé.
+> joindre le serveur hors manche ; refusée en `409` pendant `STARTED`/`PAUSED`. Gardez le serveur sur un réseau d'administration isolé.
 
 ### Gestion du réservoir (`/admin/rafale`)
 

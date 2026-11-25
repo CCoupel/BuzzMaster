@@ -2142,7 +2142,7 @@ Le réservoir Picto réutilise l'interface du réservoir Speedy : une seule page
   Ce champ ne contient jamais le mot.
 - **Sauvegarde** : `BackupPage.jsx`, catégorie « Pools » à trois états (`POOL_OPTIONS = { rafale: 'Pool Speedy', picto: 'Pool Picto' }`).
 
-Contrats : `contracts/picto-pool.md` (rév. 2) §4 à §7.
+Contrats : `contracts/picto-pool.md` (rév. 3) §4 à §7.
 
 ---
 
