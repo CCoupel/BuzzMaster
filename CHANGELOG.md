@@ -20,9 +20,9 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
     espaces compactés). Au niveau joueur, rien n'est coché ;
   - **Memotion** : voir ci-dessous.
   Une unité déjà créditée, ou dont le montant est nul ou négatif, n'est jamais cochée. La sélection reste modifiable.
-  - En-tête de carte équipe : une chip « +N pts » (fond rouge avec halo si pénalité) montre le montant de chaque équipe cochée et non
-    encore créditée. Elle s'affiche pour Picto, Speedy au niveau équipe, Ardoise et les autres types ; Mémoire, QCM et
-    Rafale gardent leur propre chip.
+  - En-tête de carte équipe : une chip « +N pts » (fond rouge avec halo si pénalité) montre le montant réellement attribué
+    de chaque équipe cochée et non encore créditée, champ « Points » pris en compte. Elle passe avant les chips Mémoire,
+    QCM et Rafale. Une équipe non cochée garde sa chip habituelle.
 - **Memotion : gagnant de carte présélectionné (#321)** — le sélecteur de gagnant part sur l'équipe qui a la main, avec
   « Personne » comme seul autre choix (libellé « Perdu » sur l'admin). En solo, l'équipe unique est présélectionnée. Sur l'anim,
   le geste est en deux temps : choix, puis **VALIDER** ; rien n'est envoyé avant ce clic. Sur l'admin, le choix
@@ -30,9 +30,8 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
 
 ### Changed
 
-- **Chip « +N pts » et petit aperçu (#321)** — sur une équipe cochée où la chip « +N pts » s'affiche, le petit « +N » à
-  côté des points n'est plus affiché, pour éviter le doublon. Mémoire, QCM et Rafale gardent leur chip et leur aperçu.
-  Le niveau joueur est inchangé.
+- **Petit « +N » supprimé au niveau équipe (#321)** — le petit « +N » à côté des points de l'équipe n'est plus affiché,
+  pour aucun type : seule la chip « +N pts » porte le montant. Le niveau joueur est inchangé.
 
 ### Fixed
 

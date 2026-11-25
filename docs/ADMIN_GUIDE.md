@@ -248,8 +248,9 @@ d'un coup.
   selon la question (Picto, Mémoire, Rafale, QCM, Speedy, Ardoise ; voir `contracts/award-preselect.md` §2). Une unité
   déjà créditée ou dont le montant est nul ou négatif n'est pas cochée. Rien n'est attribué avant « Attribuer les points » :
   décochez ou cochez à la main avant de valider. Pour SPEEDY, décochez si la réponse du premier buzzeur était fausse.
-  En-tête de carte équipe, une chip « +N pts » (fond rouge avec halo si pénalité) indique le montant de chaque équipe cochée et non
-  encore créditée ; Mémoire, QCM et Rafale gardent leur propre chip.
+  En-tête de carte équipe, une chip « +N pts » (fond rouge avec halo si pénalité) indique le montant réellement attribué
+  de chaque équipe cochée et non encore créditée, champ « Points » pris en compte. Elle passe avant les chips Mémoire, QCM
+  et Rafale ; une équipe non cochée garde sa chip habituelle. Le niveau équipe n'affiche plus de petit « +N ».
 - **Memotion (v13.1.0, #321)** : le gagnant de carte est présélectionné sur l'équipe qui a la main ; l'autre choix
   reste possible : « Perdu » sur l'admin, « PERSONNE » sur l'anim. Validez avec **Valider** (sur l'anim, le geste est en deux temps : choix puis VALIDER).
 - **Champ « Points »** : le montant vient du champ « Points » de la page, en tête de la colonne Équipes. Il est éditable
