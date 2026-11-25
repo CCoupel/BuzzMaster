@@ -184,6 +184,7 @@ type Engine struct {
 	// PICTO (v13.0.0, #192, contracts/picto.md §3.2/§10): the SECRET word of the round (never in GameState
 	// before REVEALED) — drawn at START, kept until the next Ready / NEW_GAME.
 	pictoWord string
+	pictoRound *pictoRoundState // v13.1.0 (#318): draw state, shown words and passed queue of the round in progress; nil outside
 
 	// sessions holds the fingerprints of the VJoueur session tokens (v13.0.0, vplayer_sessions.go).
 	sessions *vplayerSessionStore
@@ -510,7 +511,7 @@ func NewEngine() *Engine {
 			RoueBoard: RoueBoard{Cols: RoueBoardCols, Rows: []string{}}, RoueLetters: []RoueLetter{},
 			RoueWheel: RoueWheel{Segments: []RoueSegment{}, Current: -1}, RoueAwards: map[string]int{},
 			// PICTO (v13.0.0, #192): never nil.
-			PictoTeamColor: []int{}, PictoCandidates: []PictoCandidate{},
+			PictoTeamColor: []int{}, PictoCandidates: []PictoCandidate{}, PictoFoundWords: []string{}, PictoPassesLeft: -1,
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
 			// empty (not nil) so JSON serializes [] (not null) before the
 			// first UPDATE_QUIZ_META (contract game-state.md §"Aucun omitempty").
@@ -1911,7 +1912,7 @@ func participantsConform(question *Question, state *GameState) bool {
 		// PREPARE->READY gate: SOLO now needs an explicit "who is playing"
 		// selection, same UX as MEMORY SOLO, before START).
 		return participantsCountConform(question.RafaleMode, len(state.RafaleParticipatingTeams))
-	case QuestionTypePicto:
+	case QuestionTypePicto, QuestionTypeRafalePicto:
 		// v13.0.0 (#192, contracts/picto.md §6.1): a team chosen, TIME in 30–300 s, at least one word.
 		// The drawer is not required for READY; START requires it (PictoStartCheck).
 		return pictoParticipantsConform(question, state)
@@ -3873,8 +3874,8 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	}
 
 	// Ignore buzz for PICTO questions (v13.0.0, #192, contracts/picto.md §2.10, §6.3): the guessing is oral.
-	if e.state.Question != nil && e.state.Question.Type == QuestionTypePicto {
-		log.Printf("[Engine] Ignoring buzz for PICTO question from %s", bumperID)
+	if e.state.Question != nil && IsPictoFamily(e.state.Question.Type) {
+		log.Printf("[Engine] Ignoring buzz for PICTO-family question from %s", bumperID)
 		e.mu.Unlock()
 		return false
 	}

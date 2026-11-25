@@ -88,6 +88,7 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionPictoSetDrawer:  {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionPictoDrawDrawer: {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionPictoFound:      {ClientTypeAdmin, ClientTypeAnim}, // v13.0.0 #194: « Trouvé ! » is "conduite en direct"
+	protocol.ActionPictoPass:       {ClientTypeAdmin, ClientTypeAnim}, // v13.1.0 #318: the drawer ANNOUNCES the pass aloud; no vplayer widening
 	protocol.ActionPictoStrokes:    {ClientTypeVPlayer},
 	protocol.ActionPictoCanvasSync: {ClientTypeAdmin, ClientTypeTV, ClientTypeAnim, ClientTypeVPlayer},
 	// QUESTION_SOUND (v11.1, #219, contract sound.md §10.2): the three

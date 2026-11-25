@@ -1739,7 +1739,10 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handlePictoPrepAction(incoming.ClientID, msg)
 
 	case protocol.ActionPictoFound:
-		a.handlePictoFound(incoming.ClientID)
+		a.handlePictoFound(incoming.ClientID, msg)
+
+	case protocol.ActionPictoPass:
+		a.handlePictoPass(incoming.ClientID, msg)
 
 	case protocol.ActionPictoStrokes:
 		a.handlePictoStrokes(incoming)
@@ -4599,7 +4602,7 @@ var suspendedDuringLaunch = map[string]bool{
 	protocol.ActionRoueLetter: true, protocol.ActionRoueBuyVowel: true, protocol.ActionRoueFlip: true, protocol.ActionRoueAnswer: true,
 	protocol.ActionRoueNext: true, protocol.ActionRouePass: true, protocol.ActionRoueReveal: true,
 	protocol.ActionPictoSetTeam: true, protocol.ActionPictoSetDrawer: true, protocol.ActionPictoDrawDrawer: true,
-	protocol.ActionPictoFound: true,
+	protocol.ActionPictoFound: true, protocol.ActionPictoPass: true,
 	// points
 	protocol.ActionTeamPoints: true, protocol.ActionBumperPoints: true, protocol.ActionTeamPointsBatch: true,
 	protocol.ActionBumperPointsBatch: true, protocol.ActionSetCreditPoints: true,

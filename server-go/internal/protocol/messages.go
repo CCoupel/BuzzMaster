@@ -179,7 +179,8 @@ const (
 	ActionPictoSetTeam    = "PICTO_SET_TEAM"    // Admin/Anim → Server: {TEAM}
 	ActionPictoSetDrawer  = "PICTO_SET_DRAWER"  // Admin/Anim → Server: {PLAYER}
 	ActionPictoDrawDrawer = "PICTO_DRAW_DRAWER" // Admin/Anim → Server: draw the drawer at random
-	ActionPictoFound      = "PICTO_FOUND"       // Admin/Anim → Server: « Trouvé ! » (STARTED, PAUSED, or STOPPED after TIMEOUT)
+	ActionPictoFound      = "PICTO_FOUND"       // Admin/Anim → Server: « Trouvé ! » (STARTED, PAUSED, or STOPPED after TIMEOUT); {EPOCH} mandatory in Rafale Picto
+	ActionPictoPass       = "PICTO_PASS"        // Admin/Anim → Server: {EPOCH} — the drawer announced a pass (RAFALE_PICTO only, STARTED); NEVER from a tablet
 	ActionPictoStrokes    = "PICTO_STROKES"     // VPlayer drawer → Server; Server → TV/admin/anim
 	ActionPictoCanvasSync = "PICTO_CANVAS_SYNC" // TV/Admin/Anim/VPlayer → Server: whole sheet please
 	ActionPictoCanvas     = "PICTO_CANVAS"      // Server → requester: whole sheet of the epoch
@@ -637,6 +638,12 @@ type RoueNextPayload struct {
 type RoueErrorPayload struct {
 	Code    string `json:"CODE"`
 	Message string `json:"MESSAGE"`
+}
+
+// PictoStepPayload for PICTO_FOUND / PICTO_PASS (contracts/picto.md §17.5): EPOCH of the word the gesture is about.
+// Mandatory in Rafale Picto (a late or doubled gesture is refused STALE_WORD), optional for a PICTO question.
+type PictoStepPayload struct {
+	Epoch *int `json:"EPOCH,omitempty"`
 }
 
 // PictoSetTeamPayload for PICTO_SET_TEAM ("" clears the team).
@@ -1307,7 +1314,7 @@ func (m *Message) SerializeForTV() ([]byte, error) {
 // the animateur keep them. PICTO (v13.0.0, contracts/picto.md §10): the words of
 // the question — the other words of a multi-word question are never shown, not
 // even in REVEALED.
-var SecretQuestionFields = []string{"ROUE_PHRASE", "PICTO_WORDS"}
+var SecretQuestionFields = []string{"ROUE_PHRASE", "PICTO_WORDS", "RAFALE_PICTO_WORDS"} // RAFALE_PICTO_WORDS: contracts/picto.md §17.9
 
 // serializeFiltered is the shared implementation behind SerializeForWebClient
 // and SerializeForVPlayerCommon (#128): strips AdminOnlyBumperFields from

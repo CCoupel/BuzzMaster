@@ -179,6 +179,9 @@ const (
 	// QuestionTypePicto (v13.0.0, #191): "Picto" — one team's drawer draws a
 	// secret word on a tablet, the team guesses it orally — contracts/picto.md.
 	QuestionTypePicto QuestionType = "PICTO"
+	// QuestionTypeRafalePicto (v13.1.0, #318): "Rafale Picto" — one team has as many words as possible guessed
+	// within the question's TIME, with passes — contracts/picto.md §17. Same drawn round as PICTO (family).
+	QuestionTypeRafalePicto QuestionType = "RAFALE_PICTO"
 )
 
 // KeyboardType represents the virtual keyboard layout for ARDOISE questions
@@ -431,6 +434,57 @@ type TypedContent struct {
 	PictoSource       string   `json:"PICTO_SOURCE,omitempty"`
 	PictoCategories   []string `json:"PICTO_CATEGORIES,omitempty"`
 	PictoDifficulties []int    `json:"PICTO_DIFFICULTIES,omitempty"`
+
+	// RAFALE_PICTO (v13.1.0, #318, contracts/picto.md §17.2) — exclusive OwnedFields of the type (the registry
+	// forbids a field shared between two types): same word-source block as PICTO under its own prefix, plus the
+	// passes and the end of the pool. All omitempty. RAFALE_PICTO_WORDS is SECRET (stripped from TV / tablets).
+	RafalePictoSource       string   `json:"RAFALE_PICTO_SOURCE,omitempty"`
+	RafalePictoWords        []string `json:"RAFALE_PICTO_WORDS,omitempty"`
+	RafalePictoCategories   []string `json:"RAFALE_PICTO_CATEGORIES,omitempty"`
+	RafalePictoDifficulties []int    `json:"RAFALE_PICTO_DIFFICULTIES,omitempty"`
+	RafalePictoPassCost     int      `json:"RAFALE_PICTO_PASS_COST,omitempty"`  // 0 to 100 points taken per pass; 0 = free
+	RafalePictoPassLimit    int      `json:"RAFALE_PICTO_PASS_LIMIT,omitempty"` // 0 = unlimited, 1 = a single pass
+	RafalePictoPoolEnd      string   `json:"RAFALE_PICTO_POOL_END,omitempty"`   // END (default) | LOOP
+}
+
+// RAFALE_PICTO_POOL_END values (contracts/picto.md §17.2).
+const (
+	PictoPoolEndEnd  = "END"
+	PictoPoolEndLoop = "LOOP"
+)
+
+// PictoConfig is the word-source configuration of a Picto-family question, read through ONE accessor so the
+// engine never branches on the field prefix: PICTO_* for the PICTO type, RAFALE_PICTO_* for RAFALE_PICTO.
+type PictoConfig struct {
+	Rafale       bool // RAFALE_PICTO (several words, passes) — false for PICTO (one word)
+	Source       string
+	Words        []string
+	Categories   []string
+	Difficulties []int
+	PassCost     int
+	PassLimit    int  // 0 = unlimited (RAFALE_PICTO)
+	PoolLoop     bool // POOL_END = LOOP
+}
+
+// PictoConfig returns the Picto-family configuration of q (zero value for any other type).
+func (q *Question) PictoConfig() PictoConfig {
+	if q == nil {
+		return PictoConfig{}
+	}
+	switch q.Type {
+	case QuestionTypeRafalePicto:
+		src := PictoSourceWords
+		if q.RafalePictoSource == PictoSourceReservoir {
+			src = PictoSourceReservoir
+		}
+		return PictoConfig{Rafale: true, Source: src, Words: q.RafalePictoWords, Categories: q.RafalePictoCategories,
+			Difficulties: q.RafalePictoDifficulties, PassCost: q.RafalePictoPassCost, PassLimit: q.RafalePictoPassLimit,
+			PoolLoop: q.RafalePictoPoolEnd == PictoPoolEndLoop}
+	case QuestionTypePicto:
+		return PictoConfig{Source: q.EffectivePictoSource(), Words: q.PictoWords, Categories: q.PictoCategories,
+			Difficulties: q.PictoDifficulties}
+	}
+	return PictoConfig{}
 }
 
 // PICTO_SOURCE values (contracts/picto.md §17.2).
@@ -678,6 +732,7 @@ func AllQuestionTypes() []QuestionType {
 		QuestionTypeEntracte,
 		QuestionTypeRoue,
 		QuestionTypePicto,
+		QuestionTypeRafalePicto,
 	}
 }
 
@@ -1125,6 +1180,15 @@ type GameState struct {
 	PictoPoolAvailable int    `json:"PICTO_POOL_AVAILABLE"` // words still drawable (RESERVOIR: pool filtered, not used; WORDS: question words)
 	PictoWordCategory  string `json:"PICTO_WORD_CATEGORY"`  // category of the current word (pool) else the question's
 
+	// Round state of the Picto family (v13.1.0, #318, contracts/picto.md §17.4) — NO omitempty, arrays never null,
+	// never persisted, never sent to the buzzers. FOUND_WORDS only ever holds words found (said aloud, public);
+	// a passed word is never published. PASSES_LEFT: -1 = unlimited (and always -1 for a PICTO question).
+	PictoFoundCount  int      `json:"PICTO_FOUND_COUNT"`
+	PictoFoundWords  []string `json:"PICTO_FOUND_WORDS"`
+	PictoPassCount   int      `json:"PICTO_PASS_COUNT"`
+	PictoPassesLeft  int      `json:"PICTO_PASSES_LEFT"`
+	PictoRoundPoints int      `json:"PICTO_ROUND_POINTS"` // suggested credit: max(0, found x POINTS - passes x cost)
+
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero
 	// values (IDLE/false), so a client resets cleanly between questions
@@ -1396,7 +1460,7 @@ func ParseQCMWrongPenaltyRaw(raw []byte) int {
 // PICTO, PLAYER for SPEEDY (and legacy NORMAL / unknown).
 func DefaultPointsTarget(t string) PointsTarget {
 	switch t {
-	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE", "PICTO": // PICTO (v13.0.0, contracts/picto.md §7): team only
+	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE", "PICTO", "RAFALE_PICTO": // PICTO family (contracts/picto.md §7, §17): team only
 		return PointsTargetTeam
 	}
 	return PointsTargetPlayer

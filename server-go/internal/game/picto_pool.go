@@ -143,6 +143,9 @@ func (e *Engine) ClearPictoReservoir()         { e.pictoPool.Clear() }
 func (e *Engine) ClearPictoUsed()              { e.pictoPool.ClearUsed() }
 
 // IsPictoFamily reports whether t is a Picto-family question type — the
-// single predicate (contracts/picto.md §17.1). RAFALE_PICTO joins it with its
-// type in LOT-3; today the family is PICTO alone.
-func IsPictoFamily(t QuestionType) bool { return t == QuestionTypePicto }
+// single predicate (contracts/picto.md §17.1): PICTO (one word) and
+// RAFALE_PICTO (many words, passes). Every site that tests the drawn round
+// goes through it (JS twin: isPictoFamily).
+func IsPictoFamily(t QuestionType) bool {
+	return t == QuestionTypePicto || t == QuestionTypeRafalePicto
+}

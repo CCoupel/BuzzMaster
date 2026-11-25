@@ -1531,6 +1531,15 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	// RAFALE_PICTO (v13.1.0, #318, contracts/picto.md §17.2): same block under the rafale_picto_* prefix, plus the
+	// passes and the end of the pool. Re-read at each save for the same rebuild-from-scratch reason.
+	if questionType == string(game.QuestionTypeRafalePicto) {
+		if status, msg := h.applyRafalePictoFields(r, question); status != 0 {
+			http.Error(w, msg, status)
+			return
+		}
+	}
+
 	// Handle RAFALE specific fields (v8.0.0, #107, contract §3.3) — round
 	// configuration: difficulty/mode/seconds-per-question/max-questions.
 	// CATEGORY is already handled generically above (shared field, contract

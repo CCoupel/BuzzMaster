@@ -188,6 +188,15 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		NestableInMotionCard: false, // a round needs a drawer and a relay: meaningless in a card
 		HasPlayerInput:       true,  // PICTO_STROKES comes from a VPlayer
 	},
+	QuestionTypeRafalePicto: {
+		Type: QuestionTypeRafalePicto,
+		// CATEGORY (credit), TIME and POINTS (per word found) are reused (contracts/picto.md §17.2).
+		OwnedFields: []string{"RAFALE_PICTO_SOURCE", "RAFALE_PICTO_WORDS", "RAFALE_PICTO_CATEGORIES", "RAFALE_PICTO_DIFFICULTIES",
+			"RAFALE_PICTO_PASS_COST", "RAFALE_PICTO_PASS_LIMIT", "RAFALE_PICTO_POOL_END"},
+		MediaSlots:           nil,
+		NestableInMotionCard: false, // a round needs a drawer and a relay
+		HasPlayerInput:       true,  // PICTO_STROKES comes from a VPlayer
+	},
 	QuestionTypeEntracte: {
 		Type:        QuestionTypeEntracte,
 		OwnedFields: []string{"ENTRACTE_CONFIG"},
