@@ -113,6 +113,17 @@ describe('GamePage — présélection à l’entrée en REVEALED (#321)', () => 
     expect(checked()).toEqual([])
   })
 
+  it('QCM : la chip d’une équipe cochée suit le montant réel (champ « Points » modifié), pas le barème initial', () => {
+    reveal({ question: { ID: '1', TYPE: 'QCM', QUESTION: 'Q', ANSWER: 'x', POINTS: '3', QCM_ANSWERS: { GREEN: 'b' }, QCM_CORRECT: 'GREEN', STATUS: 'REVEALED' } })
+    const chips = () => [...document.querySelectorAll('.award-chip')].map((e) => e.textContent)
+    expect(chips()).toEqual(['+3 pts', '+3 pts'])
+    const input = screen.getAllByLabelText('Points').find((el) => el.tagName === 'INPUT' && el.type === 'number')
+    fireEvent.change(input, { target: { value: '7' } })
+    expect(chips()).toEqual(['+7 pts', '+7 pts'])
+    fireEvent.click(box('Bleus'))
+    expect(chips()).toEqual(['+7 pts'])
+  })
+
   it('modification manuelle du champ « Points » après REVEALED : ne recoche ni ne décoche rien', () => {
     reveal({ question: { ID: '1', TYPE: 'QCM', QUESTION: 'Q', ANSWER: 'x', POINTS: '3', QCM_ANSWERS: { GREEN: 'b' }, QCM_CORRECT: 'GREEN', STATUS: 'REVEALED' } })
     fireEvent.click(box('Bleus'))

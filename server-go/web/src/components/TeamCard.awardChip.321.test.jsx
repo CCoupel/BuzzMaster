@@ -26,10 +26,25 @@ describe('TeamCard — awardChip (#321)', () => {
     r({ awardChip: 3, gamePhase: 'STOPPED' })
     expect(screen.queryByText('+3 pts')).toBeNull()
   })
-  it('un chip dédié (MEMORY) garde la priorité', () => {
+  it('équipe cochée (awardChip) : la chip du montant réel passe AVANT MEMORY, QCM et RAFALE', () => {
     r({ awardChip: 9, memoryStats: { pairs: 2, errors: 0, totalPairs: 4, pointsPerPair: 10 } })
+    expect(screen.getByText('+9 pts')).toBeTruthy()
+    expect(screen.queryByText('+20 pts')).toBeNull()
+  })
+  it('QCM : awardChip prioritaire sur qcmAcquiredPoints ; pénalité en rouge', () => {
+    const { container } = r({ awardChip: -2, qcmAcquiredPoints: 3 })
+    expect(container.querySelector('.award-chip.award-chip-neg').textContent).toBe('-2 pts')
+    expect(screen.queryByText('+3 pts')).toBeNull()
+  })
+  it('RAFALE : awardChip prioritaire sur le compteur et la suggestion, en REVEALED', () => {
+    r({ awardChip: 6, rafaleStats: { counter: 3, suggestedPoints: 30 } })
+    expect(screen.getByText('+6 pts')).toBeTruthy()
+    expect(screen.queryByText(/bonnes/)).toBeNull()
+    expect(screen.queryByText(/sugg\./)).toBeNull()
+  })
+  it('équipe non cochée (awardChip null) : chip habituelle inchangée (MEMORY, QCM, RAFALE)', () => {
+    r({ awardChip: null, memoryStats: { pairs: 2, errors: 0, totalPairs: 4, pointsPerPair: 10 } })
     expect(screen.getByText('+20 pts')).toBeTruthy()
-    expect(screen.queryByText('+9 pts')).toBeNull()
   })
   it('niveau ÉQUIPE : plus de petit « +N » (award-preview), seule la chip porte le montant', () => {
     const { container } = r({ awardChip: 3, selectable: true, selected: true })

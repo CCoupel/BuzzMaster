@@ -518,7 +518,16 @@ export default function TeamCard({
             §2.1), la sous-phase ROUND_END est le signal pertinent. Deux
             variantes : compteur "live" pendant la manche (§6.1, "compteur,
             pas un score réel"), suggestion pré-remplie en ROUND_END (§6.2). */}
-        {rafaleStats && rafaleStats.suggestedPoints !== null ? (
+        {/* #321 — équipe COCHÉE : la chip du montant réellement attribué passe AVANT MEMORY/QCM/RAFALE (REVEALED) */}
+        {awardChip !== null && gamePhase === 'REVEALED' ? (
+          <motion.span
+            className={`memory-acquired-badge award-chip${awardChip < 0 ? ' award-chip-neg' : ''}`}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+          >
+            {awardChip > 0 ? '+' : ''}{awardChip} pts
+          </motion.span>
+        ) : rafaleStats && rafaleStats.suggestedPoints !== null ? (
           <motion.span
             className="memory-acquired-badge rafale-suggested-badge"
             initial={{ scale: 0 }}
@@ -546,14 +555,6 @@ export default function TeamCard({
             animate={{ scale: 1 }}
           >
             +{qcmAcquiredPoints} pts
-          </motion.span>
-        ) : awardChip !== null && gamePhase === 'REVEALED' ? (
-          <motion.span
-            className={`memory-acquired-badge award-chip${awardChip < 0 ? ' award-chip-neg' : ''}`}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-          >
-            {awardChip > 0 ? '+' : ''}{awardChip} pts
           </motion.span>
         ) : ready && (
           <motion.span
