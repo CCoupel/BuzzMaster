@@ -190,9 +190,8 @@ func TestPoolRafaleNR_Draw_MarksUsed_ExhaustsThenPoolEmpty_ResetRestores(t *test
 	if err != nil || n != 2 {
 		t.Fatalf("ResetAllRafaleUsed = %d, %v ; attendu 2, nil", n, err)
 	}
-	if _, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1}); err != nil {
-		t.Errorf("après remise à zéro, la pioche doit refonctionner : %v", err)
-	}
+	// sans sauvegarde en arrière-plan (elle courrait contre le nettoyage de TempDir)
+	drawRafaleQuestionNoAutoSave(t, e, string(CategoryHistory), 1)
 }
 
 func TestPoolRafaleNR_MarkAvailable_UnknownID_NotFound_KnownUnusedIsNoop(t *testing.T) {

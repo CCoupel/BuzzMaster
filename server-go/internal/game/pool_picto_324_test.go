@@ -248,17 +248,13 @@ func TestPictoPool_ClearUsed_IsNewGameReset_ForBothInstances(t *testing.T) {
 }
 
 func TestPictoPool_NewGame_ResetQuestions_ClearsBothUsedMarks_KeepsBothPools(t *testing.T) {
-	e := newPictoPoolEngine(t)
-	e.SetRafalePath(t.TempDir() + "/r.json")
-	e.SetRafaleUsedPath(t.TempDir() + "/ru.json")
+	e := NewEngine() // en mémoire seulement : NEW_GAME persiste en arrière-plan, ce qui courrait contre le nettoyage de TempDir
 	if _, err := e.UpsertRafaleQuestion(RafaleQuestion{Question: "Q ?", Answer: "A", Category: CategoryHistory, Difficulty: 1}); err != nil {
 		t.Fatal(err)
 	}
 	seedPictoCouples(t, e, 1, [][2]interface{}{{CategoryHistory, 1}})
 	drawAll(t, e, []string{"HISTORY"}, []int{1}, 1)
-	if _, err := e.DrawRafaleQuestion([]string{"HISTORY"}, []int{1}); err != nil {
-		t.Fatal(err)
-	}
+	drawRafaleQuestionNoAutoSave(t, e, "HISTORY", 1) // pas de sauvegarde en arrière-plan : elle courrait contre le nettoyage de TempDir
 	e.InitGameWith(NewGameOptions{ResetQuestions: true})
 	for name, p := range map[string]*EntryPool{"Pool Speedy": e.RafalePool(), "Pool Picto": e.PictoPool()} {
 		avail, used, total := p.Count([]string{"HISTORY"}, []int{1})
