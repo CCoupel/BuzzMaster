@@ -231,10 +231,26 @@ func TestPoolPicto_WritesRefused409_DuringPictoRound(t *testing.T) {
 				t.Errorf("phase %s, %s %s : %d %q, attendu 409 picto_round_in_progress", phase, c.method, c.url, w.Code, w.Body.String())
 			}
 		}
-		// la lecture reste permise
-		if w := nrDo(t, s, "GET", "/api/picto/words", ""); w.Code != 200 {
-			t.Errorf("GET pendant la manche : %d", w.Code)
+		// la liste est aussi gardée pendant la manche (le pool ne doit pas être lisible pendant le jeu)
+		if w := nrDo(t, s, "GET", "/api/picto/words", ""); w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "picto_round_in_progress") {
+			t.Errorf("phase %s, GET /api/picto/words : %d %q, attendu 409 picto_round_in_progress", phase, w.Code, w.Body.String())
 		}
+		// le Pool Speedy n'est pas concerné
+		if w := nrDo(t, s, "GET", "/api/rafale/questions", ""); w.Code != 200 {
+			t.Errorf("GET /api/rafale/questions pendant une manche Picto : %d", w.Code)
+		}
+	}
+}
+
+func TestPoolPicto_List_Returns200_OutsideAPictoRound(t *testing.T) {
+	s, _ := setupTestHTTPServer(t)
+	addWord(t, s, "chat", "HISTORY", 1)
+	if w := nrDo(t, s, "GET", "/api/picto/words", ""); w.Code != 200 {
+		t.Errorf("GET hors manche : %d", w.Code)
+	}
+	putPictoRoundInProgress(s, game.PhaseStopped)
+	if w := nrDo(t, s, "GET", "/api/picto/words", ""); w.Code != 200 {
+		t.Errorf("GET manche arrêtée (STOPPED) : %d, attendu 200 (seuls STARTED et PAUSED gardent)", w.Code)
 	}
 }
 

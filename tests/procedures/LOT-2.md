@@ -108,7 +108,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Lancer une manche Picto (STARTED) puis ouvrir Pool Picto ; essayer ajout, suppression, remise à zéro, génération IA ; mettre en PAUSE et réessayer | Message explicite ; actions d'écriture grisées ou refusées (409) en STARTED et PAUSED ; lecture permise ; Pool Speedy reste modifiable | | |
+| 1 | Lancer une manche Picto (STARTED) puis ouvrir Pool Picto ; essayer ajout, suppression, remise à zéro, génération IA ; mettre en PAUSE et réessayer | Message explicite ; la liste du Pool Picto est grisée / indisponible (409) en STARTED et PAUSED, de même que les actions d'écriture ; elle redevient lisible à l'arrêt de la manche ; Pool Speedy reste lisible et modifiable | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
