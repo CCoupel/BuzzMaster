@@ -607,9 +607,25 @@ func TestRafalePicto318_Family_PictoRulesApplyToRafalePicto(t *testing.T) {
 	waitGameField(t, w.admin, "PHASE", "READY", 3*time.Second)
 	nErr := len(w.admin.of(pictoActError))
 	w.send(t, w.admin, protocol.ActionStart, protocol.StartPayload{Delay: 120})
-	got := w.admin.waitAction(t, pictoActError, nErr+1, 5*time.Second)
-	if errorCode(got[len(got)-1]) != "NO_DRAWER" {
-		t.Errorf("START sans dessinateur : NO_DRAWER attendu, got %v", got[len(got)-1])
+	// NO_DRAWER parmi les erreurs NOUVELLES (index ≥ nErr), attente bornée : une autre erreur ne doit pas masquer celle-ci
+	deadline := time.Now().Add(5 * time.Second)
+	sawNoDrawer := false
+	var seen []string
+	for time.Now().Before(deadline) && !sawNoDrawer {
+		errs := w.admin.of(pictoActError)
+		seen = seen[:0]
+		for _, f := range errs[min(nErr, len(errs)):] {
+			seen = append(seen, errorCode(f))
+			if errorCode(f) == "NO_DRAWER" {
+				sawNoDrawer = true
+			}
+		}
+		if !sawNoDrawer {
+			time.Sleep(25 * time.Millisecond)
+		}
+	}
+	if !sawNoDrawer {
+		t.Errorf("START sans dessinateur : NO_DRAWER attendu parmi les erreurs nouvelles, reçu %v", seen)
 	}
 
 	// 2. relais de dessin : seul le dessinateur dessine, la TV reçoit ses traits, un trait d'une autre époque est refusé
