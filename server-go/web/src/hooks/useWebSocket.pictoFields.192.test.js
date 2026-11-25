@@ -39,6 +39,7 @@ describe('useWebSocket — champs PICTO_* du GameState (#192/#193, contrat §5)'
   })
 
   it('le mot de la manche n\'a jamais de champ GameState (seul PICTO_REVEALED_WORD existe, §10)', () => {
-    expect(fields.filter(f => /WORD/.test(f)).sort()).toEqual(['PICTO_REVEALED_WORD', 'PICTO_WORDS_COUNT'])
+    // PICTO_WORD_CATEGORY (v13.1.0) est l'indice public — une catégorie, jamais le mot ; seul PICTO_REVEALED_WORD porte un mot (après révélation)
+    expect(fields.filter(f => /WORD/.test(f)).sort()).toEqual(['PICTO_REVEALED_WORD', 'PICTO_WORDS_COUNT', 'PICTO_WORD_CATEGORY'])
   })
 })
