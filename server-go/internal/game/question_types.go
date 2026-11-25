@@ -183,7 +183,7 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 	QuestionTypePicto: {
 		Type: QuestionTypePicto,
 		// CATEGORY (generic), TIME and POINTS are reused, not owned (contracts/picto.md §4).
-		OwnedFields:          []string{"PICTO_WORDS"},
+		OwnedFields:          []string{"PICTO_WORDS", "PICTO_SOURCE", "PICTO_CATEGORIES", "PICTO_DIFFICULTIES"},
 		MediaSlots:           nil,   // the word is text, the sheet is produced in play
 		NestableInMotionCard: false, // a round needs a drawer and a relay: meaningless in a card
 		HasPlayerInput:       true,  // PICTO_STROKES comes from a VPlayer

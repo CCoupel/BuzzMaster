@@ -24,6 +24,9 @@ const (
 const (
 	PictoErrWordsInvalid = "PICTO_WORDS_INVALID"
 	PictoErrTimeInvalid  = "PICTO_TIME_INVALID"
+	// v13.1.0 (#324, contracts/picto.md §17.2): source and filter of the word.
+	PictoErrSourceInvalid = "PICTO_SOURCE_INVALID"
+	PictoErrFilterInvalid = "PICTO_FILTER_INVALID"
 )
 
 // ErrPictoWord is the sentinel wrapped by every refused word / list.

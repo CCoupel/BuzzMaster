@@ -1525,7 +1525,7 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// question from scratch, a field not read here would be destroyed (RAFALE
 	// bugfix 2026-08-31). A refusal answers 400 prefixed by its code, nothing written.
 	if questionType == string(game.QuestionTypePicto) {
-		if status, msg := applyPictoFields(r, question); status != 0 {
+		if status, msg := h.applyPictoFields(r, question); status != 0 {
 			http.Error(w, msg, status)
 			return
 		}

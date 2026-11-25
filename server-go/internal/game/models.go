@@ -425,6 +425,26 @@ type TypedContent struct {
 	// nestable. 1 to 20 words (rules §3.1, see picto_words.go), one of which is
 	// drawn at each START. SECRET: stripped from TV / tablet messages (§10).
 	PictoWords []string `json:"PICTO_WORDS,omitempty"`
+	// v13.1.0 (#324, contracts/picto.md §17.2) — source of the word: "" / WORDS = the question's own words
+	// (v13.0.0 behaviour, free draw), RESERVOIR = the Pool Picto (stratified draw, "used" marking). The filter
+	// (categories × difficulties) is required with the RESERVOIR source and not secret.
+	PictoSource       string   `json:"PICTO_SOURCE,omitempty"`
+	PictoCategories   []string `json:"PICTO_CATEGORIES,omitempty"`
+	PictoDifficulties []int    `json:"PICTO_DIFFICULTIES,omitempty"`
+}
+
+// PICTO_SOURCE values (contracts/picto.md §17.2).
+const (
+	PictoSourceWords     = "WORDS"
+	PictoSourceReservoir = "RESERVOIR"
+)
+
+// EffectivePictoSource returns the source of the word: absent (every v13.0.0 question) = WORDS.
+func (tc TypedContent) EffectivePictoSource() string {
+	if tc.PictoSource == PictoSourceReservoir {
+		return PictoSourceReservoir
+	}
+	return PictoSourceWords
 }
 
 // Effective vowel settings (contract §15.1.1: absent = default).
@@ -1101,6 +1121,9 @@ type GameState struct {
 	PictoOutcome          string           `json:"PICTO_OUTCOME"`
 	PictoRevealedWord     string           `json:"PICTO_REVEALED_WORD"`
 	PictoRevealedCategory string           `json:"PICTO_REVEALED_CATEGORY"`
+	// v13.1.0 (#324, contracts/picto.md §17.4) — public hint and pool counter, same lifecycle as the fields above.
+	PictoPoolAvailable int    `json:"PICTO_POOL_AVAILABLE"` // words still drawable (RESERVOIR: pool filtered, not used; WORDS: question words)
+	PictoWordCategory  string `json:"PICTO_WORD_CATEGORY"`  // category of the current word (pool) else the question's
 
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero

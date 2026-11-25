@@ -1936,7 +1936,7 @@ func (e *Engine) ParticipantsConform() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	return participantsConform(e.state.Question, &e.state)
+	return e.participantsConformUnsafe() // v13.1.0 (#324): fresh Pool Picto availability
 }
 
 // reevaluatePrepareReadyUnsafe (#172 B3) re-checks the PREPARE↔READY transition
@@ -1959,7 +1959,7 @@ func (e *Engine) ParticipantsConform() bool {
 func (e *Engine) reevaluatePrepareReadyUnsafe() GamePhase {
 	switch e.state.Phase {
 	case PhaseReady:
-		if !participantsConform(e.state.Question, &e.state) {
+		if !e.participantsConformUnsafe() {
 			e.state.Phase = PhasePrepare
 			e.purgeFlipMemoryUnsafe() // #248: back to PREPARE
 			e.setQuestionStatus(StatusPrepare)
@@ -1967,7 +1967,7 @@ func (e *Engine) reevaluatePrepareReadyUnsafe() GamePhase {
 			return PhasePrepare
 		}
 	case PhasePrepare:
-		if e.areAllTeamsReadyUnsafe() && participantsConform(e.state.Question, &e.state) {
+		if e.areAllTeamsReadyUnsafe() && e.participantsConformUnsafe() {
 			e.state.Phase = PhaseReady
 			e.setQuestionStatus(StatusReady)
 			log.Printf("[Engine] Participants conform again, transitioning PREPARE -> READY")
@@ -4730,7 +4730,7 @@ func (e *Engine) ForceReady() {
 	// the admin selects a conform participant set, the PREPARE→READY reevaluation
 	// (reevaluatePrepareReadyUnsafe, triggered by Set*ParticipatingTeams) fires
 	// immediately without waiting on PONG again.
-	if !participantsConform(e.state.Question, &e.state) {
+	if !e.participantsConformUnsafe() {
 		log.Printf("[Engine] FORCE_READY: buzzers marked ready, but participants do not conform — staying in PREPARE")
 		e.mu.Unlock()
 		return
