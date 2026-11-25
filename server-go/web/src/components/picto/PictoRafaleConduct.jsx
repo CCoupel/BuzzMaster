@@ -57,10 +57,12 @@ export default function PictoRafaleConduct({ gs, word, thread = [], actions, var
         <div className="picto-rafale-actions">
           <button type="button" className="picto-btn" data-testid="picto-rafale-pass" disabled={!canPass}
             title={gs.PICTO_PASSES_LEFT === 0 ? 'Plus de passe disponible' : 'Passer ce mot (le dessinateur l\'a annoncé)'}
+            aria-label="Passer"
             onClick={() => actions.pass(epoch)}>
             ⏭ Passer<span className="picto-btn-sub">−{cost} pts</span>
           </button>
           <button type="button" className="picto-btn ok" data-testid="picto-rafale-found" disabled={!canFound}
+            aria-label={gong ? 'Trouvé sur le gong' : 'Trouvé'}
             onClick={() => actions.found(epoch)}>
             ✅ {gong ? 'Trouvé sur le gong' : 'Trouvé'}<span className="picto-btn-sub">+{per} pts</span>
           </button>

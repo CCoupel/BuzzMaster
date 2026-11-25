@@ -32,35 +32,8 @@ vi.mock('../components/Timer', () => ({
   default: ({ currentTime, phase }) => <div data-testid="timer" data-phase={phase}>{currentTime}</div>,
 }))
 
-// #166/F5 — mock de câblage (même patron que AnimPage.test.jsx) : capture
-// les props RAFALE reçues (data-attributes + boutons) pour vérifier le
-// câblage vers rafaleValidate/rafaleInvalidate, sans dépendre du rendu réel
-// d'AnimConductPanel (sa propre couverture exhaustive vit dans
-// AnimConductPanel.test.jsx / AnimRafaleActions.rafale.test.jsx).
-// #198 (retour QUALIF 8.0.0.13) — le rendu visuel de l'encart
-// question+réponse a déménagé dans AnimRafaleQuestion.jsx (zone centrale,
-// montée PAR AnimConductPanel), sa propre couverture vit désormais dans
-// AnimConductPanel.test.jsx. Ce mock expose donc `props.rafale` tel quel
-// via data-attributes : ce fichier vérifie que AnimPage.jsx calcule et
-// transmet les BONNES valeurs (câblage), pas le rendu final.
-vi.mock('../components/AnimConductPanel', () => ({
-  default: (props) => (
-    <div
-      data-testid="conduct-panel"
-      data-phase={props.phase}
-      data-rafale-disabled={String(!!props.rafaleDisabled)}
-      data-rafale-question={props.rafale?.current?.QUESTION ?? ''}
-      data-rafale-answer={props.rafale?.answerValue ?? ''}
-      data-rafale-team={props.rafale?.teamName ?? ''}
-      data-rafale-team-color-css={props.rafale?.teamColorCss ?? ''}
-      data-rafale-cat-label={props.rafale?.catMeta?.label ?? ''}
-      data-rafale-difficulty={props.rafale?.current?.DIFFICULTY ?? ''}
-    >
-      <button onClick={() => props.onRafaleValidate?.()}>MOCK_RAFALE_VALIDATE</button>
-      <button onClick={() => props.onRafaleInvalidate?.()}>MOCK_RAFALE_INVALIDATE</button>
-    </div>
-  ),
-}))
+// v13.1.0 (#318) — AnimConductPanel RÉEL : les boutons « Trouvé » / « Passer » de la conduite Rafale Picto vivent dans le
+// panneau de conduite (L3, AnimPicto), pas dans AnimPage ; l'ancien mock de câblage RAFALE les masquait.
 
 vi.mock('../components/AnimAnswerZone', () => ({
   default: (props) => (

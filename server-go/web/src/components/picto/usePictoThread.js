@@ -21,6 +21,14 @@ export function usePictoThread(gs, pictoWord) {
     st.seen = { found: 0, passes: 0 }
   }
 
+  // Rechargement de la page en cours de manche : les mots TROUVÉS sont publics (PICTO_FOUND_WORDS) et reconstituent le
+  // début du fil ; les mots passés, jamais publiés, ne peuvent pas l'être.
+  const foundWords = Array.isArray(gs?.PICTO_FOUND_WORDS) ? gs.PICTO_FOUND_WORDS : []
+  if (foundWords.length > 0 && st.thread.length === 0) {
+    st.thread = [...foundWords.map((w, i) => ({ word: w, epoch: -(i + 1), status: 'found' })), ...st.thread]
+    st.seen = { found: Math.max(st.seen.found, found), passes: Math.max(st.seen.passes, passes) }
+  }
+
   if (phase === 'STARTED' || phase === 'PAUSED' || phase === 'STOPPED') {
     const word = pictoWord && pictoWord.EPOCH === gs.PICTO_CANVAS_EPOCH ? (pictoWord.WORD || '') : ''
     if (word) {

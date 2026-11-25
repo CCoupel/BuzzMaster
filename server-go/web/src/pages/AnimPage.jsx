@@ -593,6 +593,10 @@ export default function AnimPage() {
     if (isQcmWithHints) {
       return calcQcmTeamAward(gameState.question, basePoints, bumpersByTeam[teamName] || [], gameState.qcmInvalidated?.length || 0)
     }
+    if (question?.TYPE === 'RAFALE_PICTO') {
+      // Rafale Picto (picto.md §17.7) : crédit pré-rempli = montant suggéré par le serveur (PICTO_ROUND_POINTS), ajustable
+      return { amount: Number.isInteger(gameState.PICTO_ROUND_POINTS) ? gameState.PICTO_ROUND_POINTS : basePoints, hasCorrectAnswer: null }
+    }
     if (question?.TYPE === 'RAFALE') {
       // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.2) — même règle que
       // GamePage.jsx (mutualisée, utils/pointsAward.js) : suggestion =

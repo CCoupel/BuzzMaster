@@ -8,16 +8,19 @@ import { isPictoFamily } from '../../utils/pictoFamily'
 export const isPictoQuestion = (gs) => isPictoFamily(gs?.question?.TYPE)
 
 /** Fabrique des actions de préparation (§9.1) au-dessus d'un `sendMessage(action, payload)`. */
-export function makePictoActions(sendMessage) {
+export function makePictoActions(sendMessage, hooks = {}) {
   return {
     setTeam: (team) => sendMessage('PICTO_SET_TEAM', { TEAM: team || '' }),
     setDrawer: (player) => sendMessage('PICTO_SET_DRAWER', { PLAYER: player || '' }),
     drawDrawer: () => sendMessage('PICTO_DRAW_DRAWER', {}),
     // « Trouvé ! » (§6.3/§6.4) : STARTED, PAUSED, ou STOPPED après TIMEOUT (réponse donnée sur le gong)
     // `epoch` : obligatoire en Rafale Picto (STALE_WORD sinon), facultatif en Picto un mot (§17.5)
-    found: (epoch) => sendMessage('PICTO_FOUND', epoch === undefined || epoch === null ? {} : { EPOCH: epoch }),
+    // Avec une époque, passe par le callback du contexte (`useGame().pictoFound`) quand il est fourni.
+    found: (epoch) => (epoch === undefined || epoch === null
+      ? sendMessage('PICTO_FOUND', {})
+      : (hooks.found ? hooks.found(epoch) : sendMessage('PICTO_FOUND', { EPOCH: epoch }))),
     // « Passer » (Rafale Picto seulement, §17.5) : admin et anim ; le dessinateur l'annonce à l'oral
-    pass: (epoch) => sendMessage('PICTO_PASS', { EPOCH: epoch }),
+    pass: (epoch) => (hooks.pass ? hooks.pass(epoch) : sendMessage('PICTO_PASS', { EPOCH: epoch })),
   }
 }
 

@@ -57,6 +57,7 @@ import { makePictoActions, pictoLaunchBlocked, pictoLaunchReason } from '../comp
 import './GamePage.css'
 import '../styles/entracte.css'
 import { isPictoFamily } from '../utils/pictoFamily'
+import { roundPointsFormula } from '../components/picto/pictoRafaleState'
 
 // #172/C2 (v11.1.0.6, retour QUALIF #219/#236/#237) — un motif de blocage
 // PREPARE par ligne (prepareWaitReasons.js peut désormais en renvoyer
@@ -114,6 +115,8 @@ export default function GamePage() {
     // PICTO (v13.0.0, #192) — refus serveur d'une action PICTO_* et mot de la manche (admin seulement, contrat picto.md §9.2)
     pictoError,
     pictoWord,
+    pictoFound,
+    pictoPass,
   } = useGame()
   // #253 — popup « Lancer la partie » ouverte sur un AUTRE poste : le serveur suspend les actions de
   // jeu ; on désactive les commandes ici avec le motif (bandeau global sous la barre de navigation).
@@ -494,6 +497,7 @@ export default function GamePage() {
     memoryTeamErrors: gameState.MEMORY_TEAM_ERRORS,
     rafaleCounters: gameState.RAFALE_TEAM_COUNTERS,
     rafaleBest: gameState.RAFALE_TEAM_BEST,
+    pictoRoundPoints: gameState.PICTO_ROUND_POINTS,
   })
 
   // ─── #244/#251/#254 — attribution groupée après le REVEAL ──────────────────
@@ -527,6 +531,12 @@ export default function GamePage() {
   useEffect(() => {
     if (gameState.phase === 'REVEALED') {
       awardBaseRef.current = pointsInputRef.current > 0 ? pointsInputRef.current : awardBaseRef.current
+      // Rafale Picto (picto.md §17.7) : le champ « Points » est pré-rempli au crédit suggéré par le serveur
+      // (max(0, trouvés × POINTS − passes × coût)) ; l'admin l'ajuste avant l'envoi.
+      if (gameState.question?.TYPE === 'RAFALE_PICTO' && gameState.PICTO_ROUND_POINTS > 0) {
+        awardBaseRef.current = gameState.PICTO_ROUND_POINTS
+        setPointsInput(gameState.PICTO_ROUND_POINTS)
+      }
     } else if (pointsInputRef.current <= 0) {
       // Le champ ne reste jamais sur une pénalité / 0 hors REVEALED (il sert aussi aux tablettes).
       setPointsInput(awardBaseRef.current > 0 ? awardBaseRef.current : 1)
@@ -560,7 +570,7 @@ export default function GamePage() {
 
   const awardTeamAmount = (teamName) => {
     if (pointsInput <= 0) return pointsInput
-    if (awardManual && (questionType === 'MEMORY' || questionType === 'RAFALE')) return pointsInput
+    if (awardManual && (questionType === 'MEMORY' || questionType === 'RAFALE' || questionType === 'RAFALE_PICTO')) return pointsInput
     return teamDefaultAward(teamName, pointsInput, useHints)
   }
   const awardPlayerAmount = (mac) => {
@@ -644,6 +654,9 @@ export default function GamePage() {
       return awardManual
         ? `montant saisi, ajusté selon les indices de chaque ${awardUnitName}`
         : `barème de la question, ajusté selon les indices de chaque ${awardUnitName}`
+    }
+    if (questionType === 'RAFALE_PICTO') {
+      return awardManual ? 'modifié à la main, montant uniforme' : `barème de la manche — ${roundPointsFormula(gameState, gameState.question)}`
     }
     if (questionType === 'RAFALE' || questionType === 'MEMORY') {
       return awardManual ? 'modifié à la main, montant uniforme' : 'barème de la question, par équipe'
@@ -1291,7 +1304,7 @@ export default function GamePage() {
           return (
             <PictoPanel
               gameState={gameState}
-              actions={makePictoActions(sendMessage)}
+              actions={makePictoActions(sendMessage, { found: pictoFound, pass: pictoPass })}
               error={pictoError}
               pictoWord={pictoWord}
               teamList={teamsWithBuzzers.map(t => ({ name: t.name, color: getRgbColor(t.COLOR) }))}

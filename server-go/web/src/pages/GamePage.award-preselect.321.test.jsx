@@ -124,6 +124,30 @@ describe('GamePage — présélection à l’entrée en REVEALED (#321)', () => 
     expect(chips()).toEqual(['+7 pts'])
   })
 
+  it('Rafale Picto : l\'équipe de la manche est cochée avec PICTO_ROUND_POINTS (montant du serveur), chip « +25 pts »', () => {
+    reveal({ question: { ID: 'rp', TYPE: 'RAFALE_PICTO', QUESTION: 'RP', ANSWER: '—', POINTS: '10', STATUS: 'REVEALED', RAFALE_PICTO_PASS_COST: 5 }, PICTO_TEAM: 'Rouges', PICTO_ROUND_POINTS: 25, PICTO_FOUND_COUNT: 3, PICTO_PASS_COUNT: 1, PICTO_OUTCOME: 'TIMEOUT' })
+    expect(checked()).toEqual(['Rouges'])
+    expect([...document.querySelectorAll('.award-chip')].map((e) => e.textContent)).toEqual(['+25 pts'])
+  })
+
+  it('Rafale Picto : aucun point gagné (PICTO_ROUND_POINTS = 0) → aucune équipe cochée', () => {
+    reveal({ question: { ID: 'rp', TYPE: 'RAFALE_PICTO', QUESTION: 'RP', ANSWER: '—', POINTS: '10', STATUS: 'REVEALED' }, PICTO_TEAM: 'Rouges', PICTO_ROUND_POINTS: 0, PICTO_OUTCOME: 'TIMEOUT' })
+    expect(checked()).toEqual([])
+  })
+
+  it('Rafale Picto : le champ « Points » modifié à la main devient le montant uniforme', () => {
+    reveal({ question: { ID: 'rp', TYPE: 'RAFALE_PICTO', QUESTION: 'RP', ANSWER: '—', POINTS: '10', STATUS: 'REVEALED' }, PICTO_TEAM: 'Rouges', PICTO_ROUND_POINTS: 25, PICTO_OUTCOME: 'TIMEOUT' })
+    const input = screen.getAllByLabelText('Points').find((el) => el.tagName === 'INPUT' && el.type === 'number')
+    fireEvent.change(input, { target: { value: '7' } })
+    expect([...document.querySelectorAll('.award-chip')].map((e) => e.textContent)).toEqual(['+7 pts'])
+  })
+
+  it('Rafale Picto : le crédit part avec le montant suggéré (TEAM_POINTS_BATCH)', () => {
+    const { game } = reveal({ question: { ID: 'rp', TYPE: 'RAFALE_PICTO', QUESTION: 'RP', ANSWER: '—', POINTS: '10', STATUS: 'REVEALED' }, PICTO_TEAM: 'Rouges', PICTO_ROUND_POINTS: 25, PICTO_OUTCOME: 'TIMEOUT' })
+    fireEvent.click(screen.getByRole('button', { name: /^Attribuer les points/ }))
+    expect(game.teamPointsBatch).toHaveBeenCalledWith('rp', [{ team: 'Rouges', points: 25 }])
+  })
+
   it('modification manuelle du champ « Points » après REVEALED : ne recoche ni ne décoche rien', () => {
     reveal({ question: { ID: '1', TYPE: 'QCM', QUESTION: 'Q', ANSWER: 'x', POINTS: '3', QCM_ANSWERS: { GREEN: 'b' }, QCM_CORRECT: 'GREEN', STATUS: 'REVEALED' } })
     fireEvent.click(box('Bleus'))

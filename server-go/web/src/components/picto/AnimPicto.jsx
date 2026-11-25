@@ -99,14 +99,14 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
 
 
 export default function AnimPicto() {
-  const { gameState, teams, bumpers, sendMessage, revealAnswer, pictoError, pictoWord, pictoCanvasStore } = useGame()
+  const { gameState, teams, bumpers, sendMessage, revealAnswer, pictoError, pictoWord, pictoCanvasStore, pictoFound, pictoPass } = useGame()
   const { categories } = useCategories()
   return (
     <AnimPictoView
       gameState={gameState}
       teams={teams}
       bumpers={bumpers}
-      actions={makePictoActions(sendMessage)}
+      actions={makePictoActions(sendMessage, { found: pictoFound, pass: pictoPass })}
       error={pictoError}
       pictoWord={pictoWord}
       store={pictoCanvasStore}

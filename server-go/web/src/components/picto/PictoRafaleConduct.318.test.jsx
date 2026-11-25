@@ -33,11 +33,17 @@ describe.each([['admin (M7)', admin, 'admin'], ['anim (M6)', anim, 'anim']])('Co
     expect(screen.getByTestId('picto-rafale-credit').textContent).toContain('25 pts')
     expect(screen.getByTestId('picto-rafale').className).toContain(`picto-rafale-${variant}`)
   })
-  it('mot en cours en grand avec son numéro et sa catégorie', () => {
-    mount(gs())
+  it('mot en cours en grand avec son numéro et sa catégorie ; après rechargement, les mots trouvés (publics) reconstituent le fil', () => {
+    mount(gs({ PICTO_FOUND_COUNT: 0, PICTO_FOUND_WORDS: [], PICTO_PASS_COUNT: 0 }))
     expect(screen.getByTestId('picto-rafale-word').textContent).toBe('Maison')
     expect(document.body.textContent).toContain('Mot 1')
     expect(document.body.textContent).toContain('Vie quotidienne')
+  })
+  it('rechargement en cours de manche : 3 mots trouvés connus → le mot en cours est le « Mot 4 »', () => {
+    mount(gs())
+    expect(document.body.textContent).toContain('Mot 4')
+    const items = within(screen.getByTestId('picto-thread')).getAllByRole('listitem').map(li => li.dataset.status)
+    expect(items).toEqual(['found', 'found', 'found', 'current'])
   })
   it('« Trouvé » et « Passer » envoient l\'ÉPOQUE du mot affiché', () => {
     const a = mkActions()
@@ -86,10 +92,10 @@ describe.each([['admin (M7)', admin, 'admin'], ['anim (M6)', anim, 'anim']])('Co
 describe('Fil des mots (admin et anim)', () => {
   const step = (rerender, g, w) => rerender(<PictoPanel gameState={g} actions={mkActions()} teamList={teamList} pictoWord={w} customCategories={CATS} />)
   it('trouvés ✅, passés ⏭, en cours ✏️ ; aucun mot à venir ; le mot passé reste visible seulement dans ce fil', () => {
-    const { rerender } = admin(gs({ PICTO_FOUND_COUNT: 0, PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 1 }), mkActions(), { WORD: 'Chat', EPOCH: 1 })
-    step(rerender, gs({ PICTO_FOUND_COUNT: 1, PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 2 }), { WORD: 'Soleil', EPOCH: 2 })
-    step(rerender, gs({ PICTO_FOUND_COUNT: 1, PICTO_PASS_COUNT: 1, PICTO_CANVAS_EPOCH: 3 }), { WORD: 'Girafe', EPOCH: 3 })
-    step(rerender, gs({ PICTO_FOUND_COUNT: 2, PICTO_PASS_COUNT: 1, PICTO_CANVAS_EPOCH: 4 }), { WORD: 'Maison', EPOCH: 4 })
+    const { rerender } = admin(gs({ PICTO_FOUND_COUNT: 0, PICTO_FOUND_WORDS: [], PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 1 }), mkActions(), { WORD: 'Chat', EPOCH: 1 })
+    step(rerender, gs({ PICTO_FOUND_COUNT: 1, PICTO_FOUND_WORDS: ['Chat'], PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 2 }), { WORD: 'Soleil', EPOCH: 2 })
+    step(rerender, gs({ PICTO_FOUND_COUNT: 1, PICTO_FOUND_WORDS: ['Chat'], PICTO_PASS_COUNT: 1, PICTO_CANVAS_EPOCH: 3 }), { WORD: 'Girafe', EPOCH: 3 })
+    step(rerender, gs({ PICTO_FOUND_COUNT: 2, PICTO_FOUND_WORDS: ['Chat', 'Girafe'], PICTO_PASS_COUNT: 1, PICTO_CANVAS_EPOCH: 4 }), { WORD: 'Maison', EPOCH: 4 })
     const items = within(screen.getByTestId('picto-thread')).getAllByRole('listitem').map(li => [li.dataset.status, li.textContent])
     expect(items.map(i => i[0])).toEqual(['found', 'passed', 'found', 'current'])
     expect(items[0][1]).toContain('1 · ✅ Chat')
@@ -97,18 +103,18 @@ describe('Fil des mots (admin et anim)', () => {
     expect(items[3][1]).toContain('4 · ✏️ Maison')
   })
   it('révélation : le mot en cours devient ⌛', () => {
-    const { rerender } = admin(gs({ PICTO_FOUND_COUNT: 0, PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 1 }), mkActions(), { WORD: 'Chat', EPOCH: 1 })
-    step(rerender, gs({ phase: 'REVEALED', PICTO_FOUND_COUNT: 0, PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 1, PICTO_REVEALED_WORD: 'Chat' }), { WORD: 'Chat', EPOCH: 1 })
+    const { rerender } = admin(gs({ PICTO_FOUND_COUNT: 0, PICTO_FOUND_WORDS: [], PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 1 }), mkActions(), { WORD: 'Chat', EPOCH: 1 })
+    step(rerender, gs({ phase: 'REVEALED', PICTO_FOUND_COUNT: 0, PICTO_FOUND_WORDS: [], PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 1, PICTO_REVEALED_WORD: 'Chat' }), { WORD: 'Chat', EPOCH: 1 })
     expect(within(screen.getByTestId('picto-thread')).getByRole('listitem').dataset.status).toBe('revealed')
   })
   it('nouvelle question ou relance (retour en préparation) : fil vide', () => {
-    const { rerender } = admin(gs({ PICTO_FOUND_COUNT: 0, PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 1 }), mkActions(), { WORD: 'Chat', EPOCH: 1 })
+    const { rerender } = admin(gs({ PICTO_FOUND_COUNT: 0, PICTO_FOUND_WORDS: [], PICTO_PASS_COUNT: 0, PICTO_CANVAS_EPOCH: 1 }), mkActions(), { WORD: 'Chat', EPOCH: 1 })
     expect(screen.getByTestId('picto-thread')).toBeTruthy()
-    step(rerender, gs({ phase: 'READY', PICTO_FOUND_COUNT: 0, PICTO_PASS_COUNT: 0 }), null)
+    step(rerender, gs({ phase: 'READY', PICTO_FOUND_COUNT: 0, PICTO_FOUND_WORDS: [], PICTO_PASS_COUNT: 0 }), null)
     expect(screen.queryByTestId('picto-thread')).toBeNull()
   })
   it('le mot d\'une autre époque n\'entre jamais dans le fil (PICTO_WORD en retard sur l\'UPDATE)', () => {
-    admin(gs({ PICTO_CANVAS_EPOCH: 5 }), mkActions(), { WORD: 'Ancien', EPOCH: 4 })
+    admin(gs({ PICTO_CANVAS_EPOCH: 5, PICTO_FOUND_COUNT: 0, PICTO_FOUND_WORDS: [], PICTO_PASS_COUNT: 0 }), mkActions(), { WORD: 'Ancien', EPOCH: 4 })
     expect(screen.queryByTestId('picto-thread')).toBeNull()
     expect(screen.getByTestId('picto-rafale-word').textContent).toBe('—')
   })

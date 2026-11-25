@@ -360,7 +360,7 @@ export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedC
  */
 export function defaultTeamAward({
   question, teamName, basePoints, teamBumpers, invalidatedCount = 0, memorySoloScore = null,
-  memoryTeamPairs, memoryTeamErrors, rafaleCounters, rafaleBest, useHints = true,
+  memoryTeamPairs, memoryTeamErrors, rafaleCounters, rafaleBest, useHints = true, pictoRoundPoints,
 }) {
   // #254 : montant négatif (pénalité) = uniforme, quel que soit le type
   if (!(basePoints > 0)) return basePoints
@@ -372,6 +372,10 @@ export function defaultTeamAward({
     amount = memorySoloScore.score
   } else if (question?.TYPE === 'QCM' && question?.QCM_HINTS_ENABLED) {
     amount = calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount, useHints).amount
+  } else if (question?.TYPE === 'RAFALE_PICTO' && Number.isInteger(pictoRoundPoints)) {
+    // Rafale Picto (picto.md §17.7) : crédit pré-rempli = PICTO_ROUND_POINTS, calculé par le serveur
+    // (max(0, trouvés × POINTS − passes × coût)) ; jamais recalculé ici.
+    amount = pictoRoundPoints
   } else if (question?.TYPE === 'RAFALE') {
     const counter = rafaleCounterForTeam(question, teamName, rafaleCounters, rafaleBest)
     const award = calcRafaleTeamAward(question, basePoints, counter)
