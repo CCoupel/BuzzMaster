@@ -163,3 +163,32 @@ describe('Fin de pool : champ absent = END (picto.md §17.2)', () => {
     expect(screen.getByTestId('picto-thread').textContent).toContain('rebouclage')
   })
 })
+
+describe('Fil des mots en ligne, couleur de l\'équipe (cycle 5)', () => {
+  it('fil en rangée (liste flex wrap) avec le fond de la couleur de l\'équipe', () => {
+    admin(gs({ PICTO_TEAM_COLOR: [0, 0, 255] }))
+    const thread = screen.getByTestId('picto-thread')
+    expect(thread.style.getPropertyValue('--thread-bg')).toBeTruthy()
+    expect(thread.style.getPropertyValue('--thread-bg')).not.toBe('#475569')
+    expect(thread.style.getPropertyValue('--thread-fg')).toBe('#ffffff') // contraste sur bleu
+  })
+  it('équipe claire : texte noir', () => {
+    admin(gs({ PICTO_TEAM_COLOR: [250, 240, 100] }))
+    expect(screen.getByTestId('picto-thread').style.getPropertyValue('--thread-fg')).toBe('#000000')
+  })
+  it('aucune couleur d\'équipe : fond neutre', () => {
+    admin(gs({ PICTO_TEAM_COLOR: [] }))
+    expect(screen.getByTestId('picto-thread').style.getPropertyValue('--thread-bg')).toBe('#475569')
+  })
+  it('le mot en cours est distinct (statut current) ; même fil sur l\'anim', () => {
+    anim(gs({ PICTO_TEAM_COLOR: [0, 0, 255] }))
+    const current = within(screen.getByTestId('picto-thread')).getAllByRole('listitem').find(li => li.dataset.status === 'current')
+    expect(current.textContent).toContain('Maison')
+    expect(screen.getByTestId('picto-thread').style.getPropertyValue('--thread-bg')).toBeTruthy()
+  })
+  it('CSS : rangée flex wrap, pas de colonne', async () => {
+    const fs = await import('node:fs')
+    const css = fs.readFileSync('src/components/picto/PictoPanel.css', 'utf8')
+    expect(css).toMatch(/\.picto-thread ol \{[^}]*flex-flow: row wrap/)
+  })
+})

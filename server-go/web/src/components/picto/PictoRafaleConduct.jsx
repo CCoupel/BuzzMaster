@@ -8,6 +8,7 @@
  * pouce droit. Le dessinateur n'a aucun bouton : il annonce la passe à voix haute.
  */
 import { categoryMeta } from '../../utils/categoryUtils'
+import { getRgbColor, getContrastColor } from '../../utils/colorUtils'
 import { canPictoPass, canRafaleFound, passLimitLabel, roundPointsFormula, THREAD_ICON } from './pictoRafaleState'
 
 export default function PictoRafaleConduct({ gs, word, thread = [], actions, variant = 'admin', customCategories = [], onReveal = null }) {
@@ -22,6 +23,11 @@ export default function PictoRafaleConduct({ gs, word, thread = [], actions, var
   const wordNo = thread.length
   const canPass = canPictoPass(gs)
   const canFound = canRafaleFound(gs)
+  // Fil en ligne, fond = couleur de l'équipe qui joue (PICTO_TEAM_COLOR) ; repli neutre si aucune équipe
+  const teamColor = Array.isArray(gs.PICTO_TEAM_COLOR) && gs.PICTO_TEAM_COLOR.length === 3 ? gs.PICTO_TEAM_COLOR : null
+  const threadStyle = teamColor
+    ? { '--thread-bg': getRgbColor(teamColor), '--thread-fg': getContrastColor(teamColor) }
+    : { '--thread-bg': '#475569', '--thread-fg': '#ffffff' }
   const showWord = !revealed && gs.phase !== 'PREPARE' && gs.phase !== 'READY'
 
   return (
@@ -81,7 +87,7 @@ export default function PictoRafaleConduct({ gs, word, thread = [], actions, var
       )}
 
       {thread.length > 0 && (
-        <div className="picto-thread" data-testid="picto-thread">
+        <div className="picto-thread" data-testid="picto-thread" style={threadStyle}>
           <span className="picto-lbl">Mots de la manche</span>
           <ol>
             {thread.map((t, i) => (
