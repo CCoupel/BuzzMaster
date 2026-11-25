@@ -28,3 +28,5 @@
 .picto-source-btn { border: 1px solid var(--gray-300, #d1d5db); background: #fff; border-radius: 999px; padding: 0.25rem 0.75rem; font-size: 0.8rem; cursor: pointer; }
 .picto-source-btn.on { background: #cffafe; border-color: #0891b2; color: #0e7490; font-weight: 700; }
 .picto-source-pool { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.picto-lbl-inline { display: block; font-size: 0.8rem; color: var(--gray-700, #374151); margin-bottom: 0.3rem; }
