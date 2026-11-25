@@ -61,8 +61,10 @@ func rafaleRuneLen(s string) int {
 
 var rafaleGenerationPresets = []int{10, 20, 50, 100, 200}
 
-func isRafaleGenerationPreset(n int) bool {
-	for _, p := range rafaleGenerationPresets {
+func isRafaleGenerationPreset(n int) bool { return intInSlice(rafaleGenerationPresets, n) }
+
+func intInSlice(list []int, n int) bool {
+	for _, p := range list {
 		if p == n {
 			return true
 		}
@@ -97,6 +99,12 @@ type generateRafaleRequest struct {
 // contract §3, a question generated here must be validated by the exact
 // same rule as the manual editor of its destination store.
 func (h *HTTPServer) validateGenerateRafaleRequest(req *generateRafaleRequest, aiCfg config.AIConfig) string {
+	return h.validateGeneratePoolRequest(rafaleGenDescriptor(), req, aiCfg)
+}
+
+// validateGeneratePoolRequest is validateGenerateRafaleRequest parameterised by
+// the pool descriptor (v13.1.0, #324 — only the volume presets differ).
+func (h *HTTPServer) validateGeneratePoolRequest(desc *poolGenDescriptor, req *generateRafaleRequest, aiCfg config.AIConfig) string {
 	if strings.TrimSpace(req.Theme) == "" {
 		return "theme is required"
 	}
@@ -127,7 +135,7 @@ func (h *HTTPServer) validateGenerateRafaleRequest(req *generateRafaleRequest, a
 	}
 	seenCat := make(map[string]bool, len(req.Categories))
 	for _, c := range req.Categories {
-		if !h.isKnownRafaleCategory(c) {
+		if !h.isKnownCategory(c) {
 			return fmt.Sprintf("unknown category: %q", c)
 		}
 		if seenCat[c] {
@@ -153,8 +161,8 @@ func (h *HTTPServer) validateGenerateRafaleRequest(req *generateRafaleRequest, a
 	if maxQuestions <= 0 {
 		maxQuestions = 200
 	}
-	if !isRafaleGenerationPreset(req.Count) {
-		return fmt.Sprintf("count must be one of %v", rafaleGenerationPresets)
+	if !intInSlice(desc.presets, req.Count) {
+		return fmt.Sprintf("count must be one of %v", desc.presets)
 	}
 	if req.Count > maxQuestions {
 		return fmt.Sprintf("count must be at most %d", maxQuestions)
@@ -489,6 +497,15 @@ func validateGeneratedRafaleQuestions(raw []llmRawRafaleQuestion, allowedCategor
 // equivalent, since the Quiz generation path has no notion of "a round in
 // progress" to protect against.
 func (h *HTTPServer) handleGenerateRafaleQuestions(w http.ResponseWriter, r *http.Request) {
+	h.handleGeneratePool(rafaleGenDescriptor(), w, r)
+}
+
+// handleGeneratePool is the generation endpoint shared by both pool instances
+// (POST /api/rafale/generate-questions, POST /api/picto/generate-words) —
+// contracts/picto-pool.md §5: same path, same single job (aiJobRegistry), the
+// descriptor supplies presets, schema, prompt, validator, persistence, round
+// guard and TARGET.
+func (h *HTTPServer) handleGeneratePool(desc *poolGenDescriptor, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -507,7 +524,7 @@ func (h *HTTPServer) handleGenerateRafaleQuestions(w http.ResponseWriter, r *htt
 
 	aiCfg := config.Get().AI
 
-	if msg := h.validateGenerateRafaleRequest(&req, aiCfg); msg != "" {
+	if msg := h.validateGeneratePoolRequest(desc, &req, aiCfg); msg != "" {
 		writeGenerateError(w, http.StatusBadRequest, "invalid_request", msg, 0)
 		return
 	}
@@ -525,14 +542,12 @@ func (h *HTTPServer) handleGenerateRafaleQuestions(w http.ResponseWriter, r *htt
 	// current question is of type RAFALE AND the phase is STARTED or
 	// PAUSED. Checked AFTER validation/key so a malformed request or a
 	// missing key still gets its own, more specific error first.
-	state := h.engine.GetState()
-	if state.Question != nil && state.Question.Type == game.QuestionTypeRafale &&
-		(state.Phase == game.PhaseStarted || state.Phase == game.PhasePaused) {
-		writeGenerateError(w, http.StatusConflict, "rafale_round_in_progress", "Une manche RAFALE est en cours — la génération reprendra une fois la manche terminée.", 0)
+	if code, msg, blocked := desc.guard(h.engine.GetState()); blocked {
+		writeGenerateError(w, http.StatusConflict, code, msg, 0)
 		return
 	}
 
-	jobID, batchesTotal, started := h.startAIRafaleGenerationJob(req, aiCfg)
+	jobID, batchesTotal, started := h.startAIPoolGenerationJob(desc, req, aiCfg)
 	if !started {
 		// contract §1.2: a single job at a time, Quiz or RAFALE combined —
 		// same atomic check-and-start as the Quiz path (aiJobRegistry.tryStart).
@@ -540,8 +555,8 @@ func (h *HTTPServer) handleGenerateRafaleQuestions(w http.ResponseWriter, r *htt
 		return
 	}
 
-	LogInfo(game.LogComponentHTTP, "AI RAFALE generation job %s started: provider=%s batches_total=%d",
-		jobID, aiCfg.Provider, batchesTotal)
+	LogInfo(game.LogComponentHTTP, "AI %s generation job %s started: provider=%s batches_total=%d",
+		desc.target, jobID, aiCfg.Provider, batchesTotal)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
@@ -577,6 +592,12 @@ func (h *HTTPServer) handleGenerateRafaleQuestions(w http.ResponseWriter, r *htt
 // more than one batch's worth of questions is itself split across
 // ceil(couple.Count / batchSize) calls (planRafaleBatches).
 func (h *HTTPServer) startAIRafaleGenerationJob(req generateRafaleRequest, aiCfg config.AIConfig) (jobID string, batchesTotal int, ok bool) {
+	return h.startAIPoolGenerationJob(rafaleGenDescriptor(), req, aiCfg)
+}
+
+// startAIPoolGenerationJob is startAIRafaleGenerationJob parameterised by the
+// pool descriptor (#324).
+func (h *HTTPServer) startAIPoolGenerationJob(desc *poolGenDescriptor, req generateRafaleRequest, aiCfg config.AIConfig) (jobID string, batchesTotal int, ok bool) {
 	couples := allocateRafaleCounts(req.Categories, req.Difficulties, req.Count)
 	batchSize := clampBatchSize(aiCfg.BatchSize)
 	plan := planRafaleBatches(couples, batchSize)
@@ -585,12 +606,12 @@ func (h *HTTPServer) startAIRafaleGenerationJob(req generateRafaleRequest, aiCfg
 		batchesTotal = 1
 	}
 
-	job, started := globalAIJobRegistry.tryStart(aiCfg.Provider, batchesTotal, "RAFALE")
+	job, started := globalAIJobRegistry.tryStart(aiCfg.Provider, batchesTotal, desc.target)
 	if !started {
 		return "", 0, false
 	}
 
-	go h.runAIRafaleJob(job, req, aiCfg, plan)
+	go h.runAIPoolJob(desc, job, req, aiCfg, plan)
 
 	return job.ID, batchesTotal, true
 }
@@ -606,6 +627,12 @@ func (h *HTTPServer) startAIRafaleGenerationJob(req generateRafaleRequest, aiCfg
 // the reservoir has no equivalent broadcast, contract §6 "Rafraîchissement
 // de la liste du réservoir" — the frontend refetches on its own instead).
 func (h *HTTPServer) runAIRafaleJob(job *aiJob, req generateRafaleRequest, aiCfg config.AIConfig, plan []rafaleBatchItem) {
+	h.runAIPoolJob(rafaleGenDescriptor(), job, req, aiCfg, plan)
+}
+
+// runAIPoolJob is runAIRafaleJob parameterised by the pool descriptor (#324):
+// the loop, cancellation, retries and progress are the RAFALE ones, unchanged.
+func (h *HTTPServer) runAIPoolJob(desc *poolGenDescriptor, job *aiJob, req generateRafaleRequest, aiCfg config.AIConfig, plan []rafaleBatchItem) {
 	provider := h.selectProvider(aiCfg)
 	maxFailures := aiCfg.MaxConsecutiveFailures
 	if maxFailures <= 0 {
@@ -623,7 +650,7 @@ func (h *HTTPServer) runAIRafaleJob(job *aiJob, req generateRafaleRequest, aiCfg
 	// therefore built once, outside the loop, unlike the Quiz path's schema
 	// (which varies batch to batch only in which TYPES are active — not
 	// applicable here, RAFALE has no per-batch type mixing).
-	schema := provider.AdaptSchema(buildRafaleQuestionSchema(req.Categories, req.Difficulties))
+	schema := provider.AdaptSchema(desc.schema(req.Categories, req.Difficulties))
 
 	var jobExtraContext []string // job-accumulated statements, freshest last — anti-duplicate context (contract §5)
 	consecutiveFailures := 0
@@ -642,7 +669,7 @@ batchLoop:
 
 		item := plan[batchIndex]
 
-		existingContext := h.collectExistingRafaleContext(req.Categories, req.Difficulties)
+		existingContext := desc.context(h, req.Categories, req.Difficulties)
 		combined := make([]string, 0, len(jobExtraContext)+len(existingContext))
 		combined = append(combined, jobExtraContext...)
 		combined = append(combined, existingContext...)
@@ -650,7 +677,7 @@ batchLoop:
 			combined = combined[:150]
 		}
 
-		prompt := h.buildRafaleGenerationPrompt(req, item.Count, item.Category, item.Difficulty, combined)
+		prompt := desc.prompt(h, req, item.Count, item.Category, item.Difficulty, combined)
 
 		callCtx, cancel := context.WithTimeout(context.Background(), timeoutOrDefault(aiCfg.TimeoutSeconds))
 		rawJSON, err := provider.Generate(callCtx, aiCfg, prompt, schema)
@@ -659,8 +686,8 @@ batchLoop:
 		if err != nil {
 			lastErr = err
 			consecutiveFailures++
-			LogWarn(game.LogComponentHTTP, "AI RAFALE generation job %s: batch %d/%d failed (%d/%d consecutive failures): %v",
-				job.ID, batchIndex+1, len(plan), consecutiveFailures, maxFailures, err)
+			LogWarn(game.LogComponentHTTP, "AI %s generation job %s: batch %d/%d failed (%d/%d consecutive failures): %v",
+				desc.target, job.ID, batchIndex+1, len(plan), consecutiveFailures, maxFailures, err)
 
 			if consecutiveFailures >= maxFailures {
 				finalState = "FAILED"
@@ -693,8 +720,8 @@ batchLoop:
 		if parseErr != nil {
 			lastErr = parseErr
 			consecutiveFailures++
-			LogWarn(game.LogComponentHTTP, "AI RAFALE generation job %s: batch %d/%d response schema mismatch (%d/%d consecutive failures): %v",
-				job.ID, batchIndex+1, len(plan), consecutiveFailures, maxFailures, parseErr)
+			LogWarn(game.LogComponentHTTP, "AI %s generation job %s: batch %d/%d response schema mismatch (%d/%d consecutive failures): %v",
+				desc.target, job.ID, batchIndex+1, len(plan), consecutiveFailures, maxFailures, parseErr)
 			if consecutiveFailures >= maxFailures {
 				finalState = "FAILED"
 				finalErrorCode = classifyJobErrorCode(lastErr)
@@ -707,43 +734,31 @@ batchLoop:
 
 		existingNormalized := make(map[string]bool, len(combined))
 		for _, txt := range combined {
-			existingNormalized[normalizeRafaleQuestionText(txt)] = true
+			existingNormalized[desc.normalize(txt)] = true
 		}
 
-		validQuestions, skipped := validateGeneratedRafaleQuestions(llmQuestions, req.Categories, req.Difficulties, item.Count, existingNormalized)
+		validQuestions, skipped := desc.validate(llmQuestions, req.Categories, req.Difficulties, item.Count, existingNormalized)
 
-		toWrite := make([]game.RafaleQuestion, 0, len(validQuestions))
-		for _, vq := range validQuestions {
-			toWrite = append(toWrite, game.RafaleQuestion{
-				Question:   vq.Question,
-				Answer:     vq.Answer,
-				Category:   game.QuestionCategory(vq.Category),
-				Difficulty: vq.Difficulty,
-			})
-		}
-
-		var stored []game.RafaleQuestion
-		var writeErr error
-		if len(toWrite) > 0 {
-			// Single locked batch write, single SaveRafale() — contract §8.
-			stored, writeErr = h.engine.AppendRafaleQuestions(toWrite)
-		}
+		// Single locked batch write, single save — contract §8 (RAFALE:
+		// AppendRafaleQuestions; Picto: AddWords per couple, which also drops
+		// the per-category duplicates the word rules refuse).
+		stored, extraSkipped, writeErr := desc.persist(h, validQuestions)
 
 		job.mu.Lock()
 		job.CreatedCount += len(stored)
-		job.SkippedCount += len(skipped)
+		job.SkippedCount += len(skipped) + extraSkipped
 		job.mu.Unlock()
 
 		if writeErr != nil {
 			finalState = "FAILED"
 			finalErrorCode = "internal_error"
-			LogError(game.LogComponentHTTP, "AI RAFALE generation job %s: failed to persist batch: %v", job.ID, writeErr)
+			LogError(game.LogComponentHTTP, "AI %s generation job %s: failed to persist batch: %v", desc.target, job.ID, writeErr)
 			h.broadcastAIJobProgress(job, "FAILED", finalErrorCode, sanitizeUpstreamMessage(writeErr.Error()))
 			return
 		}
 
 		for _, s := range stored {
-			jobExtraContext = append(jobExtraContext, s.Question)
+			jobExtraContext = append(jobExtraContext, s)
 		}
 		if len(jobExtraContext) > 150 {
 			jobExtraContext = jobExtraContext[len(jobExtraContext)-150:]

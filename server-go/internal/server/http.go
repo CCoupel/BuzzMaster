@@ -476,6 +476,8 @@ func (h *HTTPServer) setupRoutes() {
 	// net/http's exact-match-wins rule (see the comment above) isn't even in
 	// play here; still verified by an explicit test (plan task 7 note).
 	h.mux.HandleFunc("/api/rafale/generate-questions", h.handleGenerateRafaleQuestions)
+	// Pool Picto AI generation (v13.1.0, #324, contracts/picto-pool.md §5) — same path/job as RAFALE.
+	h.mux.HandleFunc("/api/picto/generate-words", func(w http.ResponseWriter, r *http.Request) { h.handleGeneratePool(pictoGenDescriptor(), w, r) })
 
 	// AI question generator (v6.0.0 — #8)
 	h.mux.HandleFunc("/api/generate-questions", h.handleGenerateQuestions)
