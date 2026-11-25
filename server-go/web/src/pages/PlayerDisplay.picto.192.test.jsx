@@ -70,6 +70,21 @@ describe('PlayerDisplay — type PICTO (#192/#193)', () => {
     expect(container.querySelector('[data-testid="picto-drawer-prep"]')).not.toBeNull()
     expect(container.querySelector('.ready-category-display')).toBeNull()
   })
+  it('tablette du dessinateur : le décompte 3-2-1 / GO! s\'affiche en COUNTDOWN (#321), sans feuille ni mot', () => {
+    mockGame({ phase: 'COUNTDOWN', countdownTime: 2 })
+    const { container } = render(<PlayerDisplay isVPlayer playerId="b1" teamName="Bleus" />)
+    expect(container.querySelector('[data-testid="picto-drawer-countdown"]').textContent).toBe('2')
+    expect(container.querySelector('[data-testid="picto-drawer"]')).toBeNull()
+  })
+  it('tablette du dessinateur : « GO! » quand le décompte atteint 0, rien en READY', () => {
+    mockGame({ phase: 'COUNTDOWN', countdownTime: 0 })
+    const { container, unmount } = render(<PlayerDisplay isVPlayer playerId="b1" teamName="Bleus" />)
+    expect(container.querySelector('[data-testid="picto-drawer-countdown"]').textContent).toBe('GO!')
+    unmount()
+    mockGame()
+    const r2 = render(<PlayerDisplay isVPlayer playerId="b1" teamName="Bleus" />)
+    expect(r2.container.querySelector('[data-testid="picto-drawer-countdown"]')).toBeNull()
+  })
   it('tablette d\'une autre équipe en READY : écran générique (type et catégorie)', () => {
     mockGame()
     const { container } = render(<PlayerDisplay isVPlayer playerId="b7" teamName="Rouges" />)

@@ -80,6 +80,11 @@ export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage
         <div className="picto-tab-emoji" aria-hidden="true">✏️</div>
         <div className="picto-tab-title">C'est toi qui dessines !</div>
         <div className="picto-tab-sub">Le mot s'affichera au lancement de la manche.</div>
+        {gs.phase === 'COUNTDOWN' && (
+          <div className="countdown-number picto-tab-countdown" data-testid="picto-drawer-countdown" aria-live="polite">
+            {gs.countdownTime > 0 ? gs.countdownTime : 'GO!'}
+          </div>
+        )}
       </div>
     )
   }
