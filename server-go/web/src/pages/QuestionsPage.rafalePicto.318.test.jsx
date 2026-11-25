@@ -205,4 +205,21 @@ describe('QuestionsPage — type RAFALE_PICTO (#318)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Picto' }))
     expect(document.querySelector('.picto-grid').className).not.toContain('picto-grid-stacked')
   })
+
+  it('catégorie du crédit = TOUJOURS la première du filtre (sélecteur masqué) : une catégorie préexistante ne l\'emporte pas', async () => {
+    useCategories.mockReturnValue({ categories: [{ key: 'ANIMALS', name: 'Animaux', imageURL: '', isCustom: false }, { key: 'HISTORY', name: 'Histoire', imageURL: '', isCustom: false }], loading: false, error: null, refetch: vi.fn() })
+    openRafalePicto()
+    fillTitle()
+    // catégorie « résiduelle » du formulaire : choisie en mots saisis, puis retour au pool (sélecteur unique masqué)
+    fireEvent.click(screen.getByRole('button', { name: '✍️ Saisis dans la question' }))
+    fireEvent.click(screen.getByTitle('Animaux'))
+    fireEvent.click(screen.getByRole('button', { name: '🗂 Pool Picto' }))
+    fireEvent.click(screen.getByTitle('Animaux')) // le filtre reprenait la catégorie résiduelle : on la retire
+    fireEvent.click(screen.getByTitle('Histoire')) // filtre du pool = HISTORY seul
+    fireEvent.click(submitBtn())
+    await waitFor(() => expect(postedForm()).not.toBeNull(), { timeout: 2000 })
+    const fd = postedForm()
+    expect(JSON.parse(fd.get('rafale_picto_categories'))).toEqual(['HISTORY'])
+    expect(fd.get('category')).toBe('HISTORY') // et non la catégorie résiduelle ANIMALS
+  })
 })

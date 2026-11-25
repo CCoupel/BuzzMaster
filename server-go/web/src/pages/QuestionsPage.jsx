@@ -1815,8 +1815,10 @@ export default function QuestionsPage() {
     data.append('question', formData.type === 'ROUE' ? (formData.rouePresentation.trim() || 'Roue de la Fortune') : formData.question)
     data.append('type', formData.type)
     // Rafale Picto sur le pool : pas de sélecteur unique, la catégorie du crédit = première catégorie du filtre
-    const creditCategory = formData.category
-      || (formData.type === 'RAFALE_PICTO' && formData.rafalePictoSource === 'RESERVOIR' ? (formData.rafalePictoCategories || [])[0] : '')
+    // (toujours le filtre : le sélecteur unique est masqué, une catégorie préexistante du formulaire ne doit pas l'emporter)
+    const creditCategory = formData.type === 'RAFALE_PICTO' && formData.rafalePictoSource === 'RESERVOIR'
+      ? (formData.rafalePictoCategories || [])[0]
+      : formData.category
     if (creditCategory) {
       data.append('category', creditCategory)
     }
