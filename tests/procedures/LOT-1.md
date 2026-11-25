@@ -166,7 +166,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Sur un QCM : décocher une équipe, « Tout sélectionner », modifier le champ Points ; créditer une équipe puis revenir ; changer de question | Sélection toujours modifiable ; modifier « Points » ne recoche ni ne décoche ; équipe déjà créditée jamais cochée ; sélection vidée au changement de question ; rien n'est envoyé avant « Donner les points » | | |
+| 1 | Sur un QCM : décocher une équipe, « Tout sélectionner », modifier le champ Points ; créditer une équipe puis revenir ; changer de question | Sélection toujours modifiable ; modifier « Points » ne recoche ni ne décoche ; équipe déjà créditée jamais cochée ; sélection vidée au changement de question ; rien n'est envoyé avant « Attribuer les points » | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
