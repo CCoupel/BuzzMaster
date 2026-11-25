@@ -13,6 +13,9 @@ import Timer from '../Timer'
 import PictoCanvasView from './PictoCanvasView'
 import PictoCanvasInput from './PictoCanvasInput'
 import { errorText, pictoShownWord } from './pictoState'
+import { foundLabel, passUsedLabel } from './pictoRafaleState'
+import { useRafaleFlash } from './useRafaleFlash'
+import { isRafalePicto } from '../../utils/pictoFamily'
 import './PictoCanvas.css'
 import './PictoTv.css'
 
@@ -36,22 +39,43 @@ function Hint({ gs, catMeta, small = false }) {
   )
 }
 
-/** Écran TV : zones communes (M3). */
+/** Écran TV : zones communes (M3) ; Rafale Picto : grand compteur à gauche de la feuille, mot trouvé 1 s dessus (M4). */
 export function PictoTvScreen({ gameState: gs, catMeta, store }) {
   const revealed = gs.phase === 'REVEALED'
+  const rafale = isRafalePicto(gs.question?.TYPE)
+  const { foundWord, passMark } = useRafaleFlash(gs, store, rafale)
+  const foundCount = gs.PICTO_FOUND_COUNT || 0
+  const passCount = gs.PICTO_PASS_COUNT || 0
+  const foundWords = Array.isArray(gs.PICTO_FOUND_WORDS) ? gs.PICTO_FOUND_WORDS : []
   return (
-    <div className="game-content-zones picto-tv" data-testid="picto-tv">
+    <div className={`game-content-zones picto-tv${rafale ? ' picto-tv-rafale' : ''}`} data-testid="picto-tv">
       <div className="zone-timer">
         <Timer currentTime={gs.timer} totalTime={gs.totalTime} phase={gs.phase} size="xl" showPhase={false} />
       </div>
       <div className="zone-question"><Hint gs={gs} catMeta={catMeta} /></div>
       <div className="zone-media picto-media">
-        <div className="picto-sheet picto-sheet-fit">{store && <PictoCanvasView store={store} />}</div>
+        {rafale && (
+          <div className="picto-counter" data-testid="picto-counter">
+            <span className="picto-counter-n">{foundCount}</span>
+            <span className="picto-counter-lbl">{foundCount > 1 ? 'mots trouvés' : 'mot trouvé'}</span>
+            {passCount > 0 && <span className="picto-counter-pass" data-testid="picto-counter-pass">⏭ {passUsedLabel(passCount)}</span>}
+          </div>
+        )}
+        <div className="picto-sheet picto-sheet-fit picto-sheet-rel">
+          {store && <PictoCanvasView store={store} />}
+          {foundWord && <div className="picto-found-flash" data-testid="picto-found-flash">✅ {foundWord}</div>}
+          {passMark && <div className="picto-pass-mark" data-testid="picto-pass-mark" aria-hidden="true">⏭</div>}
+        </div>
       </div>
       <div className="zone-answers">
-        {revealed && gs.PICTO_REVEALED_WORD && (
+        {revealed && (gs.PICTO_REVEALED_WORD || (rafale && foundWords.length > 0)) && (
           <div className="answer-container">
-            <p className="answer-text" data-testid="picto-revealed-word">{gs.PICTO_REVEALED_WORD}</p>
+            {gs.PICTO_REVEALED_WORD && <p className="answer-text" data-testid="picto-revealed-word">{gs.PICTO_REVEALED_WORD}</p>}
+            {rafale && foundWords.length > 0 && (
+              <p className="picto-tv-found" data-testid="picto-tv-found">
+                {foundLabel(foundCount)} : {foundWords.map((w, i) => <span key={`${w}-${i}`} className="picto-tv-found-word">✅ {w}</span>)}
+              </p>
+            )}
           </div>
         )}
       </div>

@@ -22,3 +22,15 @@
 .picto-tab-sheet .picto-sheet-fit { height: 100%; }
 .picto-tab-foot { margin: 0; text-align: center; font-size: 1.8vh; opacity: 0.8; }
 .picto-tab.drawer.land { flex-direction: row; }
+
+/* #318 — TV Rafale Picto (M4) : statique, aucun défilement, unités viewport */
+.picto-tv-rafale .zone-media.picto-media { gap: 3vw; }
+.picto-counter { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #fff; min-width: 14vw; max-width: 22vw; overflow: hidden; }
+.picto-counter-n { font-size: 16vh; line-height: 1; font-weight: 900; }
+.picto-counter-lbl { font-size: 3vh; font-weight: 700; opacity: 0.9; }
+.picto-counter-pass { margin-top: 1.2vh; font-size: 2.6vh; background: rgba(255, 255, 255, 0.15); border-radius: 999px; padding: 0.3vh 1.2vw; white-space: nowrap; }
+.picto-sheet-rel { position: relative; }
+.picto-found-flash { position: absolute; inset: auto 0 6% 0; margin: 0 auto; width: max-content; max-width: 92%; background: rgba(22, 163, 74, 0.92); color: #fff; font-size: 6vh; font-weight: 900; padding: 0.6vh 2vw; border-radius: 1vh; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.picto-pass-mark { position: absolute; top: 3%; right: 4%; font-size: 5vh; opacity: 0.45; color: #475569; }
+.picto-tv-found { margin: 0.6vh 0 0; font-size: 2.6vh; color: #fff; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.picto-tv-found-word { margin-left: 1vw; }
