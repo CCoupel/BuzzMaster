@@ -2,7 +2,8 @@
 
 **Issues** : #318 et, selon P1 du plan, une issue fille « pool de mots Picto ». Plan :
 `_work/reports/plan-20261124-v1310.md`.
-**Statut** : contrat de référence, écrit avant implémentation (contract-first) — **révision 2** (2026-11-24, GATE 2).
+**Statut** : contrat de référence, écrit avant implémentation (contract-first) — **révision 3** (2026-11-25, relecture des docs du LOT-2 : formats de réponse et lecture de la liste
+refusée pendant une manche, §4 ; révision 2 : GATE 2 du 2026-11-24).
 **Révision 2** (version finale du GATE 2 : collage retenu, case « Pools » à trois états, libellés « Pool Speedy » / « Pool Picto », pool Picto utilisé par les types `PICTO` et `RAFALE_PICTO`) : le pool Picto n'est **plus un magasin parallèle**. Le **moteur de pool RAFALE est généralisé** :
 stockage, marquage « utilisé », pioche stratifiée, HTTP, sauvegarde, job et modale IA. Il est instancié deux fois,
 `rafale` et `picto`. La révision 1 (magasin `PictoWord` distinct, marquages `PRESENTED` / `REVEALED` par clé
@@ -101,9 +102,31 @@ authentification (#259, dette connue).
 | `POST /api/picto/words/batch` (M1 A retenue au GATE 2) | — (nouveau, dans la fabrique, désactivé pour RAFALE). Corps `{ "CATEGORY", "DIFFICULTY", "WORDS": [string, 1 à 200] }`. Lignes valides créées en une seule sauvegarde ; refus listés, jamais tronqués ; doublon interne au lot refusé dès sa 2ᵉ occurrence | `{ "CREATED": [{ID, QUESTION}], "REFUSED": [{QUESTION, CODE}] }` |
 | `POST /api/picto/generate-words` | `POST /api/rafale/generate-questions` | `202` (§5) |
 
-**Refus pendant une manche** **[planner]** : les écritures, les remises à zéro et la génération de l'instance
-`picto` sont refusées en `409 picto_round_in_progress` pendant une manche PICTO (`STARTED` / `PAUSED`). C'est la
-même garde, paramétrée, que `rafale_round_in_progress` (`rafale-ai-generation.md` §7). RAFALE ne change pas.
+**Refus pendant une manche** **[planner]** (`poolGuardPicto`, `pool_http.go`) :
+- **Instance `picto` seulement.** Pendant une manche de la famille Picto (`IsPictoFamily`, phase `STARTED` ou
+  `PAUSED`), les opérations suivantes sont refusées en `409 picto_round_in_progress` :
+  - **la lecture de la liste** `GET /api/picto/words` (révision 3, décision `ec8ab5d1`, #324). La liste porte
+    `USED`, et le dernier mot « utilisé » est le mot secret en jeu ;
+  - **toutes les écritures** : `POST /api/picto/words`, `POST /api/picto/words/batch`,
+    `DELETE /api/picto/words/{id}` ;
+  - les remises à disposition : `POST /api/picto/words/{id}/reset` et `/reset-all` ;
+  - la génération IA.
+- **Lisibles hors manche et à l'arrêt** : en `PREPARE`, `READY`, `COUNTDOWN`, `STOPPED` et `REVEALED`, et quand la
+  question courante n'est pas de la famille Picto.
+- `GET /api/picto/pool` (comptes `AVAILABLE` / `USED` / `TOTAL`, sans aucun mot) n'est **pas** gardé.
+- C'est la même garde, paramétrée, que `rafale_round_in_progress` (`rafale-ai-generation.md` §7).
+- **Pool Speedy non concerné** : l'instance `rafale` n'a aucune garde sur ses lectures ni sur ses écritures ; sa
+  génération IA garde son refus existant.
+
+**Formats de réponse** (révision 3, alignés sur le code `pool_http.go` / `http_picto.go`) :
+
+| Cas | Statut | Corps |
+|---|---|---|
+| Refus de validation d'un ajout ou d'une modification (`POST /api/picto/words`) | `400` | **texte brut** `CODE: message` (ex. `DUPLICATE: …`, `WORD_INVALID: …`, `CATEGORY_UNKNOWN: unknown CATEGORY`, `DIFFICULTY_INVALID: …`, `POOL_FULL: …`). Le client lit le code avant le premier `:` |
+| Requête mal formée (JSON illisible, lot vide ou de plus de 200 mots, `ID` manquant, filtre invalide) | `400` | texte brut, **sans code** (ex. `Invalid JSON body`, `WORDS must contain 1 to 200 words`) |
+| Collage (`POST /api/picto/words/batch`), lot accepté | `200` | **JSON** `{ "CREATED": [{ "ID", "QUESTION" }], "REFUSED": [{ "QUESTION", "CODE" }] }`. Les refus ligne par ligne sont **dans le JSON**, jamais en `400`. Une catégorie ou une difficulté de lot invalide reste un `400` texte `CODE: message`, et rien n'est créé |
+| Manche Picto en cours (liste, écritures, remises, génération) | `409` | **JSON** `{ "status": "error", "code": "picto_round_in_progress", "message": "Une manche Picto est en cours — le Pool Picto est verrouillé jusqu'à sa fin." }` (même enveloppe que les erreurs de génération IA, `writeGenerateError`) |
+| ID inconnu / méthode | `404` / `405` | texte brut |
 
 ## 5. Génération IA — descripteur `picto`
 

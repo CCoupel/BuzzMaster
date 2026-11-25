@@ -1,6 +1,18 @@
 # Changelog des Contrats API
 
 ---
+## [20261125-a] — v13.1.0 — Pool Picto : formats de réponse et lecture de la liste pendant une manche (relecture docs LOT-2)
+
+`picto-pool.md` révision 3, §4 précisé et aligné sur le code (`pool_http.go`, `http_picto.go`). **Aucun BREAKING.**
+- **[CHANGED — précision]** Trois formats de réponse documentés :
+  - `400` en **texte brut** `CODE: message` (validation ; texte sans code pour une requête mal formée) ;
+  - collage : **JSON** `REFUSED[].CODE` dans une réponse `200` ;
+  - `409` : **JSON** `{status, code, message}` avec `code = picto_round_in_progress`.
+- **[CHANGED — ajout au contrat de décisions déjà codées]** `GET /api/picto/words` est **refusé en `409`** pendant une
+  manche de la famille Picto (`STARTED` / `PAUSED`), puisque la liste révèle `USED` (`ec8ab5d1`, #324). La liste reste
+  lisible hors manche et à l'arrêt. `GET /api/picto/pool` (comptes seuls) et le Pool Speedy ne sont pas concernés.
+
+---
 ## [20261124-f] — v13.1.0 — Présélection des gagnants : MEMOTION admin en deux temps, libellé du bouton (#321)
 
 `award-preselect.md` révision 3, texte aligné sur le code (relecture des docs du LOT-1). **Aucun BREAKING.**
