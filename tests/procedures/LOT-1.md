@@ -68,7 +68,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | MEMORY à 3 équipes : une équipe sans paire, une avec paires, une dont les erreurs ramènent le score à 0 | Seules les équipes de score > 0 sont cochées ; les équipes MEMORY gardent leur chip habituelle | | |
+| 1 | MEMORY à 3 équipes : une équipe sans paire, une avec paires, une dont les erreurs ramènent le score à 0 | Seules les équipes de score > 0 sont cochées ; les équipes MEMORY gardent leur chip et leur aperçu | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -82,7 +82,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Manche en SOLO avec compteur > 0, puis une seconde fois avec compteur 0 | Équipe cochée si compteur retenu > 0, sinon rien ; les cartes RAFALE gardent leur chip habituelle | | |
+| 1 | Manche en SOLO avec compteur > 0, puis une seconde fois avec compteur 0 | Équipe cochée si compteur retenu > 0, sinon rien ; les cartes RAFALE gardent leur chip et leur aperçu | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -96,7 +96,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | 3 équipes, compteurs différents dont un à 0 ; refaire en MAILLON_FAIBLE (compteur retombé à 0 mais meilleur > 0) | Équipes à compteur retenu > 0 cochées (RAFALE_TEAM_BEST en MAILLON_FAIBLE) ; les cartes RAFALE gardent leur chip habituelle | | |
+| 1 | 3 équipes, compteurs différents dont un à 0 ; refaire en MAILLON_FAIBLE (compteur retombé à 0 mais meilleur > 0) | Équipes à compteur retenu > 0 cochées (RAFALE_TEAM_BEST en MAILLON_FAIBLE) ; les cartes RAFALE gardent leur chip et leur aperçu | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -110,7 +110,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | QCM, plusieurs équipes répondent juste et faux ; révéler. Refaire avec POINTS_TARGET = PLAYER | Équipes (puis joueurs) ayant donné la bonne couleur cochés ; aucune bonne réponse → rien ; couleur assignée sans réponse ignorée ; les cartes QCM gardent leur chip habituelle (+ chip « +N pts » sur les équipes cochées) | | |
+| 1 | QCM, plusieurs équipes répondent juste et faux ; révéler. Refaire avec POINTS_TARGET = PLAYER | Équipes (puis joueurs) ayant donné la bonne couleur cochés ; aucune bonne réponse → rien ; couleur assignée sans réponse ignorée ; les cartes QCM gardent leur chip et leur aperçu (+ chip « +N pts » sur les équipes cochées) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -166,7 +166,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Sur un QCM : décocher une équipe, « Tout sélectionner », modifier le champ Points ; créditer une équipe puis revenir ; changer de question | Sélection toujours modifiable ; modifier « Points » ne recoche ni ne décoche ; équipe déjà créditée jamais cochée ; sélection vidée au changement de question ; rien n'est envoyé avant « Attribuer les points » ; chip « +N pts » en en-tête de carte pour chaque équipe cochée non créditée (montant ≠ 0), qui disparaît à la décoche (retour PRET/rien) ; un montant négatif (pénalité) s'affiche en rouge ; une équipe déjà créditée n'a pas de chip | | |
+| 1 | Sur un QCM : décocher une équipe, « Tout sélectionner », modifier le champ Points ; créditer une équipe puis revenir ; changer de question | Sélection toujours modifiable ; modifier « Points » ne recoche ni ne décoche ; équipe déjà créditée jamais cochée ; sélection vidée au changement de question ; rien n'est envoyé avant « Attribuer les points » ; chip « +N pts » en en-tête de carte pour chaque équipe cochée non créditée (montant ≠ 0), qui disparaît à la décoche (retour PRET/rien) ; un montant négatif (pénalité) s'affiche en rouge ; une équipe déjà créditée n'a pas de chip ; la chip « +N pts » est le SEUL affichage du gain d'équipe au niveau équipe (plus de petit « +N » à côté des points) ; au niveau JOUEUR, le montant est sur la ligne du joueur | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -200,10 +200,24 @@
 
 ---
 
+## Scénario 13 — Picto : décompte sur la tablette du dessinateur
+
+**Validation** : HUMAIN — **Issues** : #326
+
+**Objectif** : le décompte de lancement du chrono est visible aussi par le dessinateur.
+
+| Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Question Picto, équipe et dessinateur choisis, lancer le chrono (décompte 3-2-1 / GO!) | Le décompte 3-2-1 / GO! s'affiche aussi sur la tablette du dessinateur (écran de préparation « C'est toi qui dessines ! »), sans révéler le mot ni toucher la feuille ; TV, admin et anim inchangés | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Criteres de Validation
 
 - [ ] Scénario 0 (#322) PASS
-- [ ] Tous les scénarios 1 à 12 PASS (aucune sélection cochée à tort, jamais d'unité déjà créditée ni à montant ≤ 0)
+- [ ] Tous les scénarios 1 à 13 PASS (aucune sélection cochée à tort, jamais d'unité déjà créditée ni à montant ≤ 0)
 - [ ] Les attributions groupées existantes (#244 / #251 / #254 / #289) se comportent comme avant
 
 ## Notes QA
