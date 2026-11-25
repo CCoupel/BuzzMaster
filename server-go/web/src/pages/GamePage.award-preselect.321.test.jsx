@@ -66,6 +66,16 @@ describe('GamePage — présélection à l’entrée en REVEALED (#321)', () => 
     expect(checked().sort()).toEqual(['Bleus', 'Verts'])
   })
 
+  it('chip « +N pts » sur l’équipe cochée seulement ; décochée, il disparaît', () => {
+    reveal({ question: { ID: '11', TYPE: 'SPEEDY', QUESTION: 'Q', ANSWER: 'A', POINTS: '3', POINTS_TARGET: 'TEAM', STATUS: 'REVEALED' } })
+    const chips = () => [...document.querySelectorAll('.award-chip')].map((e) => e.textContent)
+    expect(chips()).toEqual(['+3 pts'])
+    fireEvent.click(box('Bleus'))
+    expect(chips()).toEqual(['+3 pts', '+3 pts'])
+    fireEvent.click(box('Bleus'))
+    expect(chips()).toEqual(['+3 pts'])
+  })
+
   it('SPEEDY niveau équipe : le premier buzzeur est coché (équipe de plus petit TIME)', () => {
     reveal({ question: { ID: '2', TYPE: 'SPEEDY', QUESTION: 'Q', ANSWER: 'x', POINTS: '3', POINTS_TARGET: 'TEAM', STATUS: 'REVEALED' } })
     expect(checked()).toEqual(['Rouges'])

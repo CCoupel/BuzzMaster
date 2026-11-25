@@ -1066,3 +1066,6 @@
 .player-select-checkbox:disabled { cursor: not-allowed; opacity: 0.6; }
 .buzzer-mini .award-done-chip { margin-left: 0; margin-right: 0.4rem; }
 .buzzer-mini .award-preview { margin-left: 0; margin-right: 0.4rem; }
+
+/* #321 — chip de gain prévu (équipe cochée) : pénalité en rouge */
+.memory-acquired-badge.award-chip-neg { background: #dc2626; color: #fff; }

@@ -396,6 +396,7 @@ export default function TeamCard({
   onSelectChange = null,
   awardedInfo = null, // { POINTS } si l'équipe est dans AWARDED_TEAMS
   awardPreview = null, // montant prévu (équipe sélectionnée)
+  awardChip = null, // #321 — chip « +N pts » (équipe cochée, sans chip dédié) ; null = rien
   // #254 — attribution au niveau JOUEUR : cases sur les lignes de joueurs (pas de case d'équipe).
   // { selected(mac), onChange(mac, checked), awarded(mac) → {POINTS}|null, preview(mac) → number|null }
   playerAward = null,
@@ -546,6 +547,14 @@ export default function TeamCard({
             animate={{ scale: 1 }}
           >
             +{qcmAcquiredPoints} pts
+          </motion.span>
+        ) : awardChip !== null && gamePhase === 'REVEALED' ? (
+          <motion.span
+            className={`memory-acquired-badge award-chip${awardChip < 0 ? ' award-chip-neg' : ''}`}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+          >
+            {awardChip > 0 ? '+' : ''}{awardChip} pts
           </motion.span>
         ) : ready && (
           <motion.span

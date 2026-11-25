@@ -2040,6 +2040,8 @@ export default function GamePage() {
                   onSelectChange={toggleAwardKey}
                   awardedInfo={team.name in awardedTeams ? awardedTeams[team.name] : null}
                   awardPreview={awardSelected.has(team.name) ? awardTeamAmount(team.name) : null}
+                  awardChip={isRevealedPhase && !isPlayerLevel && awardSelected.has(team.name) && !(team.name in awardedTeams) && awardTeamAmount(team.name) !== 0
+                    ? awardTeamAmount(team.name) : null}
                   playerAward={isRevealedPhase && isPlayerLevel ? {
                     selected: (mac) => awardSelected.has(mac),
                     onChange: toggleAwardKey,
