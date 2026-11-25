@@ -18,7 +18,7 @@ export const CUE_LABELS = {
   'memory-paire': { label: 'Paire trouvée', sub: 'Les deux cartes correspondent (la paire ratée joue « Erreur », onglet Global)' },
   'memotion-selection': { label: 'Carte choisie', sub: "L'équipe sélectionne une carte de la grille" },
   'memotion-fin-carte': { label: 'Fin de carte', sub: 'Carte fermée sans gagnant (avec gagnant : « Points gagnés », onglet Global)' },
-  'rafale-bonne': { label: 'Bonne réponse', sub: "L'animateur valide la réponse RAFALE" },
+  'rafale-bonne': { label: 'Bonne réponse', sub: "L'animateur valide la réponse Rafale Speedy" },
   'rafale-mauvaise': { label: 'Mauvaise réponse', sub: "L'animateur invalide (ou passe) la réponse" },
   'rafale-fin-lot': { label: 'Fin de lot', sub: 'Le réservoir est épuisé ou le nombre maximal de questions est atteint' },
 }

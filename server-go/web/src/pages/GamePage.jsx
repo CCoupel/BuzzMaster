@@ -1226,7 +1226,7 @@ export default function GamePage() {
           return (
             <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
               <div className="memory-selector-label">
-                🌀 RAFALE · {modeLabel}
+                🌀 Rafale Speedy · {modeLabel}
               </div>
               <WaitReasonLines reasons={waitReasons} />
               <div className="memory-chips-row">
@@ -1824,7 +1824,7 @@ export default function GamePage() {
                     : rafaleTeamsBlocked && !isPlaying
                     ? 'Selectionnez au moins une equipe participante avant de demarrer — contrat §5.1'
                     : rafaleBlocked && !isPlaying
-                      ? 'Selectionnez une categorie et verifiez le pool RAFALE (disponibilite) avant de demarrer — contrat §7.2'
+                      ? 'Selectionnez une categorie et verifiez le Pool Speedy (disponibilite) avant de demarrer — contrat §7.2'
                       : undefined
                 }
                 disabled={launchLocked || (!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked || (gameState.phase === 'READY' && pictoLaunchBlocked(gameState))))}

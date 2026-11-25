@@ -61,7 +61,7 @@ export const QUESTION_TYPES = [
   // ci-dessous (pas de génération IA, décision du 2026-08-28 non rouverte).
   // `defaultPointsRule: 'STARS_PRORATA'` (217-Q4, contrat rafale.md §14.4) —
   // même barème que MEMORY.
-  { key: 'RAFALE', label: 'Rafale', icon: '🌀', color: '#f97316', nestable: true, defaultPointsRule: 'STARS_PRORATA' },
+  { key: 'RAFALE', label: 'Rafale Speedy', icon: '🌀', color: '#f97316', nestable: true, defaultPointsRule: 'STARS_PRORATA' },
   // ENTRACTE (#214, milestone v9.0.0) — second déclencheur du mécanisme
   // ENTRACTE existant (#119) : une entrée du déroulé qui porte sa propre
   // configuration de pause (titre/sous-titre/image, mêmes réglages que

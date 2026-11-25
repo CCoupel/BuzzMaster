@@ -125,7 +125,7 @@ function switchToRafaleAndGetModeRadios(container) {
   // ajoute un onglet "Rafale" (role="tab") sur cette même page — même
   // libellé visible que le bouton de type, texte seul ne suffit plus à
   // distinguer les deux.
-  fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Rafale Speedy' }))
   return {
     solo: container.querySelector('input[name="rafaleMode"][value="SOLO"]'),
     chacunSonTour: container.querySelector('input[name="rafaleMode"][value="CHACUN_SON_TOUR"]'),
@@ -150,7 +150,7 @@ describe('QuestionsPage — sélecteur de mode RAFALE (v8.0.0, #199, bugfix coh�
     render(<QuestionsPage />)
     // getByRole('button', ...) : #215 ajoute un onglet "Rafale" (role="tab")
     // sur cette même page — distinct du bouton de type ciblé ici.
-    expect(screen.getByRole('button', { name: 'Rafale' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Rafale Speedy' })).toBeInTheDocument()
   })
 
   it('le sélecteur de mode RAFALE (4 radios) n\'est PAS rendu tant que le type RAFALE n\'est pas sélectionné', () => {
@@ -248,7 +248,7 @@ describe('QuestionsPage — sélecteur de mode RAFALE (v8.0.0, #199, bugfix coh�
 
     // Bascule sur un autre type puis retour sur Rafale.
     fireEvent.click(screen.getByText(/qcm/i).closest('button'))
-    fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rafale Speedy' }))
 
     radios = {
       solo: container.querySelector('input[name="rafaleMode"][value="SOLO"]'),
@@ -361,7 +361,7 @@ describe('QuestionsPage — RAFALE : sélecteur multi-chips catégories/difficul
     fireEvent.click(screen.getByRole('button', { name: /Histoire/ }))
 
     fireEvent.click(screen.getByText(/qcm/i).closest('button'))
-    fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rafale Speedy' }))
 
     expect(screen.getByRole('button', { name: /Histoire/ })).toHaveAttribute('aria-pressed', 'true')
   })

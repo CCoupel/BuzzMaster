@@ -179,7 +179,7 @@ describe('Éditeur MEMOTION — ligne « Points » de chaque carte (#190)', () =
     expect(optionLabels(card)).toEqual(['Étoiles (défaut)', 'Montant fixe'])
   })
 
-  it.each(['Memory', 'Rafale'])('carte %s : 4 options, « Prorata des étoiles (défaut) » en premier', (label) => {
+  it.each(['Memory', 'Rafale Speedy'])('carte %s : 4 options, « Prorata des étoiles (défaut) » en premier', (label) => {
     const { container } = renderNewMemotion()
     const card = cardAt(container, 0)
     chooseType(card, label)
@@ -264,7 +264,7 @@ describe('Éditeur MEMOTION — POINTS_RULE dans le payload motion_cards (#190)'
   it('Par unité 2 sur une carte RAFALE : { MODE: \'PER_UNIT\', VALUE: 2 }', async () => {
     const { container } = editExisting(memotionQuestion())
     const card = cardAt(container, 0)
-    chooseType(card, 'Rafale')
+    chooseType(card, 'Rafale Speedy')
     chooseMode(card, 'PER_UNIT')
     setAmount(card, 'Points par unité', 2)
     submit()
@@ -327,7 +327,7 @@ describe('Éditeur MEMOTION — Montant fixe / Par unité sans montant valide : 
   it('Par unité sans montant : message « Indiquez un montant par unité (1 à 999) », aucun POST', async () => {
     const { container } = editExisting(memotionQuestion())
     const card = cardAt(container, 0)
-    chooseType(card, 'Rafale')
+    chooseType(card, 'Rafale Speedy')
     chooseMode(card, 'PER_UNIT')
     submit()
     await settle()
@@ -388,7 +388,7 @@ describe('Éditeur MEMOTION — changement de type de carte (#190)', () => {
   it('RAFALE « Par unité » → SPEEDY : règle inapplicable remise au défaut + avertissement bref', () => {
     const { container } = editExisting(memotionQuestion())
     const card = cardAt(container, 0)
-    chooseType(card, 'Rafale')
+    chooseType(card, 'Rafale Speedy')
     chooseMode(card, 'PER_UNIT')
     setAmount(card, 'Points par unité', 2)
     chooseType(card, 'Speedy')
@@ -401,7 +401,7 @@ describe('Éditeur MEMOTION — changement de type de carte (#190)', () => {
   it('RAFALE « Par unité » → SPEEDY : POINTS_RULE absent du payload enregistré', async () => {
     const { container } = editExisting(memotionQuestion())
     const card = cardAt(container, 0)
-    chooseType(card, 'Rafale')
+    chooseType(card, 'Rafale Speedy')
     chooseMode(card, 'PER_UNIT')
     setAmount(card, 'Points par unité', 2)
     chooseType(card, 'Speedy')
@@ -447,7 +447,7 @@ describe('Éditeur MEMOTION — changement de type de carte (#190)', () => {
   it('l\'avertissement disparaît au prochain changement de barème', () => {
     const { container } = editExisting(memotionQuestion())
     const card = cardAt(container, 0)
-    chooseType(card, 'Rafale')
+    chooseType(card, 'Rafale Speedy')
     chooseMode(card, 'PER_UNIT')
     setAmount(card, 'Points par unité', 2)
     chooseType(card, 'Speedy')

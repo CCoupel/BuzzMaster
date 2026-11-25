@@ -254,7 +254,7 @@ describe('PlayerDisplay — RAFALE : écran TV non-vide en READY (bugfix SHA 560
 
   it('phase READY : le nom du type de jeu (RAFALE) est toujours affiché, jamais le repli "PRÉPAREZ-VOUS" — même sans aucune catégorie/difficulté configurée', () => {
     renderTV({ phase: 'READY', question: RAFALE_QUESTION }) // fixture par défaut, sans CATEGORY ni RAFALE_CATEGORIES
-    expect(screen.getByText('RAFALE')).toBeInTheDocument()
+    expect(screen.getByText('Rafale Speedy')).toBeInTheDocument()
     expect(screen.queryByText('PRÉPAREZ-VOUS')).not.toBeInTheDocument()
   })
 
@@ -472,7 +472,7 @@ describe('PlayerDisplay — RAFALE VPlayer : indicateur équipe active (tâche 3
     const zone = container.querySelector('.rafale-vplayer-fullscreen')
     expect(zone).not.toBeNull()
     expect(zone.classList.contains('rafale-vplayer-neutral')).toBe(true)
-    expect(zone.textContent).toContain('Manche RAFALE en cours')
+    expect(zone.textContent).toContain('Manche Rafale Speedy en cours')
   })
 
   it('mode multi, c\'est le tour de MA propre équipe : indicateur plein écran "À VOUS DE RÉPONDRE"', () => {

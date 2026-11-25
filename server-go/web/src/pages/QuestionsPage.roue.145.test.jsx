@@ -93,7 +93,7 @@ describe('QuestionsPage — type ROUE (#145)', () => {
   it('l\'éditeur ROUE n\'apparaît pas pour un autre type', () => {
     render(<QuestionsPage />)
     expect(screen.queryByLabelText(/Phrase à deviner/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rafale Speedy' }))
     expect(screen.queryByLabelText(/Phrase à deviner/)).toBeNull()
   })
 

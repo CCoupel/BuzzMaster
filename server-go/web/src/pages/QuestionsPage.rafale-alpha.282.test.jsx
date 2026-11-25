@@ -50,7 +50,7 @@ beforeEach(() => {
 
 const openRafale = () => {
   const r = render(<QuestionsPage />)
-  fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Rafale Speedy' }))
   return r
 }
 const alphaSwitch = () => screen.queryByRole('switch', { name: /Alphabétique/ })

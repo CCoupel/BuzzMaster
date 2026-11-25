@@ -1732,7 +1732,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               if (isVPlayer) {
                 return (
                   <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
-                    <span className="rafale-vplayer-fs-message">Préparez-vous —<br />manche RAFALE</span>
+                    <span className="rafale-vplayer-fs-message">Préparez-vous —<br />manche Rafale Speedy</span>
                   </div>
                 )
               }
@@ -1768,7 +1768,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         className="rafale-ready-gtype"
                         style={{ color: GAME_TYPE_COLORS.RAFALE.color, textShadow: `0 0 20px ${GAME_TYPE_COLORS.RAFALE.shadow}, 0 0 50px ${GAME_TYPE_COLORS.RAFALE.shadow}` }}
                       >
-                        RAFALE
+                        Rafale Speedy
                       </span>
                       {rafaleReadyCategories.length > 0 && (
                         <>
@@ -3204,7 +3204,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 if (!isMultiTeam) {
                   return (
                     <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
-                      <span className="rafale-vplayer-fs-message">Manche RAFALE en cours</span>
+                      <span className="rafale-vplayer-fs-message">Manche Rafale Speedy en cours</span>
                     </div>
                   )
                 }

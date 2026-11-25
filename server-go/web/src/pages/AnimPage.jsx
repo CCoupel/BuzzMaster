@@ -313,7 +313,7 @@ export default function AnimPage() {
     ? (motionSubphase === 'SELECTED' && selectedMotionCard
         ? `Carte « ${selectedMotionCard.RECTO_THEME} » — ${'★'.repeat(selectedMotionCard.DIFFICULTY || 1)} · ${motionCardDisplay.prefix}${motionCardPoints}pt${motionCardPoints > 1 ? 's' : ''}${motionCardDisplay.suffix}`
         : motionSubphase === 'QUESTION' && isSelectedCardRafale
-          ? (typeState.rafale.currentQuestion.QUESTION || 'Rafale en cours')
+          ? (typeState.rafale.currentQuestion.QUESTION || 'Rafale Speedy en cours')
           : (motionSubphase === 'QUESTION' || motionSubphase === 'REVEAL') && selectedMotionCard?.QUESTION_TEXT
             ? selectedMotionCard.QUESTION_TEXT
             : motionSubphase === 'MEMORIZE'

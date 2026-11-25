@@ -191,7 +191,7 @@ describe('GamePage — non-régression du fail-closed (SHA 1a742782) : catégori
 
     const startBtn = await screen.findByText('START')
     await waitFor(() => {
-      expect(startBtn.title).toMatch(/RAFALE/) // tooltip de blocage présent
+      expect(startBtn.title).toMatch(/Pool Speedy/) // tooltip de blocage présent
     })
     expect(startBtn.disabled).toBe(true)
   })

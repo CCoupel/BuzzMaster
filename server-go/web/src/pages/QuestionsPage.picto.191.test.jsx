@@ -92,7 +92,7 @@ describe('QuestionsPage — type PICTO (#191)', () => {
 
   it('l\'éditeur PICTO n\'apparaît pas pour un autre type', () => {
     render(<QuestionsPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rafale Speedy' }))
     expect(screen.queryByLabelText(/Mots de la question/)).toBeNull()
   })
 
