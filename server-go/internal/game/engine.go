@@ -4302,6 +4302,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	if opts.ResetQuestions {
 		e.questionStatuses = make(map[string]QuestionStatus)
 		e.rafalePool.used = make(map[string]bool)
+		e.pictoPool.used = make(map[string]bool) // v13.1.0 — both instances (contracts/picto-pool.md §3)
 	}
 
 	// 6. always: no current question, game-type states back to zero.
@@ -4363,6 +4364,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	if opts.ResetQuestions {
 		safeGo("SaveStatuses", e.SaveStatuses)
 		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+		safeGo("SavePictoUsed", e.SavePictoUsed)
 	}
 	return res
 }

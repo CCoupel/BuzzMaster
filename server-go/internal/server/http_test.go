@@ -91,6 +91,12 @@ func setupTestHTTPServer(t *testing.T) (*HTTPServer, string) {
 	// handleRestore's game_state.json case could never be genuinely
 	// exercised by a test.
 	engine.SetStatePath(filepath.Join(dataDir, "config", "game_state.json"))
+	// #324 — mirror main.go's reservoir wiring (RAFALE + Pool Picto), so a
+	// test can observe files/<pool>/reservoir.json and config/<pool>_used.json.
+	engine.SetRafalePath(filepath.Join(dataDir, "files", "rafale", "reservoir.json"))
+	engine.SetRafaleUsedPath(filepath.Join(dataDir, "config", "rafale_used.json"))
+	engine.SetPictoPath(filepath.Join(dataDir, "files", "picto", "reservoir.json"))
+	engine.SetPictoUsedPath(filepath.Join(dataDir, "config", "picto_used.json"))
 	wsHub := NewWebSocketHub()
 	go wsHub.Run()
 	logsHub := NewLogsWebSocketHub(100)
