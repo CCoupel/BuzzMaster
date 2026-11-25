@@ -60,6 +60,7 @@ export function outcomeLabel(gs) {
     case 'TIMEOUT': return '⏰ Temps écoulé'
     case 'STOPPED': return '⏹ Manche arrêtée'
     case 'NO_WORD': return 'Aucun mot dans la question'
+    case 'POOL_END': return '🗂 Fin du pool'
     default: return ''
   }
 }
@@ -89,10 +90,11 @@ export function teamCss(color, fallback = '#6b7280') {
  */
 export function pictoWordsInfo(gs) {
   const q = gs?.question || {}
-  const fromPool = q.PICTO_SOURCE === 'RESERVOIR'
+  const rafale = q.TYPE === 'RAFALE_PICTO' // champs propres du type (picto.md §17.2)
+  const fromPool = (rafale ? q.RAFALE_PICTO_SOURCE : q.PICTO_SOURCE) === 'RESERVOIR'
   return {
     fromPool,
     available: gs?.PICTO_POOL_AVAILABLE || 0,
-    words: gs?.PICTO_WORDS_COUNT || (q.PICTO_WORDS || []).length || 0,
+    words: gs?.PICTO_WORDS_COUNT || ((rafale ? q.RAFALE_PICTO_WORDS : q.PICTO_WORDS) || []).length || 0,
   }
 }

@@ -35,3 +35,16 @@
 .anim-picto-actions { display: flex; flex-direction: column; gap: 0.5rem; }
 .anim-picto-actions .picto-btn { font-size: 1.1rem; padding: 0.9rem 1rem; }
 .anim-picto-outcome { background: var(--gray-50, #f9fafb); border-radius: 0.6rem; padding: 0.6rem 0.8rem; font-size: 0.85rem; }
+
+/* #318 — conduite Rafale Picto (admin M7 / anim M6) : fil des mots, boutons Passer / Trouvé */
+.picto-rafale { display: flex; flex-direction: column; gap: 0.6rem; }
+.picto-rafale-stats { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.picto-credit { background: #ecfdf5; border-color: #16a34a; color: #166534; }
+.picto-rafale-actions { display: flex; gap: 0.6rem; }
+.picto-rafale-actions .picto-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.1rem; }
+.picto-rafale-anim .picto-rafale-actions .picto-btn { min-height: 72px; font-size: 1.15rem; }
+.picto-btn-sub { font-size: 0.72rem; font-weight: 400; opacity: 0.85; }
+.picto-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.picto-thread ol { list-style: none; margin: 0.3rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.85rem; }
+.picto-thread-passed { color: #6b7280; }
+.picto-thread-current { font-weight: 700; }

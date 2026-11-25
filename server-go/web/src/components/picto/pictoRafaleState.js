@@ -76,3 +76,6 @@ export function closeThread(thread, ev, seen) {
 }
 
 export const THREAD_ICON = { found: '✅', passed: '⏭', current: '✏️', revealed: '⌛' }
+
+/** Mots nécessaires estimés pour la manche : plafond(TIME / 10) (picto.md §17.3). */
+export const neededWords = (q) => (Number(q?.TIME) > 0 ? Math.ceil(Number(q.TIME) / 10) : 0)
