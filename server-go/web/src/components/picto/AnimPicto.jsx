@@ -18,7 +18,8 @@ import './PictoPanel.css'
 /** Vue pure (testable) ; `AnimPicto` (défaut) la branche sur le contexte de jeu. */
 export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions, error, pictoWord = null, store = null, customCategories = [], onReveal = null }) {
   const q = gs.question || {}
-  const cat = categoryMeta(q.CATEGORY, customCategories)
+  // v13.1.0 : indice = catégorie du mot en cours (pool Picto), sinon celle de la question (crédit)
+  const cat = categoryMeta(gs.PICTO_WORD_CATEGORY || q.CATEGORY, customCategories)
   const words = gs.PICTO_WORDS_COUNT || (q.PICTO_WORDS || []).length || 0
   const word = pictoShownWord(gs, pictoWord)
   // Mêmes équipes que la zone équipes de l'anim : celles qui ont au moins un joueur

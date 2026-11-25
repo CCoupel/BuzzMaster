@@ -58,6 +58,14 @@ describe('PlayerDisplay — type PICTO (#192/#193)', () => {
     const { container } = render(<PlayerDisplay />)
     expect(container.querySelector('.countdown-number')).not.toBeNull()
   })
+  it('indice TV (#324, picto.md §17) : la catégorie du mot tiré (PICTO_WORD_CATEGORY) remplace celle de la question', () => {
+    mockGame({ phase: 'STARTED', PICTO_WORD_CATEGORY: 'HISTORY' })
+    const { container } = render(<PlayerDisplay />)
+    const hint = container.querySelector('[data-testid="picto-hint"] .picto-hint-cat')
+    expect(hint).not.toBeNull()
+    const questionHint = (() => { mockGame({ phase: 'STARTED' }); const r = render(<PlayerDisplay />); return r.container.querySelector('[data-testid="picto-hint"] .picto-hint-cat')?.textContent })()
+    expect(hint.textContent).not.toBe(questionHint) // catégorie du mot ≠ catégorie de la question
+  })
   it('STARTED TV : indice et feuille, aucun repli sur le bloc générique (ni énoncé ni réponse)', () => {
     mockGame({ phase: 'STARTED' })
     const { container } = render(<PlayerDisplay />)

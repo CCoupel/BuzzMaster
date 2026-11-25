@@ -3151,7 +3151,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             {isPicto && (showGameContent || pictoDrawerPrep) && (
               <PictoTv
                 gameState={gameState}
-                catMeta={categoryMeta(gameState.question?.CATEGORY, apiCategories)}
+                catMeta={categoryMeta(gameState.PICTO_WORD_CATEGORY || gameState.question?.CATEGORY, apiCategories)} /* v13.1.0 : indice = catégorie du mot tiré (pool), sinon de la question */
                 isVPlayer={isVPlayer}
                 playerId={playerId}
                 teamName={teamName}

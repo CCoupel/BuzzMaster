@@ -223,6 +223,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     PICTO_WORDS_COUNT: 0,
     PICTO_CANVAS_EPOCH: 0,
     PICTO_OUTCOME: '',
+    PICTO_WORD_CATEGORY: '', // v13.1.0 : indice public (catégorie du mot en cours, pool) — picto.md §17
+    PICTO_POOL_AVAILABLE: 0,
     PICTO_REVEALED_WORD: '',
     PICTO_REVEALED_CATEGORY: '',
     // Son de la question (v11.1, #219, contrats game-state.md/sound.md §10).
@@ -650,6 +652,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             PICTO_WORDS_COUNT: MSG.GAME.PICTO_WORDS_COUNT ?? prev.PICTO_WORDS_COUNT,
             PICTO_CANVAS_EPOCH: MSG.GAME.PICTO_CANVAS_EPOCH ?? prev.PICTO_CANVAS_EPOCH,
             PICTO_OUTCOME: MSG.GAME.PICTO_OUTCOME ?? prev.PICTO_OUTCOME,
+            PICTO_WORD_CATEGORY: MSG.GAME.PICTO_WORD_CATEGORY ?? prev.PICTO_WORD_CATEGORY,
+            PICTO_POOL_AVAILABLE: MSG.GAME.PICTO_POOL_AVAILABLE ?? prev.PICTO_POOL_AVAILABLE,
             PICTO_REVEALED_WORD: MSG.GAME.PICTO_REVEALED_WORD ?? prev.PICTO_REVEALED_WORD,
             PICTO_REVEALED_CATEGORY: MSG.GAME.PICTO_REVEALED_CATEGORY ?? prev.PICTO_REVEALED_CATEGORY,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
