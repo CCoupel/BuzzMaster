@@ -84,7 +84,8 @@ export function PictoTvScreen({ gameState: gs, catMeta, store }) {
 }
 
 /** Tablette du dessinateur : préparation (« C'est toi qui dessines ! ») puis mot en bandeau et feuille (M4). */
-export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage, error, landscape = false }) {
+export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage, error, landscape = false, catMeta = null }) {
+  const rafale = isRafalePicto(gs.question?.TYPE)
   const prep = ['PREPARE', 'READY', 'COUNTDOWN'].includes(gs.phase)
   const word = pictoShownWord(gs, pictoWord)
   const locked = gs.phase !== 'STARTED'
@@ -115,7 +116,11 @@ export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage
   return (
     <div className={`picto-tab drawer${landscape ? ' land' : ''}`} data-testid="picto-drawer">
       <div className="picto-tab-banner">
-        <span>{revealed ? 'Mot révélé' : `Fais deviner · ⏱ ${mmss(gs.timer)}`}</span>
+        <span>
+          {revealed ? 'Mot révélé' : `Fais deviner · ⏱ ${mmss(gs.timer)}`}
+          {rafale && !revealed && <b className="picto-tab-found" data-testid="picto-drawer-found"> · ✅ {gs.PICTO_FOUND_COUNT || 0} mot{(gs.PICTO_FOUND_COUNT || 0) > 1 ? 's' : ''}</b>}
+        </span>
+        {rafale && !revealed && catMeta && <span className="picto-tab-cat" data-testid="picto-drawer-cat">Ton mot · {catMeta.icon ? `${catMeta.icon} ` : ''}{catMeta.label}</span>}
         <div className="picto-tab-word" data-testid="picto-drawer-word">{word || '—'}</div>
       </div>
       <div className="picto-tab-sheet">
@@ -135,11 +140,21 @@ export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage
 /** Autres tablettes : équipe qui dessine (devine à l'oral), autres équipes (attendent), révélation. */
 export function PictoGuesserScreen({ gameState: gs, teamName }) {
   const mine = !!teamName && teamName === gs.PICTO_TEAM
+  const rafale = isRafalePicto(gs.question?.TYPE)
+  const foundCount = gs.PICTO_FOUND_COUNT || 0
+  const passCount = gs.PICTO_PASS_COUNT || 0
+  const foundWords = Array.isArray(gs.PICTO_FOUND_WORDS) ? gs.PICTO_FOUND_WORDS : []
   if (gs.phase === 'REVEALED') {
     return (
       <div className="picto-tab center" data-testid="picto-guesser-revealed">
         <div className="picto-tab-sub">Mot révélé</div>
         {gs.PICTO_REVEALED_WORD ? <div className="picto-tab-word big">{gs.PICTO_REVEALED_WORD}</div> : null}
+        {rafale && foundWords.length > 0 && (
+          <ul className="picto-tab-found-list" data-testid="picto-guesser-found-list">
+            {foundWords.map((w, i) => <li key={`${w}-${i}`}>✅ {w}</li>)}
+          </ul>
+        )}
+        {rafale && <div className="picto-tab-sub" data-testid="picto-guesser-recap">{foundLabel(foundCount)} · {passUsedLabel(passCount)}</div>}
       </div>
     )
   }
@@ -147,7 +162,13 @@ export function PictoGuesserScreen({ gameState: gs, teamName }) {
     <div className="picto-tab center" data-testid="picto-guesser">
       <div className="picto-tab-emoji" aria-hidden="true">{mine ? '👀' : '✏️'}</div>
       <div className="picto-tab-title">{mine ? 'Devinez !' : `${gs.PICTO_TEAM || "L'équipe"} devine le dessin ${deName(gs.PICTO_DRAWER_NAME)}`}</div>
-      <div className="picto-tab-sub">{mine ? `${gs.PICTO_DRAWER_NAME || '—'} dessine — regardez la TV` : 'Attendez votre tour.'}</div>
+      <div className="picto-tab-sub">{mine ? `${gs.PICTO_DRAWER_NAME || '—'} dessine — regardez la TV` : (rafale ? '' : 'Attendez votre tour.')}</div>
+      {rafale && (
+        <div className="picto-tab-sub" data-testid="picto-guesser-counts">
+          ✅ {foundLabel(foundCount)}
+          {mine && passCount > 0 && <><br />⏭ {passCount} passe{passCount > 1 ? 's' : ''} utilisée{passCount > 1 ? 's' : ''}</>}
+        </div>
+      )}
       <div className="picto-tab-timer">{mmss(gs.timer)}</div>
     </div>
   )
@@ -156,7 +177,7 @@ export function PictoGuesserScreen({ gameState: gs, teamName }) {
 export default function PictoTv({ gameState, catMeta, isVPlayer = false, playerId = null, teamName = null, pictoWord = null, store = null, sendMessage, error = null }) {
   if (!isVPlayer) return <PictoTvScreen gameState={gameState} catMeta={catMeta} store={store} />
   if (playerId && gameState.PICTO_DRAWER && playerId === gameState.PICTO_DRAWER) {
-    return <PictoDrawerScreen gameState={gameState} pictoWord={pictoWord} store={store} sendMessage={sendMessage} error={error} />
+    return <PictoDrawerScreen gameState={gameState} pictoWord={pictoWord} store={store} sendMessage={sendMessage} error={error} catMeta={catMeta} />
   }
   return <PictoGuesserScreen gameState={gameState} teamName={teamName} />
 }
