@@ -14,7 +14,10 @@ export function makePictoActions(sendMessage) {
     setDrawer: (player) => sendMessage('PICTO_SET_DRAWER', { PLAYER: player || '' }),
     drawDrawer: () => sendMessage('PICTO_DRAW_DRAWER', {}),
     // « Trouvé ! » (§6.3/§6.4) : STARTED, PAUSED, ou STOPPED après TIMEOUT (réponse donnée sur le gong)
-    found: () => sendMessage('PICTO_FOUND', {}),
+    // `epoch` : obligatoire en Rafale Picto (STALE_WORD sinon), facultatif en Picto un mot (§17.5)
+    found: (epoch) => sendMessage('PICTO_FOUND', epoch === undefined || epoch === null ? {} : { EPOCH: epoch }),
+    // « Passer » (Rafale Picto seulement, §17.5) : admin et anim ; le dessinateur l'annonce à l'oral
+    pass: (epoch) => sendMessage('PICTO_PASS', { EPOCH: epoch }),
   }
 }
 

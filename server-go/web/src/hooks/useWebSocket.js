@@ -225,6 +225,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     PICTO_OUTCOME: '',
     PICTO_WORD_CATEGORY: '', // v13.1.0 : indice public (catégorie du mot en cours, pool) — picto.md §17
     PICTO_POOL_AVAILABLE: 0,
+    // Rafale Picto (v13.1.0, #318, picto.md §17.4) : état de manche de la famille, jamais null ; PICTO_FOUND_WORDS = mots trouvés seulement
+    PICTO_FOUND_COUNT: 0,
+    PICTO_FOUND_WORDS: [],
+    PICTO_PASS_COUNT: 0,
+    PICTO_PASSES_LEFT: -1, // −1 = illimité
+    PICTO_ROUND_POINTS: 0,
     PICTO_REVEALED_WORD: '',
     PICTO_REVEALED_CATEGORY: '',
     // Son de la question (v11.1, #219, contrats game-state.md/sound.md §10).
@@ -654,6 +660,11 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             PICTO_OUTCOME: MSG.GAME.PICTO_OUTCOME ?? prev.PICTO_OUTCOME,
             PICTO_WORD_CATEGORY: MSG.GAME.PICTO_WORD_CATEGORY ?? prev.PICTO_WORD_CATEGORY,
             PICTO_POOL_AVAILABLE: MSG.GAME.PICTO_POOL_AVAILABLE ?? prev.PICTO_POOL_AVAILABLE,
+            PICTO_FOUND_COUNT: MSG.GAME.PICTO_FOUND_COUNT ?? prev.PICTO_FOUND_COUNT,
+            PICTO_FOUND_WORDS: MSG.GAME.PICTO_FOUND_WORDS ?? prev.PICTO_FOUND_WORDS,
+            PICTO_PASS_COUNT: MSG.GAME.PICTO_PASS_COUNT ?? prev.PICTO_PASS_COUNT,
+            PICTO_PASSES_LEFT: MSG.GAME.PICTO_PASSES_LEFT ?? prev.PICTO_PASSES_LEFT,
+            PICTO_ROUND_POINTS: MSG.GAME.PICTO_ROUND_POINTS ?? prev.PICTO_ROUND_POINTS,
             PICTO_REVEALED_WORD: MSG.GAME.PICTO_REVEALED_WORD ?? prev.PICTO_REVEALED_WORD,
             PICTO_REVEALED_CATEGORY: MSG.GAME.PICTO_REVEALED_CATEGORY ?? prev.PICTO_REVEALED_CATEGORY,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
@@ -1423,6 +1434,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // MEMOTION (#160/F2) — clôt la carte en cours (retour à GRID), avec ou
   // sans équipe gagnante. CARD_ID doit toujours être renseigné (même pour
   // "annuler"/"sans vainqueur") — le moteur le compare à MEMOTION_SELECTED.
+  // RAFALE_PICTO (v13.1.0, #318, picto.md §17.5) — « Trouvé » et « Passer » : admin et anim SEULEMENT (aucune action
+  // vplayer : le dessinateur annonce la passe à voix haute). `EPOCH` = époque du mot affiché (PICTO_CANVAS_EPOCH) :
+  // une action d'une autre époque est refusée (STALE_WORD), ce qui évite qu'un double geste admin ‖ anim fasse
+  // avancer de deux mots.
+  const pictoFound = useCallback((epoch) => {
+    sendMessage('PICTO_FOUND', epoch === undefined || epoch === null ? {} : { EPOCH: epoch })
+  }, [sendMessage])
+  const pictoPass = useCallback((epoch) => {
+    sendMessage('PICTO_PASS', { EPOCH: epoch })
+  }, [sendMessage])
+
   const doneMotionCard = useCallback((cardId, winnerTeam = '') => {
     sendMessage('MEMOTION_DONE', { CARD_ID: cardId, WINNER_TEAM: winnerTeam })
   }, [sendMessage])
@@ -1761,6 +1783,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     stopMotionTimer,
     revealMotionCard,
     doneMotionCard,
+    pictoFound,
+    pictoPass,
     // New game / Quiz meta
     newGame,
     updateQuizMeta,
