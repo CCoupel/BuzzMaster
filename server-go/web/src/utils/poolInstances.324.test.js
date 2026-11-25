@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { RAFALE_GENERATION_PRESETS } from '../components/RafaleAIGenerateModal'
+import { RAFALE_MAX_QUESTION_RUNES, RAFALE_MAX_ANSWER_RUNES } from '../pages/RafalePage'
 import { POOL_INSTANCES, getPoolInstance, poolUrls } from './poolInstances'
 
 // #324 (v13.1.0, LOT-2 T13 générique) — paramétrage par instance, contrat picto-pool.md §1, §4, §6.
@@ -39,5 +41,13 @@ describe('poolInstances — paramètres', () => {
   it('clé absente ou inconnue : retombe sur rafale', () => {
     expect(getPoolInstance(undefined)).toBe(POOL_INSTANCES.rafale)
     expect(getPoolInstance('nimporte')).toBe(POOL_INSTANCES.rafale)
+  })
+})
+
+describe('poolInstances — constantes lues par le test d\'alignement Go↔JS', () => {
+  it('RAFALE_* des enveloppes == POOL_INSTANCES.rafale (une seule vérité, deux emplacements imposés par le test Go)', () => {
+    expect(RAFALE_GENERATION_PRESETS).toEqual(POOL_INSTANCES.rafale.generationPresets)
+    expect(RAFALE_MAX_QUESTION_RUNES).toBe(POOL_INSTANCES.rafale.maxEntryRunes)
+    expect(RAFALE_MAX_ANSWER_RUNES).toBe(POOL_INSTANCES.rafale.maxAnswerRunes)
   })
 })
