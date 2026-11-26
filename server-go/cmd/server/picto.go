@@ -91,26 +91,70 @@ func (a *App) handlePictoPrepAction(clientID string, msg *protocol.Message) {
 	a.sendPictoError(clientID, perr)
 }
 
-// handlePictoFound processes PICTO_FOUND (admin and anim): « Trouvé ! » stops the round and reveals it in the same
-// action (contracts/picto.md §6.4). A refusal (WRONG_PHASE) answers PICTO_ERROR to the emitter alone — when admin
-// and anim both click, the first applies and the second is refused, never two outcomes. Same side effects as
-// STOP then REVEAL: the question sound and the countdown sound end, the REVEAL broadcast (LED, ambiance, sound).
-func (a *App) handlePictoFound(clientID string) {
-	err := a.engine.PictoFound()
+// pictoStepPayload reads the optional EPOCH of PICTO_FOUND / PICTO_PASS ("EPOCH" absent = nil).
+func pictoStepPayload(msg *protocol.Message) *int {
+	var p protocol.PictoStepPayload
+	if msg != nil && len(msg.Msg) > 0 {
+		_ = json.Unmarshal(msg.Msg, &p)
+	}
+	return p.Epoch
+}
+
+// pictoStepRefused answers a refused PICTO_FOUND / PICTO_PASS with PICTO_ERROR to the emitter alone.
+func (a *App) pictoStepRefused(clientID, action string, err error) {
+	perr, ok := err.(*game.PictoError)
+	if !ok {
+		perr = &game.PictoError{Code: game.PictoErrWrongPhase, Message: err.Error()}
+	}
+	server.LogWarn(game.LogComponentEngine, "%s refused: %s (%s)", action, perr.Code, perr.Message)
+	a.sendPictoError(clientID, perr)
+}
+
+// pictoAfterStep runs the application-layer side effects of an accepted PICTO_FOUND / PICTO_PASS from the phase
+// the engine ended in: REVEALED (a PICTO "Trouvé", or the gong answer in Rafale Picto) = same side effects as
+// STOP then REVEAL — the question sound and the countdown sound end, the REVEAL broadcast (LED, ambiance, sound);
+// STOPPED (POOL_END) = the question sound ends and the next question may now differ; STARTED / PAUSED = the round
+// goes on, the engine already fired PICTO_WORD, the sheet reset and the UPDATE.
+func (a *App) pictoAfterStep(res game.PictoStepResult) {
+	switch res.Phase {
+	case game.PhaseRevealed:
+		a.questionSound().Stop()
+		a.countdownSound().Stop()
+		a.broadcastReveal("") // the revealed word rides GameState (PICTO_REVEALED_WORD), not this message
+		a.broadcastNextQuestion()
+	case game.PhaseStopped:
+		a.questionSound().Stop()
+		a.countdownSound().Stop()
+		a.broadcastNextQuestion()
+	}
+}
+
+// handlePictoFound processes PICTO_FOUND (admin and anim). PICTO (one word): « Trouvé ! » stops the round and
+// reveals it in the same action (contracts/picto.md §6.4). RAFALE_PICTO: the word is counted and the round goes
+// on with the next word (§17.5); EPOCH is mandatory. A refusal (WRONG_PHASE, STALE_WORD) answers PICTO_ERROR to
+// the emitter alone — when admin and anim both click, the first applies and the second is refused, never two
+// outcomes.
+func (a *App) handlePictoFound(clientID string, msg *protocol.Message) {
+	res, err := a.engine.PictoFoundAt(pictoStepPayload(msg))
 	if err != nil {
-		perr, ok := err.(*game.PictoError)
-		if !ok {
-			perr = &game.PictoError{Code: game.PictoErrWrongPhase, Message: err.Error()}
-		}
-		server.LogWarn(game.LogComponentEngine, "PICTO_FOUND refused: %s (%s)", perr.Code, perr.Message)
-		a.sendPictoError(clientID, perr)
+		a.pictoStepRefused(clientID, "PICTO_FOUND", err)
 		return
 	}
 	server.LogInfo(game.LogComponentEngine, "PICTO_FOUND")
-	a.questionSound().Stop()
-	a.countdownSound().Stop()
-	a.broadcastReveal("") // the revealed word rides GameState (PICTO_REVEALED_WORD), not this message
-	a.broadcastNextQuestion()
+	a.pictoAfterStep(res)
+}
+
+// handlePictoPass processes PICTO_PASS (admin and anim only — the drawer announces the pass aloud, no tablet
+// action exists; the inbound allowlist already refuses any other client type). RAFALE_PICTO only (NOT_RAFALE
+// otherwise), STARTED only, EPOCH mandatory, PASS_LIMIT_REACHED when no pass is left.
+func (a *App) handlePictoPass(clientID string, msg *protocol.Message) {
+	res, err := a.engine.PictoPass(pictoStepPayload(msg))
+	if err != nil {
+		a.pictoStepRefused(clientID, "PICTO_PASS", err)
+		return
+	}
+	server.LogInfo(game.LogComponentEngine, "PICTO_PASS")
+	a.pictoAfterStep(res)
 }
 
 // pictoStartRefused is the START guard of a PICTO round (contracts/picto.md §6.1): without a designated and

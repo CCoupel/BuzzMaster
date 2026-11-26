@@ -76,6 +76,9 @@ const mk = (over = {}) => {
 }
 // Parcours réel : sélection de la question (clic sur sa carte), puis passage en REVEALED (la base du barème est fixée à
 // l'entrée en REVEALED). `before(game)` permet d'agir en STOPPED (ex. régler « Points » avant le REVEAL).
+// #321 (v13.1.0) : la présélection coche d'office les bonnes unités à l'entrée en REVEALED. Ces tests (#244/#251/#254)
+// partent d'une sélection vide : on la vide par le geste existant « Tout désélectionner » (assertions inchangées).
+const clearPreselect = () => { const b = screen.queryByRole('button', { name: 'Tout désélectionner' }); if (b) fireEvent.click(b) }
 const show = (over = {}, before) => {
   const game = mk(over)
   useGame.mockReturnValue(mk({ ...over, gameState: { ...(over.gameState || {}), phase: 'STOPPED' } }))
@@ -85,6 +88,7 @@ const show = (over = {}, before) => {
   if (before) before(game)
   useGame.mockReturnValue(game)
   utils.rerender(<GamePage />)
+  clearPreselect()
   return { game, ...utils }
 }
 const reshow = (utils, game, patch) => {
@@ -497,6 +501,7 @@ describe('Commutateur « Tenir compte des indices » (scénarios 22 à 26, 28, 2
     if (card) fireEvent.click(card)
     useGame.mockReturnValue(g)
     utils.rerender(<GamePage />)
+    clearPreselect() // #321
     fireEvent.click(box('Mamie'))
     fireEvent.click(action())
     expect(g.bumperPointsBatch.mock.calls[0][1]).toEqual([{ id: 'vj1', points: 1 }]) // 3 × 0,33 → 1

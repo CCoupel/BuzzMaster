@@ -35,3 +35,21 @@
 .anim-picto-actions { display: flex; flex-direction: column; gap: 0.5rem; }
 .anim-picto-actions .picto-btn { font-size: 1.1rem; padding: 0.9rem 1rem; }
 .anim-picto-outcome { background: var(--gray-50, #f9fafb); border-radius: 0.6rem; padding: 0.6rem 0.8rem; font-size: 0.85rem; }
+
+/* #318 — conduite Rafale Picto (admin M7/M9 / anim M6) : bandeau d'une ligne, mot et boutons, fil regroupé en rangée */
+.picto-rafale { display: flex; flex-direction: column; gap: 0.35rem; }
+.picto-rafale-banner { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+.picto-credit { background: #ecfdf5; border-color: #16a34a; color: #166534; cursor: help; }
+.picto-revealed-chip { background: #fef9c3; border-color: #ca8a04; color: #713f12; font-size: 1rem; }
+.picto-rafale-line { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.picto-rafale-word { font-size: 1.3rem; }
+.picto-rafale-help { margin-left: auto; cursor: help; }
+.picto-rafale-actions { margin-left: auto; display: flex; gap: 0.5rem; }
+.picto-rafale-actions .picto-btn { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; }
+.picto-rafale-anim .picto-rafale-actions { width: 100%; margin-left: 0; }
+.picto-rafale-anim .picto-rafale-actions .picto-btn { flex: 1; min-height: 72px; font-size: 1.15rem; }
+.picto-btn-sub { font-size: 0.72rem; font-weight: 400; opacity: 0.85; }
+.picto-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.picto-thread ol { list-style: none; margin: 0; padding: 0; display: flex; flex-flow: row wrap; gap: 0.25rem; font-size: 0.78rem; line-height: 1.2; }
+.picto-thread li { background: var(--thread-bg, #475569); color: var(--thread-fg, #fff); border-radius: 999px; padding: 0.1rem 0.5rem; white-space: nowrap; }
+.picto-thread-passed { opacity: 0.6; }

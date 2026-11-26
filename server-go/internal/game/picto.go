@@ -25,6 +25,11 @@ const (
 	PictoErrInvalidStrokes    = "INVALID_STROKES"
 	PictoErrCanvasFull        = "CANVAS_FULL"
 	PictoErrRateLimited       = "RATE_LIMITED"
+	PictoErrPoolEmpty         = "POOL_EMPTY" // v13.1.0 (#324): RESERVOIR source with no available word
+	// v13.1.0 (#318, contracts/picto.md §17.10).
+	PictoErrPassLimitReached = "PASS_LIMIT_REACHED"
+	PictoErrNotRafale        = "NOT_RAFALE"
+	PictoErrStaleWord        = "STALE_WORD"
 )
 
 // PictoError is a refused PICTO action: Code is one of the PictoErr* codes. State unchanged.
@@ -50,6 +55,7 @@ type PictoWordInfo struct {
 	Category string
 	Epoch    int
 	DrawerID string
+	FromPool bool // the word was drawn (and marked used) in the Pool Picto: its used flags must be saved
 }
 
 // PICTO_OUTCOME values (contracts/picto.md §6.4).
@@ -58,21 +64,77 @@ const (
 	PictoOutcomeTimeout = "TIMEOUT"
 	PictoOutcomeStopped = "STOPPED"
 	PictoOutcomeNoWord  = "NO_WORD"
+	PictoOutcomePoolEnd = "POOL_END" // v13.1.0 (#318): no fresh word left and nothing to loop on
 )
 
+// isPictoQuestionUnsafe reports whether the current question is of the Picto family (PICTO or RAFALE_PICTO):
+// the drawn round is shared (contracts/picto.md §17.1), every site goes through IsPictoFamily.
 func (e *Engine) isPictoQuestionUnsafe() bool {
-	return e.state.Question != nil && e.state.Question.Type == QuestionTypePicto
+	return e.state.Question != nil && IsPictoFamily(e.state.Question.Type)
 }
 
 // pictoParticipantsConform is the PREPARE→READY gate of a PICTO question (§6.1): a team chosen, a duration
 // in 30–300 s and at least one word. The drawer is NOT required for READY (designated "at READY"); START
 // requires it (PictoStartCheck).
 func pictoParticipantsConform(q *Question, st *GameState) bool {
-	if st.PictoTeam == "" || len(q.PictoWords) == 0 {
+	if st.PictoTeam == "" {
+		return false
+	}
+	cfg := q.PictoConfig()
+	if cfg.Source == PictoSourceReservoir {
+		// v13.1.0 (#324): a valid filter and at least one available word (POOL_EMPTY otherwise). The count is
+		// the engine's fresh one (Engine.participantsConformUnsafe), carried by st.PictoPoolAvailable.
+		if !pictoFilterValid(cfg) || st.PictoPoolAvailable < 1 {
+			return false
+		}
+	} else if len(cfg.Words) == 0 {
 		return false
 	}
 	t, err := strconv.Atoi(strings.TrimSpace(q.Time))
 	return err == nil && ValidPictoTime(t)
+}
+
+// pictoFilterValid reports whether the RESERVOIR filter is usable: at least one category and one difficulty,
+// every difficulty in 1–3 (the categories are checked against the known set by the HTTP layer at save time).
+func pictoFilterValid(cfg PictoConfig) bool {
+	if len(cfg.Categories) == 0 || len(cfg.Difficulties) == 0 {
+		return false
+	}
+	for _, d := range cfg.Difficulties {
+		if d < 1 || d > 3 {
+			return false
+		}
+	}
+	return true
+}
+
+// pictoPoolAvailableUnsafe counts the words still drawable for the current PICTO question: the filtered, unused
+// Pool Picto words (RESERVOIR) or the question's own words (WORDS). 0 for any other type. Caller holds e.mu.
+func (e *Engine) pictoPoolAvailableUnsafe(q *Question) int {
+	if q == nil || !IsPictoFamily(q.Type) {
+		return 0
+	}
+	cfg := q.PictoConfig()
+	if e.pictoRound != nil {
+		return e.pictoRemainingUnsafe(cfg) // round in progress: never shown, plus the passed words waiting if LOOP (§17.4)
+	}
+	if cfg.Source == PictoSourceReservoir {
+		return len(e.pictoPool.availableUnsafe(cfg.Categories, cfg.Difficulties))
+	}
+	return len(cfg.Words)
+}
+
+// participantsConformUnsafe is participantsConform with the fresh Pool Picto availability: the gate must not
+// depend on the last refresh (words may have been added to the pool since). Works on a copy of the state, so it
+// is safe under a read lock. Caller holds e.mu.
+func (e *Engine) participantsConformUnsafe() bool {
+	q := e.state.Question
+	if q != nil && IsPictoFamily(q.Type) {
+		st := e.state
+		st.PictoPoolAvailable = e.pictoPoolAvailableUnsafe(q)
+		return participantsConform(q, &st)
+	}
+	return participantsConform(q, &e.state)
 }
 
 // pictoRefreshUnsafe recomputes the derived preparation fields from the live roster: candidates (VPlayers of
@@ -112,8 +174,21 @@ func (e *Engine) pictoRefreshUnsafe() {
 		st.PictoTeamColor = []int{}
 	}
 	st.PictoWordsCount = 0
+	st.PictoPoolAvailable = 0
 	if e.isPictoQuestionUnsafe() {
-		st.PictoWordsCount = len(st.Question.PictoWords)
+		cfg := st.Question.PictoConfig()
+		st.PictoWordsCount = len(cfg.Words)
+		if cfg.Source == PictoSourceReservoir {
+			st.PictoWordsCount = 0 // no question words: the words come from the pool
+		}
+		st.PictoPoolAvailable = e.pictoPoolAvailableUnsafe(st.Question)
+		if e.pictoRound == nil { // no round: preparation values, the hint is the question's category (§17.4)
+			st.PictoWordCategory = string(st.Question.Category)
+			st.PictoPassesLeft = pictoInitialPassesLeft(cfg)
+		}
+	} else if e.pictoRound == nil {
+		st.PictoWordCategory = ""
+		st.PictoPassesLeft = -1
 	}
 }
 
@@ -130,6 +205,10 @@ func (e *Engine) resetPictoRoundUnsafe() {
 	e.state.PictoOutcome = ""
 	e.state.PictoRevealedWord = ""
 	e.state.PictoRevealedCategory = ""
+	e.state.PictoWordCategory = ""
+	e.state.PictoFoundCount, e.state.PictoFoundWords = 0, []string{}
+	e.state.PictoPassCount, e.state.PictoPassesLeft, e.state.PictoRoundPoints = 0, -1, 0
+	e.pictoRound = nil
 	e.pictoWord = ""
 }
 
@@ -235,6 +314,10 @@ func (e *Engine) pictoStartCheckUnsafe() *PictoError {
 	if e.state.PictoDrawer == "" || !e.state.PictoDrawerConnected {
 		return pictoErr(PictoErrNoDrawer, "désignez un dessinateur connecté avant de lancer")
 	}
+	// v13.1.0 (#324, contracts/picto-pool.md §3): the RESERVOIR source needs at least one available word.
+	if e.state.Question.PictoConfig().Source == PictoSourceReservoir && e.state.PictoPoolAvailable < 1 {
+		return pictoErr(PictoErrPoolEmpty, "aucun mot disponible dans le Pool Picto pour ce filtre")
+	}
 	return nil
 }
 
@@ -246,23 +329,35 @@ func (e *Engine) PictoStartCheck() *PictoError {
 	return e.pictoStartCheckUnsafe()
 }
 
-// startPictoRoundUnsafe runs at the START of a PICTO round, under the lock: new sheet epoch, free draw of
-// the word among all the question's words (§3.2, uniform, no memory). Returns nil for any other type, or
-// the word to hand over (outside the lock, finishPictoRoundStart). No word (question edited between READY
-// and START): the secret word stays empty and nothing is sent — the NO_WORD outcome belongs to LOT-2.2.
+// startPictoRoundUnsafe runs at the START of a Picto-family round, under the lock: new sheet epoch, round
+// state reset, draw of the first word (§3.2 / §17.6: the PICTO question has one draw, RAFALE_PICTO goes on with
+// PICTO_FOUND / PICTO_PASS). Returns nil for any other type, or the word to hand over (outside the lock,
+// finishPictoRoundStart). No word (question edited between READY and START): the secret word stays empty and
+// nothing is sent — the NO_WORD safety net applies.
 func (e *Engine) startPictoRoundUnsafe() *PictoWordInfo {
 	if !e.isPictoQuestionUnsafe() {
 		return nil
 	}
+	q := e.state.Question
+	cfg := q.PictoConfig()
 	e.state.PictoCanvasEpoch++
 	e.state.PictoOutcome, e.state.PictoRevealedWord, e.state.PictoRevealedCategory = "", "", ""
+	e.state.PictoFoundCount, e.state.PictoFoundWords, e.state.PictoPassCount, e.state.PictoRoundPoints = 0, []string{}, 0, 0
+	e.state.PictoPassesLeft = pictoInitialPassesLeft(cfg)
 	e.pictoWord = ""
-	words := e.state.Question.PictoWords
-	info := &PictoWordInfo{Category: string(e.state.Question.Category), Epoch: e.state.PictoCanvasEpoch, DrawerID: e.state.PictoDrawer}
-	if len(words) > 0 {
-		e.pictoWord = words[rand.Intn(len(words))]
-		info.Word = e.pictoWord
+	e.pictoRound = &pictoRoundState{shown: map[string]bool{}}
+	if cfg.Source == PictoSourceReservoir {
+		// Stratified draw (category x difficulty) in the Pool Picto, "used" marking at the draw
+		// (contracts/picto-pool.md §3). One draw state for the whole round.
+		e.pictoRound.draw = newPoolDrawState(e.pictoPool, cfg.Categories, cfg.Difficulties)
 	}
+	info := &PictoWordInfo{Category: string(q.Category), Epoch: e.state.PictoCanvasEpoch, DrawerID: e.state.PictoDrawer}
+	if word, cat, fromPool, ok := e.pictoDrawFreshUnsafe(cfg, q); ok {
+		e.pictoWord = word
+		info.Word, info.Category, info.FromPool = word, cat, fromPool
+	}
+	e.state.PictoPoolAvailable = e.pictoRemainingUnsafe(cfg)
+	e.state.PictoWordCategory = info.Category
 	return info
 }
 
@@ -272,6 +367,9 @@ func (e *Engine) finishPictoRoundStart(info *PictoWordInfo) {
 		return
 	}
 	e.firePictoCanvasReset(info.Epoch)
+	if info.FromPool {
+		safeGo("SavePictoUsed", e.SavePictoUsed) // the draw marked the word used (persisted AFTER the lock)
+	}
 	if info.Word != "" && e.OnPictoWord != nil {
 		e.OnPictoWord(*info)
 	}
@@ -285,7 +383,11 @@ func (e *Engine) PictoWord() (PictoWordInfo, bool) {
 	if !e.isPictoQuestionUnsafe() || e.pictoWord == "" {
 		return PictoWordInfo{}, false
 	}
-	return PictoWordInfo{Word: e.pictoWord, Category: string(e.state.Question.Category), Epoch: e.state.PictoCanvasEpoch, DrawerID: e.state.PictoDrawer}, true
+	cat := string(e.state.Question.Category)
+	if e.state.Question.PictoConfig().Source == PictoSourceReservoir && e.state.PictoWordCategory != "" {
+		cat = e.state.PictoWordCategory // the word's own category (pool), same as at the draw
+	}
+	return PictoWordInfo{Word: e.pictoWord, Category: cat, Epoch: e.state.PictoCanvasEpoch, DrawerID: e.state.PictoDrawer}, true
 }
 
 // PictoStrokeContext returns the drawer ID, the phase, the sheet epoch and whether the current question is a
@@ -331,21 +433,38 @@ func (e *Engine) enterRevealedUnsafe() {
 	}
 }
 
-// PictoFound — PICTO_FOUND (admin / anim): "Trouvé !". Accepted in STARTED and PAUSED, and in STOPPED only after
-// TIMEOUT (the answer came on the gong, I5); refused otherwise (WRONG_PHASE). Stops the round then reveals it in
-// the SAME action, under one lock: two simultaneous calls create a single outcome, the second finds REVEALED.
-// The credit line is the existing mechanism (TEAM_POINTS), pre-filled by the clients at the question's points.
+// PictoStepResult tells the application layer what a PICTO_FOUND / PICTO_PASS did: the phase the engine ended in
+// (REVEALED after a "Trouvé" on a PICTO question or on the gong, STOPPED after a POOL_END, STARTED / PAUSED when
+// the round goes on with the next word).
+type PictoStepResult struct {
+	Phase GamePhase
+}
+
+// PictoFound — PICTO_FOUND (admin / anim) without epoch: the PICTO (one word) form. See PictoFoundAt.
 func (e *Engine) PictoFound() error {
+	_, err := e.PictoFoundAt(nil)
+	return err
+}
+
+// PictoFoundAt — PICTO_FOUND (admin / anim): "Trouvé !". PICTO (one word): accepted in STARTED and PAUSED, and in
+// STOPPED only after TIMEOUT (the answer came on the gong, I5); refused otherwise (WRONG_PHASE). Stops the round
+// then reveals it in the SAME action, under one lock: two simultaneous calls create a single outcome, the second
+// finds REVEALED. RAFALE_PICTO: the word is counted and the round goes on (picto_rafale.go); EPOCH is mandatory.
+// The credit line is the existing mechanism (TEAM_POINTS), pre-filled by the clients.
+func (e *Engine) PictoFoundAt(epoch *int) (PictoStepResult, error) {
 	e.mu.Lock()
 	if !e.isPictoQuestionUnsafe() {
 		e.mu.Unlock()
-		return pictoErr(PictoErrWrongPhase, "la question courante n'est pas une question Picto")
+		return PictoStepResult{}, pictoErr(PictoErrWrongPhase, "la question courante n'est pas une question Picto")
+	}
+	if e.state.Question.Type == QuestionTypeRafalePicto {
+		return e.rafalePictoFoundLocked(epoch) // unlocks
 	}
 	ph := e.state.Phase
 	afterTimeout := ph == PhaseStopped && e.state.PictoOutcome == PictoOutcomeTimeout
 	if ph != PhaseStarted && ph != PhasePaused && !afterTimeout {
 		e.mu.Unlock()
-		return pictoErr(PictoErrWrongPhase, "« Trouvé » n'est possible que manche en cours, ou après le temps écoulé")
+		return PictoStepResult{}, pictoErr(PictoErrWrongPhase, "« Trouvé » n'est possible que manche en cours, ou après le temps écoulé")
 	}
 	e.state.PictoOutcome = PictoOutcomeFound // the only replacement allowed: TIMEOUT → FOUND (§6.4)
 	released := false
@@ -363,7 +482,7 @@ func (e *Engine) PictoFound() error {
 	if callback != nil {
 		callback(PhaseRevealed)
 	}
-	return nil
+	return PictoStepResult{Phase: PhaseRevealed}, nil
 }
 
 // pictoNoWordStopUnsafe is the safety net of §6.2: a question edited by hand between READY and START may have

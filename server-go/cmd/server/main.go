@@ -306,6 +306,13 @@ func main() {
 	if err := app.engine.LoadRafaleUsed(); err != nil {
 		server.LogWarn(game.LogComponentApp, "Could not load rafale used-flags: %v", err)
 	}
+	// Pool Picto (v13.1.0, #324) — second reservoir instance.
+	if err := app.engine.LoadPicto(); err != nil {
+		server.LogWarn(game.LogComponentApp, "Could not load picto pool: %v", err)
+	}
+	if err := app.engine.LoadPictoUsed(); err != nil {
+		server.LogWarn(game.LogComponentApp, "Could not load picto used-flags: %v", err)
+	}
 
 	// Load persisted game state (#141: quiz metadata, virtual player limit).
 	// Must run AFTER app.init() (which already set the path below) and after
@@ -400,6 +407,8 @@ func (a *App) init() {
 	}
 	a.engine.SetRafalePath(filepath.Join(filesDirForRafale, "rafale", "reservoir.json"))
 	a.engine.SetRafaleUsedPath(filepath.Join(configDir, "rafale_used.json"))
+	a.engine.SetPictoPath(filepath.Join(filesDirForRafale, "picto", "reservoir.json"))
+	a.engine.SetPictoUsedPath(filepath.Join(configDir, "picto_used.json"))
 
 	// WebSocket hub (web clients: admin/TV/VPlayer)
 	a.wsHub = server.NewWebSocketHub()
@@ -1730,7 +1739,10 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handlePictoPrepAction(incoming.ClientID, msg)
 
 	case protocol.ActionPictoFound:
-		a.handlePictoFound(incoming.ClientID)
+		a.handlePictoFound(incoming.ClientID, msg)
+
+	case protocol.ActionPictoPass:
+		a.handlePictoPass(incoming.ClientID, msg)
 
 	case protocol.ActionPictoStrokes:
 		a.handlePictoStrokes(incoming)
@@ -4590,7 +4602,7 @@ var suspendedDuringLaunch = map[string]bool{
 	protocol.ActionRoueLetter: true, protocol.ActionRoueBuyVowel: true, protocol.ActionRoueFlip: true, protocol.ActionRoueAnswer: true,
 	protocol.ActionRoueNext: true, protocol.ActionRouePass: true, protocol.ActionRoueReveal: true,
 	protocol.ActionPictoSetTeam: true, protocol.ActionPictoSetDrawer: true, protocol.ActionPictoDrawDrawer: true,
-	protocol.ActionPictoFound: true,
+	protocol.ActionPictoFound: true, protocol.ActionPictoPass: true,
 	// points
 	protocol.ActionTeamPoints: true, protocol.ActionBumperPoints: true, protocol.ActionTeamPointsBatch: true,
 	protocol.ActionBumperPointsBatch: true, protocol.ActionSetCreditPoints: true,

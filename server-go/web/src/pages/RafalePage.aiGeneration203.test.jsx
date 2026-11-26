@@ -120,7 +120,7 @@ describe('RafalePage — bouton "✨ Générer via IA" (contrat §2, tâche 12)'
     renderRafalePage({ config: { ai: { provider: 'anthropic', api_key_configured: true } } }, { withRouter: true })
     await waitFor(() => expect(screen.getByText('✨ Générer via IA')).toBeInTheDocument())
     fireEvent.click(screen.getByText('✨ Générer via IA'))
-    expect(screen.getByText('✨ Générer des questions RAFALE via IA')).toBeInTheDocument()
+    expect(screen.getByText('✨ Générer des questions pour le Pool Speedy')).toBeInTheDocument()
   })
 })
 

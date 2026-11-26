@@ -58,9 +58,13 @@ beforeEach(() => {
   useCategories.mockReturnValue({ categories: [{ key: 'ANIMALS', name: 'Animaux', imageURL: '', isCustom: false }], loading: false, error: null, refetch: vi.fn() })
 })
 
+// v13.1.0 (#324) : une NOUVELLE question Picto démarre sur la source « Pool Picto » (picto.md §17.2) ; ces tests de
+// v13.0.0 portent sur l'éditeur de mots saisis, qu'ils sélectionnent explicitement.
+const chooseWordsSource = () => fireEvent.click(screen.getByRole('button', { name: '✍️ Saisis dans la question' }))
 const openPicto = () => {
   const r = render(<QuestionsPage />)
   fireEvent.click(screen.getByRole('button', { name: 'Picto' }))
+  chooseWordsSource()
   return r
 }
 const wordInput = () => screen.getByLabelText(/Mots de la question/)
@@ -79,10 +83,21 @@ describe('QuestionsPage — type PICTO (#191)', () => {
   it('le sélecteur propose « Picto » en dernier et monte l\'éditeur PICTO', () => {
     render(<QuestionsPage />)
     const labels = Array.from(document.querySelectorAll('.type-filter-row')[0].querySelectorAll('.type-btn')).map(b => b.textContent)
-    expect(labels[labels.length - 1]).toBe('Picto')
+    // v13.1.0 (#318) : « Rafale Picto » est ajouté après « Picto »
+    expect(labels[labels.length - 2]).toBe('Picto')
+    expect(labels[labels.length - 1]).toBe('Rafale Picto')
     expect(screen.queryByLabelText(/Mots de la question/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Picto' }))
+    chooseWordsSource()
     expect(wordInput()).toBeTruthy()
+  })
+
+  it('nouvelle question Picto : source « Pool Picto » par défaut, éditeur de mots masqué (#324, §17.2)', () => {
+    render(<QuestionsPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Picto' }))
+    expect(screen.getByRole('button', { name: '🗂 Pool Picto' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByLabelText(/Mots de la question/)).toBeNull()
+    expect(screen.getByTestId('picto-words-source')).toBeTruthy()
   })
 
   it('la durée est pré-remplie à 90 s à l\'entrée du type', () => {
@@ -92,7 +107,7 @@ describe('QuestionsPage — type PICTO (#191)', () => {
 
   it('l\'éditeur PICTO n\'apparaît pas pour un autre type', () => {
     render(<QuestionsPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rafale Speedy' }))
     expect(screen.queryByLabelText(/Mots de la question/)).toBeNull()
   })
 
@@ -166,6 +181,33 @@ describe('QuestionsPage — type PICTO (#191)', () => {
     addByEnter('chat')
     fireEvent.change(timeInput(), { target: { value: t } })
     expect(submitBtn().disabled).toBe(false)
+  })
+
+  it('Pool Picto : POST avec picto_source=RESERVOIR, picto_categories et picto_difficulties en JSON, sans picto_words (#324)', async () => {
+    render(<QuestionsPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Picto' }))
+    fillTitle()
+    fireEvent.click(screen.getAllByTitle('Geographie')[0]) // catégorie de la question → filtre du pool par défaut
+    fireEvent.click(submitBtn())
+    await waitFor(() => expect(postedForm()).not.toBeNull(), { timeout: 2000 })
+    const fd = postedForm()
+    expect(fd.get('type')).toBe('PICTO')
+    expect(fd.get('picto_source')).toBe('RESERVOIR')
+    expect(JSON.parse(fd.get('picto_categories'))).toEqual(['GEOGRAPHY'])
+    expect(JSON.parse(fd.get('picto_difficulties'))).toEqual([1, 2, 3])
+    expect(fd.get('picto_words')).toBe('')
+  })
+
+  it('mots saisis : picto_source vide (absent = WORDS, round-trip des questions v13.0.0), pas de filtre envoyé (#324)', async () => {
+    openPicto()
+    fillTitle()
+    addByEnter('chat')
+    fireEvent.click(submitBtn())
+    await waitFor(() => expect(postedForm()).not.toBeNull(), { timeout: 2000 })
+    const fd = postedForm()
+    expect(fd.get('picto_source')).toBe('')
+    expect(fd.get('picto_words')).toBe('chat')
+    expect(fd.get('picto_categories')).toBeNull()
   })
 
   it('smoke — enregistre : POST /questions type=PICTO, picto_words un mot par ligne, time=90', async () => {

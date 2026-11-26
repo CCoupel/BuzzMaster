@@ -57,7 +57,10 @@ export function mapSubmitError({ networkFailure, data }) {
     return { message: 'Une génération est déjà en cours. Fermez et rouvrez la fenêtre pour suivre sa progression.', showConfigLink: false, detail: null }
   }
   if (code === 'rafale_round_in_progress') {
-    return { message: 'Génération refusée : une manche RAFALE est en cours. Réessayez une fois la manche terminée.', showConfigLink: false, detail: null }
+    return { message: 'Génération refusée : une manche Rafale Speedy est en cours. Réessayez une fois la manche terminée.', showConfigLink: false, detail: null }
+  }
+  if (code === 'picto_round_in_progress') {
+    return { message: 'Génération refusée : une manche Picto est en cours. Réessayez une fois la manche terminée.', showConfigLink: false, detail: null }
   }
   return { message: 'Erreur pendant la génération.', showConfigLink: false, detail: data?.message || null }
 }

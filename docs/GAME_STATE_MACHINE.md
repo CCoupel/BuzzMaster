@@ -612,6 +612,42 @@ Au passage en `STARTED`, sous le verrou du moteur :
 
 Liste complète et règles de remise à vide : `docs/DATA_MODELS.md`, section « GameState PICTO_* ».
 
+## Type de jeu RAFALE_PICTO — Rafale Picto (v13.1.0, #318)
+
+Référence : `contracts/picto.md` §17. Le type ajoute **aucune phase** : la manche vit dans `STARTED` (↔ `PAUSED`).
+Les mots se succèdent à l'intérieur de `STARTED`, avec une nouvelle époque de feuille à chaque mot.
+
+### Déroulé en `STARTED`
+
+| Déclencheur | Émetteurs | Effet |
+|---|---|---|
+| `PICTO_FOUND {EPOCH}` | admin, anim | `PICTO_FOUND_COUNT` +1, mot ajouté à `PICTO_FOUND_WORDS`, puis **mot suivant** |
+| `PICTO_PASS {EPOCH}` | admin, anim (le dessinateur annonce la passe à voix haute) | refusée (`PASS_LIMIT_REACHED`) si plus de passe. Sinon `PICTO_PASS_COUNT` +1, `PICTO_PASSES_LEFT` −1 (sauf −1 = illimité), le mot entre dans la file des passés, puis **mot suivant** |
+| Fin du chronomètre | serveur | `PICTO_OUTCOME = TIMEOUT`, `STOPPED` |
+
+**Mot suivant** (dans la même action, sous verrou) : époque +1 et journal vidé, tirage d'un mot jamais montré dans la
+manche, `PICTO_WORD` au dessinateur, à l'admin et à l'anim, puis `UPDATE`.
+
+### Tirage et fin de pool
+
+1. Pas de mot frais :
+   - `RAFALE_PICTO_POOL_END = LOOP` et file des passés non vide → le plus ancien mot passé revient (FIFO). Un mot trouvé ne revient jamais ;
+   - sinon → `PICTO_OUTCOME = POOL_END`, `STOPPED` ; la révélation est un geste de l'admin ou de l'anim (« Révéler »).
+2. Aucun mot au tout premier tirage : `NO_WORD`, comme en Picto.
+
+### Issues et révélation
+
+| Issue | Déclencheur | Suite |
+|---|---|---|
+| `TIMEOUT` | chronomètre | `STOPPED`. Un « Trouvé » sur le gong compte le mot et révèle dans la même action (issue reste `TIMEOUT`) |
+| `STOPPED` | `STOP` | `STOPPED`, puis révélation |
+| `POOL_END` | plus de mot | `STOPPED`, puis révélation |
+| `NO_WORD` | aucun mot au départ | inchangé |
+
+- En `REVEALED` : `PICTO_REVEALED_WORD` = le mot en cours non trouvé (`""` après `POOL_END`). Les mots passés ne sont jamais publiés.
+- **Crédit manuel** pré-rempli à `PICTO_ROUND_POINTS` (plancher 0), quelle que soit l'issue, équipe présélectionnée.
+- **Relance** : compteurs, file et mots trouvés remis à zéro ; avec le pool, les mots déjà tirés restent « utilisés ».
+
 ## Chronomètre de Réponse Configurable (v11.1.0, #219)
 
 ### Vue d'ensemble

@@ -13,6 +13,9 @@ import Timer from '../Timer'
 import PictoCanvasView from './PictoCanvasView'
 import PictoCanvasInput from './PictoCanvasInput'
 import { errorText, pictoShownWord } from './pictoState'
+import { foundLabel, passUsedLabel } from './pictoRafaleState'
+import { useRafaleFlash } from './useRafaleFlash'
+import { isRafalePicto } from '../../utils/pictoFamily'
 import './PictoCanvas.css'
 import './PictoTv.css'
 
@@ -36,22 +39,43 @@ function Hint({ gs, catMeta, small = false }) {
   )
 }
 
-/** Écran TV : zones communes (M3). */
+/** Écran TV : zones communes (M3) ; Rafale Picto : grand compteur à gauche de la feuille, mot trouvé 1 s dessus (M4). */
 export function PictoTvScreen({ gameState: gs, catMeta, store }) {
   const revealed = gs.phase === 'REVEALED'
+  const rafale = isRafalePicto(gs.question?.TYPE)
+  const { foundWord, passMark } = useRafaleFlash(gs, store, rafale)
+  const foundCount = gs.PICTO_FOUND_COUNT || 0
+  const passCount = gs.PICTO_PASS_COUNT || 0
+  const foundWords = Array.isArray(gs.PICTO_FOUND_WORDS) ? gs.PICTO_FOUND_WORDS : []
   return (
-    <div className="game-content-zones picto-tv" data-testid="picto-tv">
+    <div className={`game-content-zones picto-tv${rafale ? ' picto-tv-rafale' : ''}`} data-testid="picto-tv">
       <div className="zone-timer">
         <Timer currentTime={gs.timer} totalTime={gs.totalTime} phase={gs.phase} size="xl" showPhase={false} />
       </div>
       <div className="zone-question"><Hint gs={gs} catMeta={catMeta} /></div>
       <div className="zone-media picto-media">
-        <div className="picto-sheet picto-sheet-fit">{store && <PictoCanvasView store={store} />}</div>
+        {rafale && (
+          <div className="picto-counter" data-testid="picto-counter">
+            <span className="picto-counter-n">{foundCount}</span>
+            <span className="picto-counter-lbl">{foundCount > 1 ? 'mots trouvés' : 'mot trouvé'}</span>
+            {passCount > 0 && <span className="picto-counter-pass" data-testid="picto-counter-pass">⏭ {passUsedLabel(passCount)}</span>}
+          </div>
+        )}
+        <div className="picto-sheet picto-sheet-fit picto-sheet-rel">
+          {store && <PictoCanvasView store={store} />}
+          {foundWord && <div className="picto-found-flash" data-testid="picto-found-flash">✅ {foundWord}</div>}
+          {passMark && <div className="picto-pass-mark" data-testid="picto-pass-mark" aria-hidden="true">⏭</div>}
+        </div>
       </div>
       <div className="zone-answers">
-        {revealed && gs.PICTO_REVEALED_WORD && (
+        {revealed && (gs.PICTO_REVEALED_WORD || (rafale && foundWords.length > 0)) && (
           <div className="answer-container">
-            <p className="answer-text" data-testid="picto-revealed-word">{gs.PICTO_REVEALED_WORD}</p>
+            {gs.PICTO_REVEALED_WORD && <p className="answer-text" data-testid="picto-revealed-word">{gs.PICTO_REVEALED_WORD}</p>}
+            {rafale && foundWords.length > 0 && (
+              <p className="picto-tv-found" data-testid="picto-tv-found">
+                {foundLabel(foundCount)} : {foundWords.map((w, i) => <span key={`${w}-${i}`} className="picto-tv-found-word">✅ {w}</span>)}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -60,7 +84,8 @@ export function PictoTvScreen({ gameState: gs, catMeta, store }) {
 }
 
 /** Tablette du dessinateur : préparation (« C'est toi qui dessines ! ») puis mot en bandeau et feuille (M4). */
-export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage, error, landscape = false }) {
+export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage, error, landscape = false, catMeta = null }) {
+  const rafale = isRafalePicto(gs.question?.TYPE)
   const prep = ['PREPARE', 'READY', 'COUNTDOWN'].includes(gs.phase)
   const word = pictoShownWord(gs, pictoWord)
   const locked = gs.phase !== 'STARTED'
@@ -80,13 +105,22 @@ export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage
         <div className="picto-tab-emoji" aria-hidden="true">✏️</div>
         <div className="picto-tab-title">C'est toi qui dessines !</div>
         <div className="picto-tab-sub">Le mot s'affichera au lancement de la manche.</div>
+        {gs.phase === 'COUNTDOWN' && (
+          <div className="countdown-number picto-tab-countdown" data-testid="picto-drawer-countdown" aria-live="polite">
+            {gs.countdownTime > 0 ? gs.countdownTime : 'GO!'}
+          </div>
+        )}
       </div>
     )
   }
   return (
     <div className={`picto-tab drawer${landscape ? ' land' : ''}`} data-testid="picto-drawer">
       <div className="picto-tab-banner">
-        <span>{revealed ? 'Mot révélé' : `Fais deviner · ⏱ ${mmss(gs.timer)}`}</span>
+        <span>
+          {revealed ? 'Mot révélé' : `Fais deviner · ⏱ ${mmss(gs.timer)}`}
+          {rafale && !revealed && <b className="picto-tab-found" data-testid="picto-drawer-found"> · ✅ {gs.PICTO_FOUND_COUNT || 0} mot{(gs.PICTO_FOUND_COUNT || 0) > 1 ? 's' : ''}</b>}
+        </span>
+        {rafale && !revealed && catMeta && <span className="picto-tab-cat" data-testid="picto-drawer-cat">Ton mot · {catMeta.icon ? `${catMeta.icon} ` : ''}{catMeta.label}</span>}
         <div className="picto-tab-word" data-testid="picto-drawer-word">{word || '—'}</div>
       </div>
       <div className="picto-tab-sheet">
@@ -106,11 +140,21 @@ export function PictoDrawerScreen({ gameState: gs, pictoWord, store, sendMessage
 /** Autres tablettes : équipe qui dessine (devine à l'oral), autres équipes (attendent), révélation. */
 export function PictoGuesserScreen({ gameState: gs, teamName }) {
   const mine = !!teamName && teamName === gs.PICTO_TEAM
+  const rafale = isRafalePicto(gs.question?.TYPE)
+  const foundCount = gs.PICTO_FOUND_COUNT || 0
+  const passCount = gs.PICTO_PASS_COUNT || 0
+  const foundWords = Array.isArray(gs.PICTO_FOUND_WORDS) ? gs.PICTO_FOUND_WORDS : []
   if (gs.phase === 'REVEALED') {
     return (
       <div className="picto-tab center" data-testid="picto-guesser-revealed">
         <div className="picto-tab-sub">Mot révélé</div>
         {gs.PICTO_REVEALED_WORD ? <div className="picto-tab-word big">{gs.PICTO_REVEALED_WORD}</div> : null}
+        {rafale && foundWords.length > 0 && (
+          <ul className="picto-tab-found-list" data-testid="picto-guesser-found-list">
+            {foundWords.map((w, i) => <li key={`${w}-${i}`}>✅ {w}</li>)}
+          </ul>
+        )}
+        {rafale && <div className="picto-tab-sub" data-testid="picto-guesser-recap">{foundLabel(foundCount)} · {passUsedLabel(passCount)}</div>}
       </div>
     )
   }
@@ -118,7 +162,13 @@ export function PictoGuesserScreen({ gameState: gs, teamName }) {
     <div className="picto-tab center" data-testid="picto-guesser">
       <div className="picto-tab-emoji" aria-hidden="true">{mine ? '👀' : '✏️'}</div>
       <div className="picto-tab-title">{mine ? 'Devinez !' : `${gs.PICTO_TEAM || "L'équipe"} devine le dessin ${deName(gs.PICTO_DRAWER_NAME)}`}</div>
-      <div className="picto-tab-sub">{mine ? `${gs.PICTO_DRAWER_NAME || '—'} dessine — regardez la TV` : 'Attendez votre tour.'}</div>
+      <div className="picto-tab-sub">{mine ? `${gs.PICTO_DRAWER_NAME || '—'} dessine — regardez la TV` : (rafale ? '' : 'Attendez votre tour.')}</div>
+      {rafale && (
+        <div className="picto-tab-sub" data-testid="picto-guesser-counts">
+          ✅ {foundLabel(foundCount)}
+          {mine && passCount > 0 && <><br />⏭ {passCount} passe{passCount > 1 ? 's' : ''} utilisée{passCount > 1 ? 's' : ''}</>}
+        </div>
+      )}
       <div className="picto-tab-timer">{mmss(gs.timer)}</div>
     </div>
   )
@@ -127,7 +177,7 @@ export function PictoGuesserScreen({ gameState: gs, teamName }) {
 export default function PictoTv({ gameState, catMeta, isVPlayer = false, playerId = null, teamName = null, pictoWord = null, store = null, sendMessage, error = null }) {
   if (!isVPlayer) return <PictoTvScreen gameState={gameState} catMeta={catMeta} store={store} />
   if (playerId && gameState.PICTO_DRAWER && playerId === gameState.PICTO_DRAWER) {
-    return <PictoDrawerScreen gameState={gameState} pictoWord={pictoWord} store={store} sendMessage={sendMessage} error={error} />
+    return <PictoDrawerScreen gameState={gameState} pictoWord={pictoWord} store={store} sendMessage={sendMessage} error={error} catMeta={catMeta} />
   }
   return <PictoGuesserScreen gameState={gameState} teamName={teamName} />
 }

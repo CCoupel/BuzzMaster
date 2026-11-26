@@ -1,22 +1,17 @@
 {
   "type": "FEATURE",
-  "version": "13.0.0",
-  "description": "PICTIONARY — nouveau type de jeu : un joueur tiré au sort dessine un mot sur son VPlayer, dessin en direct sur la TV, ses coéquipiers devinent à l'oral, l'animateur crédite. Cadrage approfondi du déroulé de jeu et de la configuration demandé par l'utilisateur.",
-  "branch": "main",
-  "milestone_num": 30,
+  "version": "13.1.0",
+  "branch": "milestone/v13.1.0",
+  "status": "in_progress",
+  "milestone_num": 48,
   "issue_nums": [
-    191,
-    192,
-    193,
-    194,
-    319
+    322,
+    321,
+    326,
+    324,
+    318
   ],
-  "status": "completed",
-  "started_at": "2026-11-23T13:50:00Z",
-  "updated_at": "2026-11-24T17:45:00Z",
-  "intensite_depart": "complet",
-  "cycles": 1,
-  "plan": ".claude/workflow/plan-13.0.0.md",
+  "plan": ".claude/workflow/plan-13.1.0.md",
   "cadrage": {
     "intensite": "complet",
     "test_writer": true,
@@ -30,291 +25,66 @@
       "code-reviewer",
       "qa",
       "doc-updater"
-    ],
-    "ponctuel": [
-      "security (LOT-2.1 fait, LOT-2.2 revérification)"
     ]
   },
+  "intensite_depart": "complet",
   "lots": {
-    "current": "LOT-2.3",
+    "current": null,
     "items": {
       "LOT-1": {
         "issues": [
-          191
-        ],
-        "status": "completed",
-        "ci_sha": "fd1b2811",
-        "ci_run": "45215092155",
-        "qualif": "13.0.0.4"
-      },
-      "LOT-2.1": {
-        "issues": [
-          192,
-          193
+          322,
+          321,
+          326
         ],
         "status": "validated",
-        "parent": "LOT-2",
-        "qa": "_work/reports/qa-20261123-191000.md"
-      },
-      "LOT-2.2": {
-        "issues": [
-          319
-        ],
-        "status": "validated",
-        "parent": "LOT-2",
-        "objectif": "Jeton de session des tablettes (sécurité)",
-        "qa": "_work/reports/qa-20261123-211500.md"
-      },
-      "LOT-2.3": {
-        "issues": [
-          194
-        ],
-        "status": "validated",
-        "parent": "LOT-2",
-        "qa": "_work/reports/qa-20261124-095500.md"
+        "qualif": "13.1.0.5",
+        "qa": "_work/reports/qa-20261125-cycle4.md",
+        "review": "_work/reports/code-review-lot1-cycle4-20261125-132549.md"
       },
       "LOT-2": {
-        "status": "validated",
-        "closed": [
-          192,
-          193,
-          319,
-          194,
-          320
+        "issues": [
+          324
         ],
-        "ci_run": "45380755436"
+        "status": "validated",
+        "qualif": "13.1.0.6",
+        "qa": "_work/reports/qa-20261125-lot2.md",
+        "review": "_work/reports/code-review-lot2-r1-20261125-142249.md",
+        "note": "scenarios 4 et 5 (IA) non testables, valides par l utilisateur ; a rejouer a la QUALIF finale"
+      },
+      "LOT-3": {
+        "issues": [
+          318
+        ],
+        "status": "validated",
+        "qualif": "13.1.0.9",
+        "qa": "_work/reports/qa-20261126-lot3-c6b.md",
+        "review": "_work/reports/code-review-lot3-cycle6-20261126-082253.md",
+        "note": "scenarios IA 4 et 5 non testables, valides par utilisateur ; rejeu non fait"
       }
     }
   },
+  "cycles": 6,
+  "frozen": true,
+  "description": "PICTO RAFALE — pool Picto (moteur généralisé), type Rafale Picto, présélection des gains (#321), x/net (#322)",
+  "started_at": "2026-11-24T16:52:12Z",
+  "updated_at": "2026-11-26T08:37:35Z",
   "phases": {
     "init": {
-      "status": "completed",
-      "sha": "62167358"
+      "status": "completed"
     },
     "clarification": {
-      "status": "completed",
-      "report": "_work/reports/plan-pictionary-cadrage-20261123-135359.md",
-      "gate15": {
-        "manche": "une équipe, un mot ; pas de multi-équipe ; mode max-de-mots → v13.1.0",
-        "equipe": "admin ou animateur",
-        "dessinateur": "choix direct animateur",
-        "devinette": "coéquipiers à l oral",
-        "points": "fixes de la question",
-        "mots": "au choix : pioche dans un réservoir global (v13.0.0) ou mot(s) saisi(s) dans la question",
-        "passes": "aucune en question PICTO (un seul mot) ; passes = mode RAFALE v13.1.0",
-        "reglages": "tout dans la question",
-        "duree": "champ de la question",
-        "feuille": "1:1",
-        "effacer": "non",
-        "nom": "PICTO"
-      }
+      "status": "completed"
     },
     "plan": {
       "status": "completed",
       "gate2": {
-        "status": "validé 2026-11-23 (révision 6)",
-        "mockups_retenues": {
-          "M1": "A",
-          "M4": "A",
-          "M5": "C",
-          "M6": "A",
-          "M8": "B",
-          "M9": "B"
-        },
-        "a_refaire": [
-          "M2 cohérente avec autres types",
-          "M3 structure TV commune (bandeau indice, zone média, zone réponse)",
-          "M7 catégorie Pools (Rafale + Picto)"
-        ],
-        "interpretations": {
-          "I1": "confirmé",
-          "I2": "pioche = jamais présentés ; flags présenté / révélé",
-          "I3": "confirmé",
-          "I4": "confirmé",
-          "I5": "confirmé",
-          "I6": "pas de remplacement : admin relance la question (PREPARE), nouveau mot",
-          "I7": "doublons interdits par catégorie"
-        },
-        "v13_1_0": "création demandée",
-        "scope_reduction": "réservoir, IA, sauvegarde Pools, M6, M7 → v13.1.0 (#48/#318) ; v13.0.0 = mots saisis seulement"
-      },
-      "report": "_work/reports/plan-20261123-picto.md"
+        "status": "validé 2026-11-24"
+      }
     },
     "dev": {
-      "status": "completed",
-      "lot": "LOT-2.3",
-      "head": "1d3437b9"
-    },
-    "review": {
-      "status": "completed",
-      "scope": "correctif CI",
-      "verdict": "APPROUVE code ; doc À CORRIGER D1-D3",
-      "report": "_work/reports/code-review-20261124-121500.md"
-    },
-    "qa": {
-      "status": "validated",
-      "report": "_work/reports/qa-20261124-145500.md",
-      "perf": "p95 nominal 0,24 ms (0,28 avant)"
-    },
-    "review_fixes": {
-      "status": "completed",
-      "lot": "LOT-2.2",
-      "cycle": 3,
-      "items": [
-        "C3 restore WARN",
-        "C4 message",
-        "D4 D5 doc"
-      ],
-      "c3": "35e92188",
-      "c4": "8948518a"
-    },
-    "test_fix": {
-      "sha": "221213d4"
-    },
-    "doc": {
-      "status": "completed",
-      "finalize": [
-        "0311b144",
-        "f4a4e906"
-      ],
-      "readme": "mis à jour",
-      "review": "APPROUVE (_work/reports/code-review-20261124-103000.md)"
-    },
-    "deploy-qualif": {
-      "status": "completed",
-      "version": "13.0.0.30",
-      "sha": "f9679c6e",
-      "binary": "build/qualif_v13.0.0/buzzcontrol-qualif-13.0.0.30-windows-amd64.exe"
-    },
-    "r1_fix": {
-      "status": "completed",
-      "sha": "c775a6be"
-    },
-    "gate_lot": {
-      "status": "validated, closure blocked by CI",
-      "lot": "LOT-2",
-      "at": "2026-11-24",
-      "version": "13.0.0.25",
-      "report": "_work/reports/test-report-LOT-2.md",
-      "ko_accepted": "#194 sc.2 présélection équipe au crédit → issue v13.1.0",
-      "untested": "point 6 considéré OK"
-    },
-    "security": {
-      "status": "completed",
-      "lot": "LOT-2.2",
-      "score": 90,
-      "report": "_work/reports/security-20261123-192821.md",
-      "M1": "fermée",
-      "todo": [
-        "n1 payload.ID journalisé brut main.go:4219 (dev-backend)",
-        "n2 reprise par le nom 5 min (doc)",
-        "n3 fichier absent → premier arrivé (doc + WARN optionnel)"
-      ]
-    },
-    "plan_rev7": {
-      "status": "validated",
-      "at": "2026-11-23"
-    },
-    "perf_ruling": {
-      "decision": "(a) scénario réaliste, borne 60000 conservée",
-      "report": "_work/reports/plan-arbitrage-perf-picto-20261123.md",
-      "shas": [
-        "25132e24",
-        "d9249fe2",
-        "63e663ad"
-      ]
-    },
-    "extra_fix": {
-      "lot": "LOT-2.1",
-      "what": "GamePage resync TIME/POINTS au changement de question (tous types)",
-      "decided": "utilisateur 2026-11-23",
-      "status": "completed",
-      "sha": "57dd6277",
-      "review": "_work/reports/code-review-20261123-190500.md"
-    },
-    "contract_s6": "fe05071f",
-    "found_flow": {
-      "status": "validated",
-      "at": "2026-11-24",
-      "report": "_work/reports/plan-found-flow-picto-20261124.md",
-      "frontend": "applied",
-      "shas": [
-        "442eff32",
-        "989f2af3",
-        "7f5263c6"
-      ],
-      "labels": "fc06b0f0"
-    },
-    "label_fix": {
-      "status": "completed",
-      "what": "PictoPanel Reveal → REPONSE (worktree)"
-    },
-    "nr_full": {
-      "status": "VALIDATED avec risque accepté",
-      "report": "_work/reports/qa-20261124-102500.md",
-      "coverage": "75,6 %",
-      "audit": "GO-2026-6278 : acceptation remplacée par mise à jour (CI bloquante)",
-      "notes": "firmware/ci.sh non joué (collision BUILD)"
-    },
-    "marketing": {
-      "status": "completed",
-      "site": "4cf415fb",
-      "notes": "9d71028d"
-    },
-    "ci": {
-      "status": "green",
-      "run": "45380755436",
-      "sha": "02767d26"
-    },
-    "dep_fix": {
-      "status": "completed",
-      "what": "gorilla/websocket → pseudo-version corrigée (#320)",
-      "decided": "utilisateur 2026-11-24",
-      "sha": "09fa5bd3",
-      "version": "13.0.0.28",
-      "note": "x/net v0.60.0 : GO-2026-6866/6860 non appelées, non bloquantes"
-    },
-    "retest": {
-      "status": "validated",
-      "version": "13.0.0.30",
-      "at": "2026-11-24"
-    },
-    "gate4": {
-      "status": "validated",
-      "at": "2026-11-24",
-      "qualif": "13.0.0.30"
-    },
-    "gate4d": {
-      "status": "validated",
-      "at": "2026-11-24",
-      "artifact": "v4"
-    },
-    "retex": {
-      "status": "completed",
-      "shas": [
-        "cfdfc79d",
-        "e4f46aed"
-      ]
-    },
-    "changelog_review": {
-      "status": "completed",
-      "verdict": "APPROUVE",
-      "report": "_work/reports/code-review-20261124-163000.md"
-    },
-    "deploy-prod": {
-      "status": "completed",
-      "version": "13.0.0",
-      "pr": 323,
-      "merge": "3280f3ec",
-      "tag": "v13.0.0",
-      "release_run": "45400242676"
-    },
-    "close": {
-      "status": "completed",
-      "milestone": "#30 closed",
-      "branch": "deleted"
+      "status": "in_progress",
+      "lot": "LOT-3"
     }
-  },
-  "frozen": false,
-  "issue_v13_1_0": "#321"
+  }
 }

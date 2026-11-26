@@ -329,7 +329,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
                       </>
                     )}
                   </td>
-                  <td title={`${row.rafaleCount} dans le réservoir RAFALE`}>{row.questionCount}</td>
+                  <td title={`${row.rafaleCount} dans le Pool Speedy`}>{row.questionCount}</td>
                   <td>
                     <span className="cm-hue">
                       <span className="cm-bulb" style={{ color: row.color || '#ffffff' }} />
@@ -400,7 +400,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
         {confirm && (
           <div className="cm-confirm">
             <h4>
-              {`Supprimer « ${confirm.name} » — ${confirm.questions} question(s) et ${confirm.rafale} question(s) du réservoir RAFALE l'utilisent`}
+              {`Supprimer « ${confirm.name} » — ${confirm.questions} question(s) et ${confirm.rafale} question(s) du Pool Speedy l'utilisent`}
             </h4>
             <label>
               <input

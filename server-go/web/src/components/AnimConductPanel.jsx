@@ -22,6 +22,7 @@ import AnimSoundActions from './AnimSoundActions'
 import './AnimConductPanel.css'
 import AnimRoue from './roue/AnimRoue'
 import AnimPicto from './picto/AnimPicto'
+import { isPictoFamily } from '../utils/pictoFamily'
 
 // L1 — cinq emplacements FIXES (#166/F5) : la liste ne varie jamais dans
 // son nombre d'entrées, seul l'état de chaque bouton varie par phase.
@@ -136,6 +137,7 @@ function buttonSubLabel(key, state, phase, waitReason, ardoiseBlocked, launchLoc
  * @param {() => void} [props.onStopMotionTimer] - stopMotionTimer (useGame())
  * @param {() => void} [props.onRevealMotionCard] - revealMotionCard (useGame())
  * @param {(cardId: string, winnerTeam: string) => void} [props.onDoneMotionCard] - doneMotionCard (useGame())
+ * @param {boolean} [props.confirmMotionWinner] - #321 : REVEAL MEMOTION = gagnant présélectionné + « VALIDER » (transmis à AnimMotionActions)
  * @param {string|null} [props.waitReason] - #172/C2 : motif d'attente PREPARE
  *   (utils/prepareWaitReason.js, calculé par AnimPage.jsx) — remplace le
  *   repli générique "indispo." du bouton LANCER quand renseigné
@@ -198,6 +200,7 @@ export default function AnimConductPanel({
   onStopMotionTimer,
   onRevealMotionCard,
   onDoneMotionCard,
+  confirmMotionWinner = false,
   waitReason = null,
   rafaleDisabled = false,
   onRafaleValidate,
@@ -233,7 +236,7 @@ export default function AnimConductPanel({
   // ROUE (v12.0.0, #144, maquette M7) — l'animateur commande la manche : panneau dédié en L3 (aucun geste de mode en L2)
   const isRoue = question?.TYPE === 'ROUE'
   // PICTO (v13.0.0, #192/#193, maquette M1) — panneau dédié en L3 (préparation, dessin en direct), aucun geste de mode en L2
-  const isPicto = question?.TYPE === 'PICTO'
+  const isPicto = isPictoFamily(question?.TYPE)
   // #219 (v11.1) — SPEEDY/QCM/ARDOISE porteurs d'un son : occupe L2 comme
   // MEMOTION/RAFALE ci-dessus, mais par PRÉSENCE d'un son plutôt que par
   // TYPE (le champ est structurellement commun à tous les types, plan
@@ -395,6 +398,7 @@ export default function AnimConductPanel({
               onStopMotionTimer={onStopMotionTimer}
               onRevealMotionCard={onRevealMotionCard}
               onDoneMotionCard={onDoneMotionCard}
+              confirmWinner={confirmMotionWinner}
             />
             {/* #235 (T14) — gestes du son (hôte au START, ou carte sonore retournée) sous les
                 gestes de carte ; rangée absente quand ni l'hôte ni la carte courante n'ont de son. */}

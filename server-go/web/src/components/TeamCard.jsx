@@ -395,7 +395,7 @@ export default function TeamCard({
   selected = false,
   onSelectChange = null,
   awardedInfo = null, // { POINTS } si l'équipe est dans AWARDED_TEAMS
-  awardPreview = null, // montant prévu (équipe sélectionnée)
+  awardChip = null, // #321 — chip « +N pts » du montant réel (équipe cochée) ; en REVEALED, prioritaire sur les chips MEMORY/QCM/RAFALE ; null = rien
   // #254 — attribution au niveau JOUEUR : cases sur les lignes de joueurs (pas de case d'équipe).
   // { selected(mac), onChange(mac, checked), awarded(mac) → {POINTS}|null, preview(mac) → number|null }
   playerAward = null,
@@ -512,13 +512,20 @@ export default function TeamCard({
           {rankBadge && <span className="rank-badge">{rankBadge}</span>}
           <h3 className="team-name">{name}</h3>
         </div>
-        {/* RAFALE (v8.0.0, #16/#199, contrat rafale.md §6) — badge dédié,
-            AVANT la chaîne memory/qcm/ready ci-dessous : pas de gate sur
-            gamePhase === 'REVEALED' (RAFALE n'atteint jamais cette phase,
-            §2.1), la sous-phase ROUND_END est le signal pertinent. Deux
-            variantes : compteur "live" pendant la manche (§6.1, "compteur,
-            pas un score réel"), suggestion pré-remplie en ROUND_END (§6.2). */}
-        {rafaleStats && rafaleStats.suggestedPoints !== null ? (
+        {/* #321 — équipe COCHÉE : la chip du montant réellement attribué passe AVANT MEMORY/QCM/RAFALE (REVEALED) */}
+        {awardChip !== null && gamePhase === 'REVEALED' ? (
+          <motion.span
+            className={`memory-acquired-badge award-chip${awardChip < 0 ? ' award-chip-neg' : ''}`}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+          >
+            {awardChip > 0 ? '+' : ''}{awardChip} pts
+          </motion.span>
+        ) : /* RAFALE (v8.0.0, #16/#199, contrat rafale.md §6) — badge dédié, APRÈS awardChip et AVANT memory/qcm/ready :
+           pas de gate sur gamePhase === 'REVEALED' (RAFALE n'atteint jamais cette phase, §2.1), la sous-phase
+           ROUND_END est le signal pertinent. Deux variantes : compteur "live" pendant la manche (§6.1, "compteur,
+           pas un score réel"), suggestion pré-remplie en ROUND_END (§6.2). */
+        rafaleStats && rafaleStats.suggestedPoints !== null ? (
           <motion.span
             className="memory-acquired-badge rafale-suggested-badge"
             initial={{ scale: 0 }}
@@ -577,11 +584,6 @@ export default function TeamCard({
         {selectable && awardedInfo && (
           <span className="award-done-chip">
             ✓ déjà créditée {awardedInfo.POINTS > 0 ? '+' : ''}{awardedInfo.POINTS}
-          </span>
-        )}
-        {selectable && !awardedInfo && selected && awardPreview !== null && (
-          <span className={`award-preview${awardPreview < 0 ? ' neg' : ''}`}>
-            {awardPreview > 0 ? '+' : ''}{awardPreview}
           </span>
         )}
         {/* Score decomposition tooltip */}

@@ -58,6 +58,14 @@ describe('PlayerDisplay — type PICTO (#192/#193)', () => {
     const { container } = render(<PlayerDisplay />)
     expect(container.querySelector('.countdown-number')).not.toBeNull()
   })
+  it('indice TV (#324, picto.md §17) : la catégorie du mot tiré (PICTO_WORD_CATEGORY) remplace celle de la question', () => {
+    mockGame({ phase: 'STARTED', PICTO_WORD_CATEGORY: 'HISTORY' })
+    const { container } = render(<PlayerDisplay />)
+    const hint = container.querySelector('[data-testid="picto-hint"] .picto-hint-cat')
+    expect(hint).not.toBeNull()
+    const questionHint = (() => { mockGame({ phase: 'STARTED' }); const r = render(<PlayerDisplay />); return r.container.querySelector('[data-testid="picto-hint"] .picto-hint-cat')?.textContent })()
+    expect(hint.textContent).not.toBe(questionHint) // catégorie du mot ≠ catégorie de la question
+  })
   it('STARTED TV : indice et feuille, aucun repli sur le bloc générique (ni énoncé ni réponse)', () => {
     mockGame({ phase: 'STARTED' })
     const { container } = render(<PlayerDisplay />)
@@ -69,6 +77,21 @@ describe('PlayerDisplay — type PICTO (#192/#193)', () => {
     const { container } = render(<PlayerDisplay isVPlayer playerId="b1" teamName="Bleus" />)
     expect(container.querySelector('[data-testid="picto-drawer-prep"]')).not.toBeNull()
     expect(container.querySelector('.ready-category-display')).toBeNull()
+  })
+  it('tablette du dessinateur : le décompte 3-2-1 / GO! s\'affiche en COUNTDOWN (#321), sans feuille ni mot', () => {
+    mockGame({ phase: 'COUNTDOWN', countdownTime: 2 })
+    const { container } = render(<PlayerDisplay isVPlayer playerId="b1" teamName="Bleus" />)
+    expect(container.querySelector('[data-testid="picto-drawer-countdown"]').textContent).toBe('2')
+    expect(container.querySelector('[data-testid="picto-drawer"]')).toBeNull()
+  })
+  it('tablette du dessinateur : « GO! » quand le décompte atteint 0, rien en READY', () => {
+    mockGame({ phase: 'COUNTDOWN', countdownTime: 0 })
+    const { container, unmount } = render(<PlayerDisplay isVPlayer playerId="b1" teamName="Bleus" />)
+    expect(container.querySelector('[data-testid="picto-drawer-countdown"]').textContent).toBe('GO!')
+    unmount()
+    mockGame()
+    const r2 = render(<PlayerDisplay isVPlayer playerId="b1" teamName="Bleus" />)
+    expect(r2.container.querySelector('[data-testid="picto-drawer-countdown"]')).toBeNull()
   })
   it('tablette d\'une autre équipe en READY : écran générique (type et catégorie)', () => {
     mockGame()

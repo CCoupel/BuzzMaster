@@ -28,6 +28,7 @@ import { usePointsAward } from '../hooks/usePointsAward'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 import '../styles/entracte.css'
+import { isPictoFamily } from '../utils/pictoFamily'
 
 // QCM answer colors
 const QCM_COLORS = {
@@ -715,7 +716,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // ROUE (v12.0.0, #144, contrat roue.md) — dispatch positif, jamais de repli sur le bloc SPEEDY générique.
   const isRoue = gameState.question?.TYPE === 'ROUE'
   // PICTO (v13.0.0, #192/#193, contrat picto.md) — dispatch positif aussi : jamais de repli sur le bloc SPEEDY générique.
-  const isPicto = gameState.question?.TYPE === 'PICTO'
+  const isPicto = isPictoFamily(gameState.question?.TYPE)
   // Tablette du dessinateur : écran « C'est toi qui dessines ! » à la place des écrans génériques de préparation (maquette M4)
   const pictoDrawerPrep = isPicto && isVPlayer && !!playerId && playerId === gameState.PICTO_DRAWER && ['PREPARE', 'READY', 'COUNTDOWN'].includes(gameState.phase)
   const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale || isEntracte || isRoue || isPicto
@@ -1732,7 +1733,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               if (isVPlayer) {
                 return (
                   <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
-                    <span className="rafale-vplayer-fs-message">Préparez-vous —<br />manche RAFALE</span>
+                    <span className="rafale-vplayer-fs-message">Préparez-vous —<br />manche Rafale Speedy</span>
                   </div>
                 )
               }
@@ -1768,7 +1769,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         className="rafale-ready-gtype"
                         style={{ color: GAME_TYPE_COLORS.RAFALE.color, textShadow: `0 0 20px ${GAME_TYPE_COLORS.RAFALE.shadow}, 0 0 50px ${GAME_TYPE_COLORS.RAFALE.shadow}` }}
                       >
-                        RAFALE
+                        Rafale Speedy
                       </span>
                       {rafaleReadyCategories.length > 0 && (
                         <>
@@ -3151,7 +3152,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             {isPicto && (showGameContent || pictoDrawerPrep) && (
               <PictoTv
                 gameState={gameState}
-                catMeta={categoryMeta(gameState.question?.CATEGORY, apiCategories)}
+                catMeta={categoryMeta(gameState.PICTO_WORD_CATEGORY || gameState.question?.CATEGORY, apiCategories)} /* v13.1.0 : indice = catégorie du mot tiré (pool), sinon de la question */
                 isVPlayer={isVPlayer}
                 playerId={playerId}
                 teamName={teamName}
@@ -3204,7 +3205,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 if (!isMultiTeam) {
                   return (
                     <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
-                      <span className="rafale-vplayer-fs-message">Manche RAFALE en cours</span>
+                      <span className="rafale-vplayer-fs-message">Manche Rafale Speedy en cours</span>
                     </div>
                   )
                 }

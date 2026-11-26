@@ -2,17 +2,25 @@
  * pictoState — helpers purs des écrans PICTO (contrat picto.md §5, §6, §9). Aucune règle de jeu ici : le serveur reste
  * seul juge (`PICTO_ERROR`), ces fonctions ne servent qu'à l'affichage et à griser les boutons.
  */
+import { isPictoFamily } from '../../utils/pictoFamily'
 
-export const isPictoQuestion = (gs) => gs?.question?.TYPE === 'PICTO'
+
+export const isPictoQuestion = (gs) => isPictoFamily(gs?.question?.TYPE)
 
 /** Fabrique des actions de préparation (§9.1) au-dessus d'un `sendMessage(action, payload)`. */
-export function makePictoActions(sendMessage) {
+export function makePictoActions(sendMessage, hooks = {}) {
   return {
     setTeam: (team) => sendMessage('PICTO_SET_TEAM', { TEAM: team || '' }),
     setDrawer: (player) => sendMessage('PICTO_SET_DRAWER', { PLAYER: player || '' }),
     drawDrawer: () => sendMessage('PICTO_DRAW_DRAWER', {}),
     // « Trouvé ! » (§6.3/§6.4) : STARTED, PAUSED, ou STOPPED après TIMEOUT (réponse donnée sur le gong)
-    found: () => sendMessage('PICTO_FOUND', {}),
+    // `epoch` : obligatoire en Rafale Picto (STALE_WORD sinon), facultatif en Picto un mot (§17.5)
+    // Avec une époque, passe par le callback du contexte (`useGame().pictoFound`) quand il est fourni.
+    found: (epoch) => (epoch === undefined || epoch === null
+      ? sendMessage('PICTO_FOUND', {})
+      : (hooks.found ? hooks.found(epoch) : sendMessage('PICTO_FOUND', { EPOCH: epoch }))),
+    // « Passer » (Rafale Picto seulement, §17.5) : admin et anim ; le dessinateur l'annonce à l'oral
+    pass: (epoch) => (hooks.pass ? hooks.pass(epoch) : sendMessage('PICTO_PASS', { EPOCH: epoch })),
   }
 }
 
@@ -55,6 +63,7 @@ export function outcomeLabel(gs) {
     case 'TIMEOUT': return '⏰ Temps écoulé'
     case 'STOPPED': return '⏹ Manche arrêtée'
     case 'NO_WORD': return 'Aucun mot dans la question'
+    case 'POOL_END': return '🗂 Fin du pool'
     default: return ''
   }
 }
@@ -76,4 +85,19 @@ export const errorText = (e) => (e ? (ERROR_TEXT[e.CODE] || e.MESSAGE || e.CODE 
 /** Couleur d'équipe (tableau [r,g,b] ou chaîne CSS). */
 export function teamCss(color, fallback = '#6b7280') {
   return Array.isArray(color) && color.length === 3 ? `rgb(${color.join(',')})` : (typeof color === 'string' && color ? color : fallback)
+}
+
+/**
+ * Origine des mots d'une question Picto (v13.1.0, picto.md §17.2) : `PICTO_SOURCE = RESERVOIR` → Pool Picto, mots
+ * encore tirables = `PICTO_POOL_AVAILABLE` ; sinon (absent = mots saisis) → nombre de mots de la question.
+ */
+export function pictoWordsInfo(gs) {
+  const q = gs?.question || {}
+  const rafale = q.TYPE === 'RAFALE_PICTO' // champs propres du type (picto.md §17.2)
+  const fromPool = (rafale ? q.RAFALE_PICTO_SOURCE : q.PICTO_SOURCE) === 'RESERVOIR'
+  return {
+    fromPool,
+    available: gs?.PICTO_POOL_AVAILABLE || 0,
+    words: gs?.PICTO_WORDS_COUNT || ((rafale ? q.RAFALE_PICTO_WORDS : q.PICTO_WORDS) || []).length || 0,
+  }
 }

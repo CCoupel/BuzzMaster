@@ -179,6 +179,9 @@ const (
 	// QuestionTypePicto (v13.0.0, #191): "Picto" — one team's drawer draws a
 	// secret word on a tablet, the team guesses it orally — contracts/picto.md.
 	QuestionTypePicto QuestionType = "PICTO"
+	// QuestionTypeRafalePicto (v13.1.0, #318): "Rafale Picto" — one team has as many words as possible guessed
+	// within the question's TIME, with passes — contracts/picto.md §17. Same drawn round as PICTO (family).
+	QuestionTypeRafalePicto QuestionType = "RAFALE_PICTO"
 )
 
 // KeyboardType represents the virtual keyboard layout for ARDOISE questions
@@ -425,6 +428,77 @@ type TypedContent struct {
 	// nestable. 1 to 20 words (rules §3.1, see picto_words.go), one of which is
 	// drawn at each START. SECRET: stripped from TV / tablet messages (§10).
 	PictoWords []string `json:"PICTO_WORDS,omitempty"`
+	// v13.1.0 (#324, contracts/picto.md §17.2) — source of the word: "" / WORDS = the question's own words
+	// (v13.0.0 behaviour, free draw), RESERVOIR = the Pool Picto (stratified draw, "used" marking). The filter
+	// (categories × difficulties) is required with the RESERVOIR source and not secret.
+	PictoSource       string   `json:"PICTO_SOURCE,omitempty"`
+	PictoCategories   []string `json:"PICTO_CATEGORIES,omitempty"`
+	PictoDifficulties []int    `json:"PICTO_DIFFICULTIES,omitempty"`
+
+	// RAFALE_PICTO (v13.1.0, #318, contracts/picto.md §17.2) — exclusive OwnedFields of the type (the registry
+	// forbids a field shared between two types): same word-source block as PICTO under its own prefix, plus the
+	// passes and the end of the pool. All omitempty. RAFALE_PICTO_WORDS is SECRET (stripped from TV / tablets).
+	RafalePictoSource       string   `json:"RAFALE_PICTO_SOURCE,omitempty"`
+	RafalePictoWords        []string `json:"RAFALE_PICTO_WORDS,omitempty"`
+	RafalePictoCategories   []string `json:"RAFALE_PICTO_CATEGORIES,omitempty"`
+	RafalePictoDifficulties []int    `json:"RAFALE_PICTO_DIFFICULTIES,omitempty"`
+	RafalePictoPassCost     int      `json:"RAFALE_PICTO_PASS_COST,omitempty"`  // 0 to 100 points taken per pass; 0 = free
+	RafalePictoPassLimit    int      `json:"RAFALE_PICTO_PASS_LIMIT,omitempty"` // 0 = unlimited, 1 = a single pass
+	RafalePictoPoolEnd      string   `json:"RAFALE_PICTO_POOL_END,omitempty"`   // END (default) | LOOP
+}
+
+// RAFALE_PICTO_POOL_END values (contracts/picto.md §17.2).
+const (
+	PictoPoolEndEnd  = "END"
+	PictoPoolEndLoop = "LOOP"
+)
+
+// PictoConfig is the word-source configuration of a Picto-family question, read through ONE accessor so the
+// engine never branches on the field prefix: PICTO_* for the PICTO type, RAFALE_PICTO_* for RAFALE_PICTO.
+type PictoConfig struct {
+	Rafale       bool // RAFALE_PICTO (several words, passes) — false for PICTO (one word)
+	Source       string
+	Words        []string
+	Categories   []string
+	Difficulties []int
+	PassCost     int
+	PassLimit    int  // 0 = unlimited (RAFALE_PICTO)
+	PoolLoop     bool // POOL_END = LOOP
+}
+
+// PictoConfig returns the Picto-family configuration of q (zero value for any other type).
+func (q *Question) PictoConfig() PictoConfig {
+	if q == nil {
+		return PictoConfig{}
+	}
+	switch q.Type {
+	case QuestionTypeRafalePicto:
+		src := PictoSourceWords
+		if q.RafalePictoSource == PictoSourceReservoir {
+			src = PictoSourceReservoir
+		}
+		return PictoConfig{Rafale: true, Source: src, Words: q.RafalePictoWords, Categories: q.RafalePictoCategories,
+			Difficulties: q.RafalePictoDifficulties, PassCost: q.RafalePictoPassCost, PassLimit: q.RafalePictoPassLimit,
+			PoolLoop: q.RafalePictoPoolEnd == PictoPoolEndLoop}
+	case QuestionTypePicto:
+		return PictoConfig{Source: q.EffectivePictoSource(), Words: q.PictoWords, Categories: q.PictoCategories,
+			Difficulties: q.PictoDifficulties}
+	}
+	return PictoConfig{}
+}
+
+// PICTO_SOURCE values (contracts/picto.md §17.2).
+const (
+	PictoSourceWords     = "WORDS"
+	PictoSourceReservoir = "RESERVOIR"
+)
+
+// EffectivePictoSource returns the source of the word: absent (every v13.0.0 question) = WORDS.
+func (tc TypedContent) EffectivePictoSource() string {
+	if tc.PictoSource == PictoSourceReservoir {
+		return PictoSourceReservoir
+	}
+	return PictoSourceWords
 }
 
 // Effective vowel settings (contract §15.1.1: absent = default).
@@ -658,21 +732,28 @@ func AllQuestionTypes() []QuestionType {
 		QuestionTypeEntracte,
 		QuestionTypeRoue,
 		QuestionTypePicto,
+		QuestionTypeRafalePicto,
 	}
 }
 
-// RafaleQuestion is one question in the RAFALE reservoir — a global pool of
-// text-only question/answer pairs, independent from Quiz/MEMOTION questions
-// (contracts/rafale.md §2.4/§3.1, milestone #16, #197). Stored as a single
-// file (data/files/rafale/reservoir.json), never one directory per question:
-// RAFALE questions carry no media (arbitrage D3).
-type RafaleQuestion struct {
+// PoolEntry is one entry of a reservoir (EntryPool, pool_store.go) — a
+// global pool of text-only entries, independent from Quiz/MEMOTION questions
+// (contracts/rafale.md §2.4/§3.1, milestone #16, #197; generalised by
+// contracts/picto-pool.md §2). RAFALE: Question = statement, Answer =
+// expected answer. PICTO (v13.1.0): Question = the word, Answer = always "".
+// Stored as a single file per instance (files/<name>/reservoir.json), never
+// one directory per entry: entries carry no media (arbitrage D3).
+type PoolEntry struct {
 	ID         string           `json:"ID"`         // stable identifier, unique within the reservoir
-	Question   string           `json:"QUESTION"`   // statement, text only
-	Answer     string           `json:"ANSWER"`     // expected answer, text only
+	Question   string           `json:"QUESTION"`   // statement (RAFALE) or word (PICTO), text only
+	Answer     string           `json:"ANSWER"`     // expected answer, text only ("" for PICTO)
 	Category   QuestionCategory `json:"CATEGORY"`   // reuses the existing enum + custom categories on disk
 	Difficulty int              `json:"DIFFICULTY"` // 1..3 — same scale as MotionCard.Difficulty
 }
+
+// RafaleQuestion is the historical name of PoolEntry, kept as an alias so the
+// RAFALE code and its tests are unchanged.
+type RafaleQuestion = PoolEntry
 
 // RafaleSubPhase is the sub-phase of a RAFALE round (GameState.RafaleSubPhase,
 // "" outside a RAFALE question) — contracts/rafale.md §4. Defined here
@@ -1095,6 +1176,18 @@ type GameState struct {
 	PictoOutcome          string           `json:"PICTO_OUTCOME"`
 	PictoRevealedWord     string           `json:"PICTO_REVEALED_WORD"`
 	PictoRevealedCategory string           `json:"PICTO_REVEALED_CATEGORY"`
+	// v13.1.0 (#324, contracts/picto.md §17.4) — public hint and pool counter, same lifecycle as the fields above.
+	PictoPoolAvailable int    `json:"PICTO_POOL_AVAILABLE"` // words still drawable (RESERVOIR: pool filtered, not used; WORDS: question words)
+	PictoWordCategory  string `json:"PICTO_WORD_CATEGORY"`  // category of the current word (pool) else the question's
+
+	// Round state of the Picto family (v13.1.0, #318, contracts/picto.md §17.4) — NO omitempty, arrays never null,
+	// never persisted, never sent to the buzzers. FOUND_WORDS only ever holds words found (said aloud, public);
+	// a passed word is never published. PASSES_LEFT: -1 = unlimited (and always -1 for a PICTO question).
+	PictoFoundCount  int      `json:"PICTO_FOUND_COUNT"`
+	PictoFoundWords  []string `json:"PICTO_FOUND_WORDS"`
+	PictoPassCount   int      `json:"PICTO_PASS_COUNT"`
+	PictoPassesLeft  int      `json:"PICTO_PASSES_LEFT"`
+	PictoRoundPoints int      `json:"PICTO_ROUND_POINTS"` // suggested credit: max(0, found x POINTS - passes x cost)
 
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero
@@ -1367,7 +1460,7 @@ func ParseQCMWrongPenaltyRaw(raw []byte) int {
 // PICTO, PLAYER for SPEEDY (and legacy NORMAL / unknown).
 func DefaultPointsTarget(t string) PointsTarget {
 	switch t {
-	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE", "PICTO": // PICTO (v13.0.0, contracts/picto.md §7): team only
+	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE", "PICTO", "RAFALE_PICTO": // PICTO family (contracts/picto.md §7, §17): team only
 		return PointsTargetTeam
 	}
 	return PointsTargetPlayer

@@ -38,6 +38,8 @@
  *     pour la même cause).
  *   - Type inconnu          : permissif par défaut.
  */
+import { isPictoFamily } from './pictoFamily'
+
 
 /** @param {{READY?: boolean|string}} team */
 export function isTeamReady(team) {
@@ -69,8 +71,8 @@ export function participantsConform(question, participating) {
     const isSolo = question.ROUE_MODE === 'SOLO'
     return isSolo ? count === 1 : count >= 2
   }
-  if (type === 'PICTO') {
-    // PICTO (#192, contrat picto.md §6.1) — READY seulement si l'équipe qui dessine est choisie (le dessinateur, lui, se désigne au READY)
+  if (isPictoFamily(type)) {
+    // PICTO et RAFALE_PICTO (#192, contrat picto.md §6.1) — READY seulement si l'équipe qui dessine est choisie (le dessinateur, lui, se désigne au READY)
     return count === 1
   }
   // SPEEDY, QCM, ARDOISE, type inconnu — déjà couvert par AreAllTeamsReady
@@ -132,7 +134,7 @@ function participantsReasonLabel(question, { short, count = 0 } = {}) {
     if (short) return isSolo ? '1 équipe' : '2 équipes'
     return isSolo ? (count > 1 ? 'sélectionnez une seule équipe' : 'sélectionnez une équipe') : 'sélectionnez au moins deux équipes participantes'
   }
-  if (type === 'PICTO') {
+  if (isPictoFamily(type)) {
     return short ? '1 équipe' : "choisissez l'équipe qui dessine"
   }
   return null
@@ -192,7 +194,7 @@ export function prepareWaitReasons(phase, question, activeTeams, gameState, opts
       ? (gameState?.RAFALE_PARTICIPATING_TEAMS || [])
       : question?.TYPE === 'ROUE'
         ? (gameState?.ROUE_TEAMS || [])
-        : question?.TYPE === 'PICTO'
+        : isPictoFamily(question?.TYPE)
           ? (gameState?.PICTO_TEAM ? [gameState.PICTO_TEAM] : [])
           : (gameState?.MEMORY_PARTICIPATING_TEAMS || [])
 

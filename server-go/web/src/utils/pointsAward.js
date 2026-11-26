@@ -15,6 +15,8 @@
  * ci-dessous — sur /anim) : ce module applique les règles de pénalité/bonus
  * par-dessus, il ne choisit pas la source.
  */
+import { isPictoFamily } from './pictoFamily'
+
 
 /**
  * Pénalité QCM par joueur, pour un nombre d'indices donné au moment du buzz
@@ -184,8 +186,8 @@ export function resolvePointsTarget(question) {
  */
 export function resolveAwardLevel(question) {
   const type = question?.TYPE
-  // PICTO (v13.0.0, contrat picto.md §7) : équipe seule, pas de score individuel pour le dessinateur
-  if (type === 'MEMORY' || type === 'MEMOTION' || type === 'RAFALE' || type === 'PICTO') return 'TEAM'
+  // PICTO et RAFALE_PICTO (famille Picto, contrat picto.md §7 et §17) : équipe seule, pas de score individuel pour le dessinateur
+  if (type === 'MEMORY' || type === 'MEMOTION' || type === 'RAFALE' || isPictoFamily(type)) return 'TEAM'
   const target = question?.POINTS_TARGET
   if (target === 'TEAM' || target === 'PLAYER') return target
   // QCM, ARDOISE : TEAM ; SPEEDY (et tout type inconnu / absent, jamais servi par le serveur) : PLAYER
@@ -358,7 +360,7 @@ export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedC
  */
 export function defaultTeamAward({
   question, teamName, basePoints, teamBumpers, invalidatedCount = 0, memorySoloScore = null,
-  memoryTeamPairs, memoryTeamErrors, rafaleCounters, rafaleBest, useHints = true,
+  memoryTeamPairs, memoryTeamErrors, rafaleCounters, rafaleBest, useHints = true, pictoRoundPoints,
 }) {
   // #254 : montant négatif (pénalité) = uniforme, quel que soit le type
   if (!(basePoints > 0)) return basePoints
@@ -370,6 +372,10 @@ export function defaultTeamAward({
     amount = memorySoloScore.score
   } else if (question?.TYPE === 'QCM' && question?.QCM_HINTS_ENABLED) {
     amount = calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount, useHints).amount
+  } else if (question?.TYPE === 'RAFALE_PICTO' && Number.isInteger(pictoRoundPoints)) {
+    // Rafale Picto (picto.md §17.7) : crédit pré-rempli = PICTO_ROUND_POINTS, calculé par le serveur
+    // (max(0, trouvés × POINTS − passes × coût)) ; jamais recalculé ici.
+    amount = pictoRoundPoints
   } else if (question?.TYPE === 'RAFALE') {
     const counter = rafaleCounterForTeam(question, teamName, rafaleCounters, rafaleBest)
     const award = calcRafaleTeamAward(question, basePoints, counter)

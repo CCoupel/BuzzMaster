@@ -30,14 +30,15 @@ import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import EntracteFields from '../components/EntracteFields'
-import PictoEditor, { isPictoReady, PICTO_TIME_DEFAULT } from '../components/picto/PictoEditor'
+import PictoEditor, { isPictoReady, PICTO_TIME_DEFAULT, PICTO_FIELDS, RAFALE_PICTO_FIELDS } from '../components/picto/PictoEditor'
+import { isPictoFamily, isRafalePicto } from '../utils/pictoFamily'
 import RoueEditor, { roueRefusalText, validVowelPrice } from '../components/roue/RoueEditor'
 import RoundGroup from '../components/RoundGroup'
 import RoundDeleteDialog from '../components/RoundDeleteDialog'
 import RoundAmbianceDialog from '../components/RoundAmbianceDialog'
 import { overriddenFields, describeOverride, fileOverrides } from '../utils/ambianceSettings'
 import { cueMeta } from '../utils/soundCues'
-import RafalePage from './RafalePage'
+import PoolPage from './PoolPage'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 import '../styles/sliders.css'
@@ -68,7 +69,7 @@ export default function QuestionsPage() {
   // lu ici en état initial uniquement (pas de synchronisation continue avec
   // l'URL au clic sur un onglet : même patron que BackstagePage.jsx).
   const [searchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') === 'rafale' ? 'rafale' : 'questions')
+  const [activeTab, setActiveTab] = useState(['rafale', 'picto'].includes(searchParams.get('tab')) ? searchParams.get('tab') : 'questions')
   const [isUploading, setIsUploading] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const fileInputRef = useRef(null)
@@ -131,6 +132,17 @@ export default function QuestionsPage() {
     rafaleWheelLayout: 'strip',
     // ROUE fields (v12.0.0, #145, contrat roue.md §3)
     pictoWords: [], // PICTO (v13.0.0, #191) : mots de la question (contrat picto.md §4)
+    // RAFALE_PICTO (v13.1.0, #318, picto.md §17.2) : défauts de l'éditeur = Pool Picto, [1,2,3], passes illimitées gratuites, rebouclage
+    rafalePictoSource: 'RESERVOIR',
+    rafalePictoWords: [],
+    rafalePictoCategories: [],
+    rafalePictoDifficulties: [1, 2, 3],
+    rafalePictoPassCost: 0,
+    rafalePictoPassLimit: 0,
+    rafalePictoPoolEnd: 'LOOP',
+    pictoSource: 'RESERVOIR', // v13.1.0 : source des mots, défaut d'une NOUVELLE question = Pool Picto (picto.md §17.2)
+    pictoCategories: [],
+    pictoDifficulties: [1, 2, 3],
     rouePhrase: '',
     rouePresentation: '',
     roueMode: 'TANT_QUE_JE_GAGNE',
@@ -751,7 +763,7 @@ export default function QuestionsPage() {
       // Auto-set pointsTarget when type changes
       if (field === 'type') {
         // QCM, MEMORY, MEMOTION, ARDOISE and RAFALE default to TEAM, SPEEDY defaults to PLAYER
-        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE' || value === 'RAFALE' || value === 'PICTO') ? 'TEAM' : 'PLAYER'
+        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE' || value === 'RAFALE' || isPictoFamily(value)) ? 'TEAM' : 'PLAYER'
         // RAFALE (v8.0.0, #16, contrat rafale.md §3.3) — défauts distincts
         // du reste des types : durée de MANCHE (120s, pas 30s) et barème
         // de 2pts/bonne réponse (maquette rafale-v8.html §2). Uniquement
@@ -766,8 +778,12 @@ export default function QuestionsPage() {
           updates.points = '2'
         }
         // PICTO (v13.0.0, #191, contrat picto.md §4) — durée de dessin pré-remplie à 90 s (30 à 300), en entrant seulement.
-        if (value === 'PICTO') {
+        if (isPictoFamily(value)) {
           updates.time = PICTO_TIME_DEFAULT
+        }
+        // RAFALE_PICTO (v13.1.0, #318) — points par mot trouvé : 10 par défaut, en entrant seulement
+        if (value === 'RAFALE_PICTO') {
+          updates.points = '10'
         }
       }
       return { ...prev, ...updates }
@@ -923,7 +939,7 @@ export default function QuestionsPage() {
 
                       {/* CA2 — le refus nomme sa cause (message serveur brut,
                           ValidateQuestionSound), jamais une étiquette générique. */}
-                      {soundError && !(formData.type === 'PICTO' && /PICTO_/.test(soundError)) && (
+                      {soundError && !(isPictoFamily(formData.type) && /PICTO_/.test(soundError)) && (
                         <p className="sound-error-message">✕ {soundError}</p>
                       )}
 
@@ -1236,6 +1252,18 @@ export default function QuestionsPage() {
       rafaleWheelLayout: question.RAFALE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip',
       // ROUE (#145) — ROUE_SHOW_LETTERS absent = true (le champ n'est écrit que pour false)
       pictoWords: Array.isArray(question.PICTO_WORDS) ? question.PICTO_WORDS : [],
+      // Absent = WORDS : une question v13.0.0 reste « mots saisis » (picto.md §17.2)
+      rafalePictoSource: question.RAFALE_PICTO_SOURCE === 'WORDS' ? 'WORDS' : 'RESERVOIR',
+      rafalePictoWords: Array.isArray(question.RAFALE_PICTO_WORDS) ? question.RAFALE_PICTO_WORDS : [],
+      rafalePictoCategories: Array.isArray(question.RAFALE_PICTO_CATEGORIES) ? question.RAFALE_PICTO_CATEGORIES : [],
+      rafalePictoDifficulties: Array.isArray(question.RAFALE_PICTO_DIFFICULTIES) && question.RAFALE_PICTO_DIFFICULTIES.length ? question.RAFALE_PICTO_DIFFICULTIES : [1, 2, 3],
+      rafalePictoPassCost: question.RAFALE_PICTO_PASS_COST || 0,
+      rafalePictoPassLimit: question.RAFALE_PICTO_PASS_LIMIT === 1 ? 1 : 0,
+      // absent = END (picto.md §17.2) : une question sans le champ est rechargée en « Finir la manche »
+      rafalePictoPoolEnd: question.RAFALE_PICTO_POOL_END === 'LOOP' ? 'LOOP' : 'END',
+      pictoSource: question.PICTO_SOURCE === 'RESERVOIR' ? 'RESERVOIR' : 'WORDS',
+      pictoCategories: Array.isArray(question.PICTO_CATEGORIES) ? question.PICTO_CATEGORIES : [],
+      pictoDifficulties: Array.isArray(question.PICTO_DIFFICULTIES) && question.PICTO_DIFFICULTIES.length ? question.PICTO_DIFFICULTIES : [1, 2, 3],
       rouePhrase: question.ROUE_PHRASE || '',
       rouePresentation: question.ROUE_PRESENTATION || '',
       roueMode: question.ROUE_MODE || 'TANT_QUE_JE_GAGNE',
@@ -1413,6 +1441,16 @@ export default function QuestionsPage() {
       rafaleAlphabetical: false,
       rafaleWheelLayout: 'strip',
       pictoWords: [],
+      pictoSource: 'RESERVOIR',
+      pictoCategories: [],
+      pictoDifficulties: [1, 2, 3],
+      rafalePictoSource: 'RESERVOIR',
+      rafalePictoWords: [],
+      rafalePictoCategories: [],
+      rafalePictoDifficulties: [1, 2, 3],
+      rafalePictoPassCost: 0,
+      rafalePictoPassLimit: 0,
+      rafalePictoPoolEnd: 'LOOP',
       // ROUE fields (#145) — voir état initial
       rouePhrase: '',
       rouePresentation: '',
@@ -1717,9 +1755,9 @@ export default function QuestionsPage() {
     // ROUE (#145) — pas d'énoncé : la phrase est validée par le serveur (aperçu) ; bouton désactivé tant qu'elle est refusée
     if (formData.type === 'ROUE') {
       if (!formData.rouePhrase.trim() || !roueValid || !roueWheelValid || !validVowelPrice(formData.roueVowelPrice ?? 250)) return
-    } else if (formData.type === 'PICTO') {
-      // PICTO (#191) — pas de réponse ; mots et durée vérifiés ici pour les bornes seulement, le reste est refusé par le serveur
-      if (!formData.question || !isPictoReady(formData)) return
+    } else if (isPictoFamily(formData.type)) {
+      // PICTO / RAFALE_PICTO (#191, #318) — pas de réponse ; mots et durée vérifiés ici pour les bornes seulement, le reste est refusé par le serveur
+      if (!formData.question || !isPictoReady(formData, isRafalePicto(formData.type) ? RAFALE_PICTO_FIELDS : PICTO_FIELDS)) return
     } else if (!formData.question) return
     if (formData.type === 'SPEEDY' && !formData.answer) return
     if (formData.type === 'ARDOISE' && !formData.answer) return
@@ -1776,8 +1814,13 @@ export default function QuestionsPage() {
     // ROUE : la phrase ne transite jamais par le champ générique « question » (visible TV, contrat roue.md §9)
     data.append('question', formData.type === 'ROUE' ? (formData.rouePresentation.trim() || 'Roue de la Fortune') : formData.question)
     data.append('type', formData.type)
-    if (formData.category) {
-      data.append('category', formData.category)
+    // Rafale Picto sur le pool : pas de sélecteur unique, la catégorie du crédit = première catégorie du filtre
+    // (toujours le filtre : le sélecteur unique est masqué, une catégorie préexistante du formulaire ne doit pas l'emporter)
+    const creditCategory = formData.type === 'RAFALE_PICTO' && formData.rafalePictoSource === 'RESERVOIR'
+      ? (formData.rafalePictoCategories || [])[0]
+      : formData.category
+    if (creditCategory) {
+      data.append('category', creditCategory)
     }
     data.append('points_target', formData.pointsTarget)
     data.append('points', formData.points)
@@ -2023,7 +2066,29 @@ export default function QuestionsPage() {
       data.append('answer', `${formData.rafaleCategories.join('/') || '?'} - ${formData.rafaleDifficulties.map(d => '★'.repeat(d)).join(', ')}`)
     } else if (formData.type === 'PICTO') {
       // PICTO (#191, contrat picto.md §11) — un mot par ligne, relus à chaque enregistrement (sinon détruits côté serveur)
-      data.append('picto_words', (formData.pictoWords || []).join('\n'))
+      // v13.1.0 : source des mots. `picto_source` n'est écrit que pour le Pool Picto (absent = WORDS : round-trip des
+      // questions v13.0.0) ; les mots ne sont écrits que pour la source « mots saisis » (picto.md §17.2).
+      const pictoFromPool = formData.pictoSource === 'RESERVOIR'
+      data.append('picto_source', pictoFromPool ? 'RESERVOIR' : '')
+      data.append('picto_words', pictoFromPool ? '' : (formData.pictoWords || []).join('\n'))
+      if (pictoFromPool) {
+        data.append('picto_categories', JSON.stringify(formData.pictoCategories || []))
+        data.append('picto_difficulties', JSON.stringify(formData.pictoDifficulties || []))
+      }
+      data.append('answer', '—')
+    } else if (formData.type === 'RAFALE_PICTO') {
+      // RAFALE_PICTO (#318, contrat picto.md §17.2) — champs rafale_picto_*, relus à chaque enregistrement par
+      // handleUploadQuestion. Mots écrits seulement pour la source « mots saisis », filtre seulement pour le pool.
+      const rpFromPool = formData.rafalePictoSource === 'RESERVOIR'
+      data.append('rafale_picto_source', rpFromPool ? 'RESERVOIR' : 'WORDS')
+      data.append('rafale_picto_words', rpFromPool ? '' : (formData.rafalePictoWords || []).join('\n'))
+      if (rpFromPool) {
+        data.append('rafale_picto_categories', JSON.stringify(formData.rafalePictoCategories || []))
+        data.append('rafale_picto_difficulties', JSON.stringify(formData.rafalePictoDifficulties || []))
+      }
+      data.append('rafale_picto_pass_cost', String(Number(formData.rafalePictoPassCost) || 0))
+      data.append('rafale_picto_pass_limit', String(Number(formData.rafalePictoPassLimit) === 1 ? 1 : 0))
+      data.append('rafale_picto_pool_end', formData.rafalePictoPoolEnd === 'LOOP' ? 'LOOP' : 'END')
       data.append('answer', '—')
     } else if (formData.type === 'ROUE') {
       // ROUE (#145, contrat roue.md §11.1) — tous les champs sont envoyés à chaque enregistrement (un champ non lu serait perdu)
@@ -2222,12 +2287,23 @@ export default function QuestionsPage() {
               plus cohérente que l'éclair ⚡ de la maquette (déjà pris par
               SPEEDY dans ce même registre). */}
           <span className="page-tab-icon" aria-hidden="true">🌀</span>
-          Rafale
+          Pool Speedy
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'picto'}
+          className={`page-tab ${activeTab === 'picto' ? 'active' : ''}`}
+          onClick={() => setActiveTab('picto')}
+        >
+          {/* ✏️ — même icône que le type PICTO (utils/questionTypeMeta.js) ; ce pool alimente Picto et Rafale Picto. */}
+          <span className="page-tab-icon" aria-hidden="true">✏️</span>
+          Pool Picto
         </button>
       </div>
 
-      {activeTab === 'rafale' ? (
-        <RafalePage />
+      {activeTab === 'rafale' || activeTab === 'picto' ? (
+        <PoolPage instance={activeTab} />
       ) : (
         <>
 
@@ -2550,14 +2626,14 @@ export default function QuestionsPage() {
               >
                 {formData.type !== 'ROUE' && (
                 <div className="form-group">
-                  <label htmlFor="question-input">{formData.type === 'PICTO' ? 'Titre (liste des questions) *' : 'Question *'}</label>
-                  {formData.type === 'PICTO' ? (
+                  <label htmlFor="question-input">{isPictoFamily(formData.type) ? 'Titre (liste des questions) *' : 'Question *'}</label>
+                  {isPictoFamily(formData.type) ? (
                     <input
                       id="question-input"
                       type="text"
                       value={formData.question}
                       onChange={(e) => handleInputChange('question', e.target.value)}
-                      placeholder="Ex. Picto — à la maison"
+                      placeholder={formData.type === 'RAFALE_PICTO' ? 'Ex. Rafale Picto — animaux et objets' : 'Ex. Picto — à la maison'}
                       required
                     />
                   ) : (
@@ -2627,7 +2703,9 @@ export default function QuestionsPage() {
                     désormais dans la section RAFALE ci-dessous (contrat
                     §3.3). Tous les autres types restent sur ce sélecteur
                     unique, inchangé. */}
-                {formData.type !== 'RAFALE' && (
+                {/* Rafale Picto sur le Pool Picto : les catégories sont celles du filtre (multi, comme Rafale Speedy) — pas de
+                    second sélecteur ; la catégorie du crédit est la première du filtre (voir l'envoi). */}
+                {formData.type !== 'RAFALE' && !(formData.type === 'RAFALE_PICTO' && formData.rafalePictoSource === 'RESERVOIR') && (
                   <div className="form-group">
                     <CategoryPicker
                       mode="single"
@@ -3714,12 +3792,13 @@ export default function QuestionsPage() {
                     ci-dessous sont ce qui s'affiche RÉELLEMENT sur le
                     panneau pendant la pause. */}
                 {/* PICTO (v13.0.0, #191, maquette M5 C) — mots, durée, points, résumé ; refus serveur affiché dans la section */}
-                {formData.type === 'PICTO' && (
+                {isPictoFamily(formData.type) && (
                   <PictoEditor
                     values={formData}
                     onChange={handleInputChange}
                     error={/PICTO_/.test(soundError || '') ? soundError : null}
                     customCategories={customCategories}
+                    fields={isRafalePicto(formData.type) ? RAFALE_PICTO_FIELDS : PICTO_FIELDS}
                   />
                 )}
 
@@ -3787,7 +3866,7 @@ export default function QuestionsPage() {
                   {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card.
                       ENTRACTE (#214) — ne rapporte jamais aucun point (maquette
                       entracte-programme-214.html §04). */}
-                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && formData.type !== 'PICTO' && (
+                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && !isPictoFamily(formData.type) && (
                     <div className="form-group">
                       <label htmlFor="points-input">Points</label>
                       <input
@@ -3840,7 +3919,7 @@ export default function QuestionsPage() {
                       </p>
                     </div>
                   )}
-                  {formData.type !== 'MEMOTION' && formData.type !== 'ROUE' && formData.type !== 'PICTO' && (
+                  {formData.type !== 'MEMOTION' && formData.type !== 'ROUE' && !isPictoFamily(formData.type) && (
                     <div className="form-group">
                       <label htmlFor="time-input">Temps (s)</label>
                       <input
@@ -3861,7 +3940,7 @@ export default function QuestionsPage() {
                     panneau), mais avec son propre champ dédié dans la section ENTRACTE ci-dessous
                     (libellé "Image de fond", pas "Image question") — pas de "Image reponse" (aucun
                     sens pour ce type), donc exclu ici comme les 3 autres. */}
-                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && formData.type !== 'PICTO' && (
+                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && formData.type !== 'ENTRACTE' && formData.type !== 'ROUE' && !isPictoFamily(formData.type) && (
                   <>
                     <div className="form-group">
                       <label htmlFor="media-input">Image question (optionnel)</label>
@@ -3928,7 +4007,7 @@ export default function QuestionsPage() {
                 {/* #235 — Son pour MEMORY, ENTRACTE et hôte MEMOTION (maquette
                     admin_question_editor__sound_memory_memotion_entracte.html) :
                     même bloc, filtre de type levé. */}
-                {['MEMORY', 'MEMOTION', 'ENTRACTE', 'ROUE', 'PICTO'].includes(formData.type) && renderQuestionSoundBlock()}
+                {['MEMORY', 'MEMOTION', 'ENTRACTE', 'ROUE', 'PICTO', 'RAFALE_PICTO'].includes(formData.type) && renderQuestionSoundBlock()}
 
                 {/* Refus serveur (corps HTTP brut) pour les types sans section « Son »
                     (RAFALE) — ex. POINTS_RULE_* (#190). */}
@@ -3941,8 +4020,8 @@ export default function QuestionsPage() {
                   variant={editingId ? 'primary' : 'fun'}
                   size="lg"
                   loading={isUploading}
-                  disabled={(formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)) || (formData.type === 'ROUE' && (!roueValid || !roueWheelValid || !validVowelPrice(formData.roueVowelPrice ?? 250))) || (formData.type === 'PICTO' && !isPictoReady(formData))}
-                  title={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty) ? 'Corrigez la pénalité de mauvaise réponse' : (formData.type === 'ROUE' && !roueValid ? 'Saisissez une phrase acceptée par le plateau' : (formData.type === 'PICTO' && !isPictoReady(formData) ? 'Saisissez 1 à 20 mots et une durée de 30 à 300 s' : undefined))}
+                  disabled={(formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)) || (formData.type === 'ROUE' && (!roueValid || !roueWheelValid || !validVowelPrice(formData.roueVowelPrice ?? 250))) || (isPictoFamily(formData.type) && !isPictoReady(formData, isRafalePicto(formData.type) ? RAFALE_PICTO_FIELDS : PICTO_FIELDS))}
+                  title={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty) ? 'Corrigez la pénalité de mauvaise réponse' : (formData.type === 'ROUE' && !roueValid ? 'Saisissez une phrase acceptée par le plateau' : (isPictoFamily(formData.type) && !isPictoReady(formData, isRafalePicto(formData.type) ? RAFALE_PICTO_FIELDS : PICTO_FIELDS) ? 'Complétez les mots (ou le filtre du pool) et une durée de 30 à 300 s' : undefined))}
                   className="submit-btn"
                 >
                   {editingId ? 'Modifier' : 'Ajouter'}

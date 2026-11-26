@@ -41,20 +41,22 @@ func TestAllQuestionTypes_183(t *testing.T) {
 	// §"Second déclencheur — entracte programmée".
 	// v12.0.0 (#145): ROUE added as the 8th type — contracts/roue.md §13.
 	// v13.0.0 (#191): PICTO added as the 9th type — contracts/picto.md §4.
+	// v13.1.0 (#318): RAFALE_PICTO added as the 10th type — contracts/picto.md §17.2.
 	want := map[QuestionType]bool{
-		QuestionTypeRoue:     true,
-		QuestionTypePicto:    true,
-		QuestionTypeSpeedy:   true,
-		QuestionTypeQCM:      true,
-		QuestionTypeMemory:   true,
-		QuestionTypeMemotion: true,
-		QuestionTypeArdoise:  true,
-		QuestionTypeRafale:   true,
-		QuestionTypeEntracte: true,
+		QuestionTypeRafalePicto: true,
+		QuestionTypeRoue:        true,
+		QuestionTypePicto:       true,
+		QuestionTypeSpeedy:      true,
+		QuestionTypeQCM:         true,
+		QuestionTypeMemory:      true,
+		QuestionTypeMemotion:    true,
+		QuestionTypeArdoise:     true,
+		QuestionTypeRafale:      true,
+		QuestionTypeEntracte:    true,
 	}
 
 	if len(got) != len(want) {
-		t.Fatalf("AllQuestionTypes() a %d entrées, attendu %d (9 types connus) — got=%v", len(got), len(want), got)
+		t.Fatalf("AllQuestionTypes() a %d entrées, attendu %d (10 types connus) — got=%v", len(got), len(want), got)
 	}
 
 	seen := map[QuestionType]bool{}
@@ -64,7 +66,7 @@ func TestAllQuestionTypes_183(t *testing.T) {
 		}
 		seen[qt] = true
 		if !want[qt] {
-			t.Errorf("AllQuestionTypes() contient %q, absent des 9 types connus (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE/RAFALE/ENTRACTE/ROUE/PICTO)", qt)
+			t.Errorf("AllQuestionTypes() contient %q, absent des 10 types connus (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE/RAFALE/ENTRACTE/ROUE/PICTO/RAFALE_PICTO)", qt)
 		}
 	}
 	for qt := range want {

@@ -1,0 +1,21 @@
+{
+  "ANSWER": "",
+  "CATEGORY": "ANIMALS",
+  "ID": "t-rafale-picto",
+  "ORDER": 11,
+  "POINTS": "10",
+  "QUESTION": "Rafale Picto",
+  "RAFALE_PICTO_CATEGORIES": [
+    "ANIMALS"
+  ],
+  "RAFALE_PICTO_DIFFICULTIES": [
+    1,
+    2
+  ],
+  "RAFALE_PICTO_PASS_COST": 5,
+  "RAFALE_PICTO_PASS_LIMIT": 1,
+  "RAFALE_PICTO_POOL_END": "LOOP",
+  "RAFALE_PICTO_SOURCE": "RESERVOIR",
+  "TIME": "90",
+  "TYPE": "RAFALE_PICTO"
+}

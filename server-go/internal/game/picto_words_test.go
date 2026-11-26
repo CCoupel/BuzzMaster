@@ -107,7 +107,8 @@ func TestPictoRegistry(t *testing.T) {
 	if !ok {
 		t.Fatal("PICTO not registered")
 	}
-	if len(d.OwnedFields) != 1 || d.OwnedFields[0] != "PICTO_WORDS" || d.NestableInMotionCard || !d.HasPlayerInput || d.MediaSlots != nil || d.DefaultPointsRule != "" {
+	// v13.1.0 (#324, contracts/picto.md §17.2): source and filter join the words.
+	if strings.Join(d.OwnedFields, ",") != "PICTO_WORDS,PICTO_SOURCE,PICTO_CATEGORIES,PICTO_DIFFICULTIES" || d.NestableInMotionCard || !d.HasPlayerInput || d.MediaSlots != nil || d.DefaultPointsRule != "" {
 		t.Errorf("unexpected descriptor: %+v", d)
 	}
 	if IsNestableInMotionCard(QuestionTypePicto) {

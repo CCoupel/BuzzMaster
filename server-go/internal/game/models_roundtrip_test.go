@@ -121,7 +121,7 @@ func TestQuestionFixtures_RoundTrip_TypedContent(t *testing.T) {
 	// QuestionType (ROUE, contracts/roue.md §3).
 	// 10 since v13.0.0 (#191): picto.json added, covering the 9th
 	// QuestionType (PICTO, contracts/picto.md §4, §16).
-	const wantFixtureCount = 10
+	const wantFixtureCount = 11
 	if tested != wantFixtureCount {
 		t.Errorf("expected to test %d testdata/questions/*.json fixtures, tested %d — fixture count changed (update wantFixtureCount if deliberate) or the fixtures dir was not found as expected", wantFixtureCount, tested)
 	}

@@ -76,6 +76,9 @@ const mk = (over = {}) => {
 // La partie réelle : sélection de la question (clic sur sa carte → points de la question dans « Points »), lancement,
 // STOP, puis REVEAL. À l'entrée en REVEALED le montant de base B reprend ces points : on reproduit ce parcours
 // (montage en STOPPED, sélection, passage en REVEALED) au lieu de monter directement en REVEALED.
+// #321 (v13.1.0) : la présélection coche d'office les bonnes unités à l'entrée en REVEALED. Ces tests (#244/#251/#254)
+// partent d'une sélection vide : on la vide par le geste existant « Tout désélectionner » (assertions inchangées).
+const clearPreselect = () => { const b = screen.queryByRole('button', { name: 'Tout désélectionner' }); if (b) fireEvent.click(b) }
 const show = (over) => {
   const game = mk(over)
   const phase = game.gameState.phase
@@ -91,6 +94,7 @@ const show = (over) => {
   if (card) fireEvent.click(card)
   useGame.mockReturnValue(game)
   utils.rerender(<GamePage />)
+  clearPreselect()
   return { game, ...utils }
 }
 const box = (name) => screen.getByRole('checkbox', { name: `Sélectionner ${name}` })
@@ -224,10 +228,11 @@ describe('Attribution groupée — sélection manuelle et envoi (scénarios 13 e
     expect(game.teamPointsBatch).toHaveBeenCalledTimes(1)
   })
 
-  it('aperçu du montant sur chaque carte sélectionnée', () => {
+  it('montant visible en chip « +3 pts » sur chaque carte sélectionnée (plus de petit « +N », #321)', () => {
     show()
     fireEvent.click(answerBtn('La Seine'))
-    expect(screen.getAllByText('+3').length).toBe(4)
+    expect(screen.getAllByText('+3 pts').length).toBe(4)
+    expect(screen.queryAllByText('+3').length).toBe(0)
   })
 })
 
@@ -345,18 +350,22 @@ describe('Attribution groupée — remise à zéro (scénario 16) et accessibili
     useGame.mockReturnValue(mk({ gameState: { question: { ...QCM, ID: '12', STATUS: 'REVEALED' } } }))
     rerender(<GamePage />)
 
-    expect(checked().length).toBe(0)
+    // #321 : à la nouvelle entrée en REVEALED, la sélection est RECALCULÉE (bonne réponse GREEN = 4 équipes) ;
+    // le choix manuel précédent (La Loire : Jaunes, Oranges) a bien été remis à zéro.
+    expect(checked().sort()).toEqual(['Les Bleus', 'Les Rouges', 'Les Roses', 'Les Verts'].sort())
     expect(amountInput().value).toBe('3')
   })
 
   it('changement de phase (REVEALED → NEW_GAME puis retour) : sélection remise à zéro', () => {
     const { rerender } = show()
-    fireEvent.click(answerBtn('La Seine'))
+    fireEvent.click(answerBtn('La Loire')) // choix manuel différent de la présélection (#321)
+    expect(checked().sort()).toEqual(['Les Jaunes', 'Les Oranges'])
     useGame.mockReturnValue(mk({ gameState: { phase: 'STARTED', question: { ...QCM, STATUS: 'STARTED' } } }))
     rerender(<GamePage />)
     useGame.mockReturnValue(mk())
     rerender(<GamePage />)
-    expect(checked().length).toBe(0)
+    // le choix manuel est perdu ; seule la présélection de la bonne réponse (GREEN) est recalculée
+    expect(checked().sort()).toEqual(['Les Bleus', 'Les Rouges', 'Les Roses', 'Les Verts'].sort())
   })
 
   it('accessibilité : chaque case a un nom « Sélectionner <équipe> », la barre est un groupe nommé, le montant a un libellé', () => {

@@ -263,3 +263,9 @@
   font-weight: 600;
 }
 
+
+/* #324 — saisie « Un mot » / « Une liste » (Pool Picto) et compte rendu du collage */
+.rafale-entry-mode { display: flex; gap: var(--space-2, 8px); margin-bottom: var(--space-3, 12px); }
+.rafale-list-report { font-size: 0.85rem; margin: var(--space-2, 8px) 0; }
+.rafale-list-report p { margin: 0 0 4px; }
+.rafale-list-report ul { margin: 0; padding-left: 1.2rem; color: #dc2626; }

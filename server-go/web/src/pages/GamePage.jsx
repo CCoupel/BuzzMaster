@@ -7,6 +7,7 @@ import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
 import { sortQuestionsByOrder, sortQuestionsByRounds, roundIndexOf, countEntries } from '../utils/questionOrder'
 import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter } from '../utils/buzzOrder'
+import { preselectAwardKeys } from '../utils/awardPreselect'
 import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { getMotionGridCols, getMotionCardCoord, getMotionCardPointsDisplay, isMotionSecretMode } from '../utils/motionGrid'
 import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
@@ -55,6 +56,8 @@ import PictoPanel from '../components/picto/PictoPanel'
 import { makePictoActions, pictoLaunchBlocked, pictoLaunchReason } from '../components/picto/pictoState'
 import './GamePage.css'
 import '../styles/entracte.css'
+import { isPictoFamily } from '../utils/pictoFamily'
+import { roundPointsFormula } from '../components/picto/pictoRafaleState'
 
 // #172/C2 (v11.1.0.6, retour QUALIF #219/#236/#237) — un motif de blocage
 // PREPARE par ligne (prepareWaitReasons.js peut désormais en renvoyer
@@ -112,6 +115,8 @@ export default function GamePage() {
     // PICTO (v13.0.0, #192) — refus serveur d'une action PICTO_* et mot de la manche (admin seulement, contrat picto.md §9.2)
     pictoError,
     pictoWord,
+    pictoFound,
+    pictoPass,
   } = useGame()
   // #253 — popup « Lancer la partie » ouverte sur un AUTRE poste : le serveur suspend les actions de
   // jeu ; on désactive les commandes ici avec le motif (bandeau global sous la barre de navigation).
@@ -492,6 +497,7 @@ export default function GamePage() {
     memoryTeamErrors: gameState.MEMORY_TEAM_ERRORS,
     rafaleCounters: gameState.RAFALE_TEAM_COUNTERS,
     rafaleBest: gameState.RAFALE_TEAM_BEST,
+    pictoRoundPoints: gameState.PICTO_ROUND_POINTS,
   })
 
   // ─── #244/#251/#254 — attribution groupée après le REVEAL ──────────────────
@@ -510,6 +516,12 @@ export default function GamePage() {
   const [awardSending, setAwardSending] = useState(false)
   const [awardToast, setAwardToast] = useState(null) // { kind: 'ok'|'error', text }
   const [pickedColor, setPickedColor] = useState(null)
+  // #321 — gagnant de carte MEMOTION : { card, value } ; absent ou autre carte → équipe qui a la main (présélection).
+  const [motionPick, setMotionPick] = useState(null)
+  // Sélection périmée : remise à null hors REVEAL MEMOTION (la carte suivante repart de l'équipe qui a la main).
+  useEffect(() => {
+    if (!(gameState.question?.TYPE === 'MEMOTION' && gameState.MEMOTION_SUBPHASE === 'REVEAL')) setMotionPick(null)
+  }, [gameState.question?.TYPE, gameState.MEMOTION_SUBPHASE])
   const awardGuardRef = useRef(null)
   const awardBaseRef = useRef(pointsInput) // base du barème (champ « Points » à l'entrée en REVEALED)
   const pointsInputRef = useRef(pointsInput)
@@ -519,6 +531,12 @@ export default function GamePage() {
   useEffect(() => {
     if (gameState.phase === 'REVEALED') {
       awardBaseRef.current = pointsInputRef.current > 0 ? pointsInputRef.current : awardBaseRef.current
+      // Rafale Picto (picto.md §17.7) : le champ « Points » est pré-rempli au crédit suggéré par le serveur
+      // (max(0, trouvés × POINTS − passes × coût)) ; l'admin l'ajuste avant l'envoi.
+      if (gameState.question?.TYPE === 'RAFALE_PICTO' && gameState.PICTO_ROUND_POINTS > 0) {
+        awardBaseRef.current = gameState.PICTO_ROUND_POINTS
+        setPointsInput(gameState.PICTO_ROUND_POINTS)
+      }
     } else if (pointsInputRef.current <= 0) {
       // Le champ ne reste jamais sur une pénalité / 0 hors REVEALED (il sert aussi aux tablettes).
       setPointsInput(awardBaseRef.current > 0 ? awardBaseRef.current : 1)
@@ -552,7 +570,7 @@ export default function GamePage() {
 
   const awardTeamAmount = (teamName) => {
     if (pointsInput <= 0) return pointsInput
-    if (awardManual && (questionType === 'MEMORY' || questionType === 'RAFALE')) return pointsInput
+    if (awardManual && (questionType === 'MEMORY' || questionType === 'RAFALE' || questionType === 'RAFALE_PICTO')) return pointsInput
     return teamDefaultAward(teamName, pointsInput, useHints)
   }
   const awardPlayerAmount = (mac) => {
@@ -571,6 +589,36 @@ export default function GamePage() {
   const teamLevelCredited = (teamName) => awardedTeams[teamName]?.TEAM_LEVEL === true
   const awardablePlayers = displayTeams.flatMap(t => (teamLevelCredited(t.name) ? [] : t.buzzers.map(b => b.mac))).filter(mac => !(mac in awardedPlayers))
   const awardableKeys = isPlayerLevel ? awardablePlayers : awardableTeams.map(t => t.name)
+
+  // #321 — présélection des gagnants à l'entrée en REVEALED (règle unique utils/awardPreselect.js).
+  // Déclaré APRÈS l'effet de remise à zéro ci-dessus (mêmes dépendances, ordre d'exécution). Le montant
+  // est évalué sur la base du barème figée à l'entrée en REVEALED (awardBaseRef), pas sur le champ
+  // « Points » : une modification manuelle ultérieure ne recoche ni ne décoche rien.
+  useEffect(() => {
+    if (gameState.phase !== 'REVEALED') return
+    const base = awardBaseRef.current > 0 ? awardBaseRef.current : 0
+    const keys = preselectAwardKeys({
+      question: gameState.question,
+      gameState,
+      bumpers,
+      awardLevel,
+      awarded: new Set([...Object.keys(awardedTeams), ...Object.keys(awardedPlayers)]),
+      knownKeys: awardableKeys,
+      amountOf: (key) => (isPlayerLevel
+        ? resolvePointsAward(gameState.question, base, {
+          hintsAtBuzz: playerHintsCount(bumpers[key], gameState.qcmInvalidated?.length || 0),
+          memory: { matchedPairs: gameState.memoryMatchedPairs?.length || 0, errors: gameState.memoryErrors || 0 },
+          useHints: true,
+        }).amount
+        : teamDefaultAward(key, base, true)),
+    })
+    if (keys.length > 0) {
+      setAwardSelected(new Set(keys))
+      // QCM : présélection = clic sur la bonne couleur (même repère visuel que pickQcmAnswer).
+      if (gameState.question?.TYPE === 'QCM') setPickedColor(gameState.question.QCM_CORRECT)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.question?.ID, gameState.phase])
   const awardEntries = awardableKeys
     .filter(key => awardSelected.has(key))
     .map(key => (isPlayerLevel
@@ -606,6 +654,9 @@ export default function GamePage() {
       return awardManual
         ? `montant saisi, ajusté selon les indices de chaque ${awardUnitName}`
         : `barème de la question, ajusté selon les indices de chaque ${awardUnitName}`
+    }
+    if (questionType === 'RAFALE_PICTO') {
+      return awardManual ? 'modifié à la main, montant uniforme' : `barème de la manche — ${roundPointsFormula(gameState, gameState.question)}`
     }
     if (questionType === 'RAFALE' || questionType === 'MEMORY') {
       return awardManual ? 'modifié à la main, montant uniforme' : 'barème de la question, par équipe'
@@ -1189,7 +1240,7 @@ export default function GamePage() {
           return (
             <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
               <div className="memory-selector-label">
-                🌀 RAFALE · {modeLabel}
+                🌀 Rafale Speedy · {modeLabel}
               </div>
               <WaitReasonLines reasons={waitReasons} />
               <div className="memory-chips-row">
@@ -1248,12 +1299,12 @@ export default function GamePage() {
         })()}
 
         {/* PICTO (v13.0.0, #192/#193, maquette M2) — équipe + dessinateur (PREPARE/READY), puis mot secret et alerte de déconnexion */}
-        {gameState.question?.TYPE === 'PICTO' && (() => {
+        {isPictoFamily(gameState.question?.TYPE) && (() => {
           const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
           return (
             <PictoPanel
               gameState={gameState}
-              actions={makePictoActions(sendMessage)}
+              actions={makePictoActions(sendMessage, { found: pictoFound, pass: pictoPass })}
               error={pictoError}
               pictoWord={pictoWord}
               teamList={teamsWithBuzzers.map(t => ({ name: t.name, color: getRgbColor(t.COLOR) }))}
@@ -1725,6 +1776,7 @@ export default function GamePage() {
             if (subphase === 'REVEAL' && selectedMotionCard) {
               const diff = selectedMotionCard.DIFFICULTY || 1
               const currentTeamData = sortedTeams.find(t => t.name === currentTeam)
+              const winnerSel = motionPick && motionPick.card === gameState.MEMOTION_SELECTED && (motionPick.value === '' || motionPick.value === currentTeam) ? motionPick.value : (currentTeam || '')
               const currentTeamChipColor = currentTeamData ? getRgbColor(currentTeamData.COLOR) : undefined
               return (
                 <div className="memotion-admin-panel">
@@ -1743,18 +1795,26 @@ export default function GamePage() {
                   <div className="memotion-winner-chips">
                     {currentTeam && (
                       <button
-                        className="memotion-winner-chip"
+                        className={`memotion-winner-chip${winnerSel === currentTeam ? ' selected' : ''}`}
                         style={{ backgroundColor: currentTeamChipColor }}
-                        onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: currentTeam })}
+                        aria-pressed={winnerSel === currentTeam}
+                        onClick={() => setMotionPick({ card: gameState.MEMOTION_SELECTED, value: currentTeam })}
                       >
-                        {currentTeam}
+                        {winnerSel === currentTeam ? '✓ ' : ''}{currentTeam}
                       </button>
                     )}
                     <button
-                      className="memotion-winner-chip none"
-                      onClick={() => sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: '' })}
+                      className={`memotion-winner-chip none${winnerSel === '' ? ' selected' : ''}`}
+                      aria-pressed={winnerSel === ''}
+                      onClick={() => setMotionPick({ card: gameState.MEMOTION_SELECTED, value: '' })}
                     >
-                      Perdu
+                      {winnerSel === '' ? '✓ ' : ''}Perdu
+                    </button>
+                    <button
+                      className="memotion-winner-chip validate"
+                      onClick={() => { sendMessage('MEMOTION_DONE', { CARD_ID: gameState.MEMOTION_SELECTED, WINNER_TEAM: winnerSel }); setMotionPick(null) }}
+                    >
+                      Valider
                     </button>
                   </div>
                 </div>
@@ -1778,7 +1838,7 @@ export default function GamePage() {
                     : rafaleTeamsBlocked && !isPlaying
                     ? 'Selectionnez au moins une equipe participante avant de demarrer — contrat §5.1'
                     : rafaleBlocked && !isPlaying
-                      ? 'Selectionnez une categorie et verifiez le pool RAFALE (disponibilite) avant de demarrer — contrat §7.2'
+                      ? 'Selectionnez une categorie et verifiez le Pool Speedy (disponibilite) avant de demarrer — contrat §7.2'
                       : undefined
                 }
                 disabled={launchLocked || (!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked || (gameState.phase === 'READY' && pictoLaunchBlocked(gameState))))}
@@ -1993,7 +2053,8 @@ export default function GamePage() {
                   selected={awardSelected.has(team.name)}
                   onSelectChange={toggleAwardKey}
                   awardedInfo={team.name in awardedTeams ? awardedTeams[team.name] : null}
-                  awardPreview={awardSelected.has(team.name) ? awardTeamAmount(team.name) : null}
+                  awardChip={isRevealedPhase && !isPlayerLevel && awardSelected.has(team.name) && !(team.name in awardedTeams) && awardTeamAmount(team.name) !== 0
+                    ? awardTeamAmount(team.name) : null}
                   playerAward={isRevealedPhase && isPlayerLevel ? {
                     selected: (mac) => awardSelected.has(mac),
                     onChange: toggleAwardKey,

@@ -2,6 +2,114 @@
 
 Historique des versions du projet BuzzControl.
 
+## [13.1.0] - 2026-11-26 — Rafale Picto, Pool Picto, présélection des gagnants au crédit, sécurité des dépendances Go (#318, #321, #322, #324, #326)
+
+Cette version ajoute le type Rafale Picto (#318) et le Pool Picto avec génération IA (#324), corrige le décompte Picto sur la tablette du dessinateur (#326), et ajoute la présélection des gagnants au crédit (#321) ; la mise à jour x/net est en #322.
+
+À la révélation de la réponse, la page Jeu coche désormais d'office les équipes ou les joueurs que la question désigne.
+Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas sur « Attribuer les points ».
+
+### Added
+
+- **Présélection des gagnants au crédit (#321)** — à l'entrée en `REVEALED`, la page Jeu coche les unités gagnantes
+  selon le type de question :
+  - **Picto** : l'équipe qui dessine, si la manche est trouvée ;
+  - **Mémoire** : en solo, l'équipe participante ; en multi-équipes, les équipes qui ont un score positif ;
+  - **Rafale Speedy** : en solo, l'équipe participante si son compteur retenu est positif ; en multi-équipes, les équipes dont le compteur retenu est positif ;
+  - **QCM** : les équipes ou les joueurs qui ont donné la bonne couleur ;
+  - **Speedy** : le premier buzzeur (son joueur au niveau joueur, son équipe au niveau équipe). L'admin décoche si la réponse était fausse ;
+  - **Ardoise** : les équipes dont la réponse correspond à la réponse attendue (comparaison sans accents, sans casse,
+    espaces compactés). Au niveau joueur, rien n'est coché ;
+  - **Memotion** : voir ci-dessous.
+  Une unité déjà créditée, ou dont le montant est nul ou négatif, n'est jamais cochée. La sélection reste modifiable.
+  - En-tête de carte équipe : une chip « +N pts » (fond rouge avec halo si pénalité) montre le montant réellement attribué
+    de chaque équipe cochée et non encore créditée, champ « Points » pris en compte. Elle passe avant les chips Mémoire,
+    QCM et Rafale. Une équipe non cochée garde sa chip habituelle.
+- **Memotion : gagnant de carte présélectionné (#321)** — le sélecteur de gagnant part sur l'équipe qui a la main, avec
+  « Personne » comme seul autre choix (libellé « Perdu » sur l'admin). En solo, l'équipe unique est présélectionnée. Sur l'anim,
+  le geste est en deux temps : choix, puis **VALIDER** ; rien n'est envoyé avant ce clic. Sur l'admin, le choix
+  présélectionné se confirme par **Valider**. Le message envoyé au serveur ne change pas.
+- **Type de question « Rafale Picto » 🖍️ (#318)** — nouveau type à part entière, comme « Rafale Speedy » : une équipe
+  fait deviner le **plus de mots possible** pendant le temps de la question, avec le même dessinateur pour toute la
+  manche. Le mot en cours est remplacé à chaque « Trouvé » ou « Passer ».
+- **Passes (#318)** — le dessinateur annonce la passe à voix haute ; l'animateur ou l'admin la déclenche, jamais la
+  tablette. Coût par passe de 0 à 100 points (0 = gratuite), et limite à **1 passe** ou **illimitées**, au choix de la
+  question.
+- **Fin de pool (#318)** — au choix : **reboucler** sur les mots passés (défaut de l'éditeur), ou **finir la manche** quand il
+  n'y a plus de mot. Un mot trouvé ne revient jamais.
+- **Crédit Rafale Picto (#318)** — le crédit manuel est pré-rempli à `mots trouvés × points − passes × coût`, plancher 0
+  (les passes ne débitent jamais le score). L'équipe est présélectionnée, et le montant reste modifiable.
+- **TV Rafale Picto (#318)** — grand compteur de mots trouvés ; le mot trouvé s'affiche 1 s sur le dessin, puis la feuille
+  est vierge. Une passe n'affiche jamais le mot.
+- **Tablette du dessinateur (#318)** — pas de bouton « Passer » ; un compteur de mots trouvés et la catégorie du mot. Le récapitulatif est sur les autres tablettes.
+- **Source des mots (#318)** — mots saisis dans la question, ou Pool Picto (voir ci-dessous). Pour Rafale Picto avec le
+  Pool Picto, les catégories et les difficultés se choisissent en sélection multiple, comme Rafale Speedy ; la catégorie du
+  crédit est la première catégorie du filtre. « Ajouter » reste grisé tant que le filtre est incomplet. Picto (un mot)
+  est inchangé.
+- **Éditeur Rafale Picto (#318)** — les cartes Mots, Passes et Temps / points sont empilées, une par ligne. Picto (un
+  mot) garde deux colonnes.
+- **Zone de conduite Rafale Picto compacte (#318)** — admin et anim : un bandeau d'une ligne (état, mots trouvés, passes,
+  mots restants, crédit suggéré) au-dessus de la zone de jeu. Le crédit suggéré n'apparaît qu'une fois, la formule
+  (mots trouvés × points − passes × coût) est en info-bulle. Une ligne « Mot » porte le mot en cours, sa présentation
+  (« 2ᵉ présentation ») et les boutons Passer / Trouvé. Le fil regroupe les mots trouvés un à un et les mots passés
+  dédoublonnés (« Lion ×5 »), sur fond de la couleur de l'équipe qui joue. Révélé : le mot est une pastille jaune ; à la
+  révélation d'un pool épuisé, « Fin de pool » (et « crédit nul : rien n'est coché » si le crédit est 0) ; avant la
+  révélation, « Plus aucun mot dans le pool : la manche est terminée » et Révéler. La ligne « Mot » et ses boutons
+  disparaissent à l'arrêt après pool épuisé. L'en-tête et la ligne du Pool Picto disparaissent pendant la manche, l'arrêt
+  et la révélation ; ils restent avant le départ (préparation et décompte).
+- **Pool Picto (#324)** — réservoir de mots pour le type Picto, sur le même moteur que le Pool Speedy (deux instances
+  d'un même moteur). Onglet « Pool Picto » de la page Questions (`?tab=picto`) : tableau filtrable (catégories,
+  difficulté, « Non utilisés »), « Remettre tout disponible », formulaire « Nouveau mot ».
+- **Saisie d'une liste de mots (#324)** — « Une liste » dans le formulaire du Pool Picto : collage d'1 à 200 mots en une
+  seule création. Les lignes valides sont créées ; les refus par ligne (`WORD_INVALID`, `DUPLICATE`, `POOL_FULL`) sont
+  listés, jamais tronqués.
+- **Génération IA de mots (#324)** — « ✨ Générer via IA » sur le Pool Picto, en volumes de 10, 20 ou 50 mots, filtrés par
+  `ai.max_questions`. Les mots doivent être dessinables (3 mots au plus, ni nom propre ni marque). Un seul job de génération
+  à la fois : `409 generation_in_progress` si un autre est en cours.
+- **Source « Pool Picto » du type Picto (#324)** — `PICTO_SOURCE = RESERVOIR` : la manche tire un mot du pool filtré par
+  catégories et difficultés, en tirage stratifié, et le mot tiré est marqué « utilisé ». Une nouvelle question prend cette
+  source par défaut. Les questions Picto v13.0.0 gardent leurs mots saisis (`WORDS`).
+- **Indice de catégorie (#324)** — la catégorie du mot en cours (`PICTO_WORD_CATEGORY`) s'affiche comme indice sur la TV
+  et sur l'anim, sans le mot.
+- **Verrou de manche Picto (#324)** — pendant une manche Picto (`STARTED` / `PAUSED`), le Pool Picto est verrouillé :
+  écritures, remises à zéro, génération IA et lecture de la liste répondent `409 picto_round_in_progress`. La page affiche
+  « Pool indisponible pendant une manche Picto ».
+- **Sauvegarde « Pools » à trois états (#324)** — la catégorie « Pools » de la sauvegarde et de la réinitialisation déplie
+  « Pool Speedy » et « Pool Picto ». Elle est cochée, vide ou intermédiaire selon ses sous-cases.
+
+### Changed
+
+- **Famille Picto (#318)** — les types « Picto » et « Rafale Picto » partagent la manche dessinée : préparation, relais de
+  dessin, confidentialité du mot, LED, ambiance, buzzers ignorés et crédit au niveau équipe. Le type « Picto » (un mot)
+  est inchangé.
+- **Libellés (#324)** — « Rafale » devient « Rafale Speedy » (type, pages, interface), et le réservoir « Pool Speedy ».
+  Les identifiants techniques ne changent pas (`RAFALE`, `/api/rafale/*`, clé de sauvegarde `rafale`, fichiers).
+- **Petit « +N » supprimé au niveau équipe (#321)** — le petit « +N » à côté des points de l'équipe n'est plus affiché,
+  pour aucun type : seule la chip « +N pts » porte le montant. Le niveau joueur est inchangé.
+
+### Fixed
+
+- **Décompte Picto sur la tablette du dessinateur (#326)** — le décompte 3-2-1 / GO! qui précède le chronomètre
+  s'affiche aussi sur la tablette du dessinateur, pendant l'écran de préparation. Affichage seulement : aucune
+  modification serveur.
+
+### Security
+
+- **Dépendances Go mises à jour (#322)** — `golang.org/x/net` passe de v0.60.0 à v0.62.0, et `golang.org/x/sys` de v0.48.0
+  à v0.49.0 (tiré par `x/net`). Corrige GO-2026-6866 et GO-2026-6860. `govulncheck` ne signale plus ces failles.
+
+### Notes
+
+- Les tests existants de l'attribution groupée ont été **adaptés** : la sélection est désormais pré-cochée, et leurs
+  fixtures repartent d'une sélection vide. Aucune assertion n'a été supprimée ni affaiblie.
+- **Entracte (#318)** : `PICTO_PASS` est refusé pendant une entracte, comme `PICTO_FOUND`.
+- **Compatibilité (#324)** : le format disque et l'API du Pool Speedy ne changent pas (`reservoir.json`,
+  `rafale_used.json`, routes `/api/rafale/*`). Une archive v13.0.0 se restaure sans `files/picto` ; les questions Picto
+  v13.0.0 restent en source « mots saisis ».
+- **Sécurité (#324)** : les routes `/api/picto/*` n'ont pas d'authentification, comme le reste de l'administration
+  (dette #259). Le mot tiré n'est envoyé qu'au dessinateur, à l'admin et à l'anim, jamais à la TV avant la révélation ; la liste des
+  mots reste lisible par qui peut joindre le serveur, hors manche (la lecture est refusée en `409` pendant une manche Picto).
+
 ## [13.0.0] - 2026-11-24 — Picto : type de question jouable de bout en bout, jeton de session des tablettes (#191, #192, #193, #319, #194)
 
 Nouveau type de jeu **Picto** (✏️) : un dessinateur dessine un mot secret sur sa tablette, l'équipe le devine à l'oral.

@@ -244,6 +244,15 @@ d'un coup.
     Pour QCM et ARDOISE, selon le réglage « Points : équipe / joueur » de la question (défaut : équipe).
   - **Joueur** : cases à cocher sur les lignes de joueurs des cartes. Pour SPEEDY, selon le même réglage (défaut : joueur).
   - Une ancienne question ARDOISE sans réglage crédite désormais **l'équipe** (auparavant le joueur).
+- **Présélection (v13.1.0, #321)** : à l'entrée en REVEALED, la page coche d'office les équipes ou les joueurs gagnants
+  selon la question (Picto, Mémoire, Rafale, QCM, Speedy, Ardoise ; voir `contracts/award-preselect.md` §2). Une unité
+  déjà créditée ou dont le montant est nul ou négatif n'est pas cochée. Rien n'est attribué avant « Attribuer les points » :
+  décochez ou cochez à la main avant de valider. Pour SPEEDY, décochez si la réponse du premier buzzeur était fausse.
+  En-tête de carte équipe, une chip « +N pts » (fond rouge avec halo si pénalité) indique le montant réellement attribué
+  de chaque équipe cochée et non encore créditée, champ « Points » pris en compte. Elle passe avant les chips Mémoire, QCM
+  et Rafale ; une équipe non cochée garde sa chip habituelle. Le niveau équipe n'affiche plus de petit « +N ».
+- **Memotion (v13.1.0, #321)** : le gagnant de carte est présélectionné sur l'équipe qui a la main ; l'autre choix
+  reste possible : « Perdu » sur l'admin, « PERSONNE » sur l'anim. Validez avec **Valider** (sur l'anim, le geste est en deux temps : choix puis VALIDER).
 - **Champ « Points »** : le montant vient du champ « Points » de la page, en tête de la colonne Équipes. Il est éditable
   après le REVEAL. Sa **base** est la valeur qu'il a à l'entrée en REVEALED. Une modification faite après le REVEAL est
   « modifiée à la main ».
@@ -2477,6 +2486,64 @@ Attribution des points (cliquer une équipe) :
 3. Valider → fin manche, retour à STOPPED
 
 **Important** : aucun point n'est attribué pendant la manche, seuls les compteurs visibles. L'attribution manuelle en fin de manche est **l'étape décisive**.
+
+### Rafale Picto — conduire une manche (v13.1.0, #318)
+
+« Rafale Picto » (🖍️) est un type de question : une équipe fait deviner **le plus de mots possible** pendant le temps
+de la question, avec le même dessinateur du début à la fin. Le mot passe au suivant à chaque « Trouvé » ou « Passer ».
+
+**Réglages de la question** (éditeur Picto) :
+- **Source des mots** : les mots saisis dans la question, ou le Pool Picto (voir ci-dessous). Pour Rafale Picto avec le Pool Picto, les catégories et difficultés se choisissent en sélection multiple ; la catégorie du crédit est la première catégorie du filtre ;
+- **Passes** : coût de 0 à 100 points par passe (0 = gratuite), et **1 passe** ou **illimitées** ;
+- **Fin de pool** : **🔁 reboucle** (les mots passés reviennent, par ordre d'ancienneté) ou **⏹ fin à la dernière**
+  (la manche s'arrête quand il ne reste plus de mot). Un mot trouvé ne revient jamais.
+- **Points** : valeur d'un mot trouvé. **Temps** : durée de la manche, 30 à 300 s.
+- **Mise en page** : pour Rafale Picto, les cartes Mots, Passes et Temps / points sont empilées, une par ligne ; Picto (un mot) garde deux colonnes.
+
+**Conduite pendant la manche** (page Jeu ou anim) :
+1. Préparer comme un Picto : équipe, puis dessinateur (choix ou tirage parmi les joueurs connectés). Le lancement exige un dessinateur connecté.
+2. **START** : le premier mot part au dessinateur (sa tablette) ; le chrono global démarre.
+3. Le dessinateur dessine. Quand l'équipe trouve : **✅ Trouvé** (le mot suivant arrive, la TV affiche le mot 1 s).
+4. Quand le dessinateur **annonce une passe à voix haute** : **⏭ Passer** (le coût est affiché sur le bouton s'il est supérieur à 0). Le mot passé
+   ne réapparaîtra qu'avec le rebouclage. Le bouton est désactivé quand la passe est épuisée, et hors de la manche en cours (pause, arrêt).
+5. Au temps écoulé, la manche s'arrête (`STOPPED`). Si le mot en cours a été donné sur le gong, **Trouvé sur le gong** (une seule fois) le compte et révèle ; sinon, **Révéler**.
+6. **Fin** : la révélation montre le mot en cours (s'il n'a pas été trouvé), en pastille jaune. Les mots passés ne sont jamais montrés. Si le pool est épuisé, la zone affiche « Plus aucun mot dans le pool : la manche est terminée » avec Révéler ; à la révélation, « Fin de pool », et « crédit nul : rien n'est coché » si le crédit est 0.
+
+**Crédit** : le champ « Points » est pré-rempli à `mots trouvés × points − passes × coût`, sans descendre sous 0.
+L'équipe est présélectionnée. Vous pouvez modifier le montant avant « Attribuer les points ». Les passes ne débitent
+jamais le score : elles réduisent seulement le montant suggéré.
+
+> ℹ️ En haut de la zone, le bandeau donne l'état, les compteurs et le crédit suggéré ; la formule est en info-bulle sur le crédit. Le fil regroupe les passes (« Lion ×5 »).
+>
+> Le dessinateur ne voit jamais de bouton « Passer » : c'est vous ou l'animateur qui déclenchez la passe. Si l'admin
+> et l'anim cliquent en même temps, un seul mot avance : le second geste, daté d'un mot déjà remplacé, est refusé.
+
+### Pool Picto — réservoir de mots (v13.1.0, #324)
+
+Le **Pool Picto** est un réservoir de mots pour le type de question Picto. Il se gère dans la page Questions, onglet
+**Pool Picto** (`/admin/quiz?tab=picto`). Il a la même présentation que le **Pool Speedy** (onglet « Pool Speedy »,
+ex-« Rafale »).
+
+- **Ajouter un mot** : « Un mot » (une saisie) ou « Une liste » (collage de 1 à 200 mots, une par ligne). Les lignes valides
+  sont créées ; chaque refus est listé avec sa raison (`WORD_INVALID`, `DUPLICATE`, `POOL_FULL`). Un mot doit faire 1 à 40
+  caractères, sans doublon dans la même catégorie (casse et accents ignorés).
+- **Générer via IA** : « ✨ Générer via IA » propose 10, 20 ou 50 mots, à choisir par catégorie et difficulté. Les mots
+  doivent être dessinables (3 mots au plus, ni nom propre ni marque). Une seule génération à la fois.
+- **Utiliser le Pool Picto dans une question** : dans l'éditeur Picto, la source « Pool Picto » tire un mot du pool, filtré par
+  catégories et difficultés. Une nouvelle question prend cette source par défaut. Les questions Picto déjà créées gardent
+  leurs mots saisis.
+- **Un mot tiré est marqué « utilisé »**, comme pour le Pool Speedy. « Remettre tout disponible » remet les mots
+  utilisés à l'état disponible.
+- **Pendant une manche Picto**, le Pool Picto est verrouillé : ajout, remise à zéro, génération et lecture de la liste
+  sont refusés (`409 picto_round_in_progress`). La page affiche « Pool indisponible pendant une manche Picto ».
+  La page ne se recharge pas seule à la fin de la manche : rouvrez l'onglet.
+- **Sauvegarde** : la catégorie « Pools » de la sauvegarde et de la réinitialisation contient « Pool Speedy » et
+  « Pool Picto ». Une archive antérieure à v13.1.0 se restaure à l'identique.
+- **Indice** : la catégorie du mot en cours s'affiche sur la TV et sur l'anim. Le mot tiré n'est envoyé qu'au dessinateur,
+  à l'admin et à l'anim, jamais à la TV avant la révélation (il s'affiche sur la TV en `REVEALED`).
+
+> ⚠️ Les routes `/api/picto/*` n'ont pas encore d'authentification (dette #259) : la liste des mots reste lisible par qui peut
+> joindre le serveur hors manche ; refusée en `409` pendant `STARTED`/`PAUSED`. Gardez le serveur sur un réseau d'administration isolé.
 
 ### Gestion du réservoir (`/admin/rafale`)
 

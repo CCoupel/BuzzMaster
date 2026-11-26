@@ -83,7 +83,7 @@ interface Team {
 ## Niveau d'attribution et QCM_WRONG_PENALTY — v11.2 (#254)
 
 - **`Question.POINTS_TARGET`** (`TEAM` ou `PLAYER`) : défaut au chargement (`game.DefaultPointsTarget`). `TEAM` pour QCM,
-  ARDOISE, MEMORY, MEMOTION et RAFALE ; `PLAYER` pour SPEEDY. Une valeur enregistrée est respectée pour SPEEDY, QCM et ARDOISE.
+  ARDOISE, MEMORY, MEMOTION, RAFALE, PICTO et RAFALE_PICTO ; `PLAYER` pour SPEEDY. Une valeur enregistrée est respectée pour SPEEDY, QCM et ARDOISE.
   **Changement** : une ancienne question ARDOISE sans `POINTS_TARGET` passe de `PLAYER` à `TEAM`.
 - **`Question.QCM_WRONG_PENALTY`** (question QCM seulement) : entier de −100 à 0, **0 = aucune pénalité** (défaut). Absent,
   invalide ou non entier → 0, sans faire échouer le chargement de la question. Aucune réécriture des fichiers existants.
@@ -1684,8 +1684,64 @@ PictoWords []string `json:"PICTO_WORDS,omitempty"` // 1 à 20 mots, secret (reti
 - **`PICTO_WORDS`** : format d'un mot = espaces de début et de fin retirés, espaces internes compactés, 1 à 40 caractères
   (lettres accentuées, chiffres, espace, apostrophe, tiret). Aucun doublon de clé repliée dans une même question
   (« Éléphant » et « elephant » sont un doublon). Une seule implémentation, côté serveur (`server-go/internal/game/picto_words.go`).
-- **Registre** : `OwnedFields` = `PICTO_WORDS`, `MediaSlots` = aucun, `NestableInMotionCard` = `false`, `HasPlayerInput` = `true`.
-- **Enregistrement** (`POST /questions`) : un refus renvoie HTTP 400 préfixé par son code (`PICTO_WORDS_INVALID`, `PICTO_TIME_INVALID`) ; rien n'est écrit.
+- **Registre** : `OwnedFields` = `PICTO_WORDS`, `PICTO_SOURCE`, `PICTO_CATEGORIES`, `PICTO_DIFFICULTIES`, `MediaSlots` = aucun, `NestableInMotionCard` = `false`, `HasPlayerInput` = `true`.
+- **Enregistrement** (`POST /questions`) : un refus renvoie HTTP 400 préfixé par son code (`PICTO_WORDS_INVALID`, `PICTO_TIME_INVALID`, `PICTO_SOURCE_INVALID`, `PICTO_FILTER_INVALID`) ; rien n'est écrit.
+
+### Source Pool Picto — v13.1.0, #324 (contracts/picto.md §17.2, contracts/picto-pool.md §2 à §4)
+
+```go
+PictoSource       string   `json:"PICTO_SOURCE,omitempty"`       // "" / "WORDS" = mots saisis ; "RESERVOIR" = Pool Picto
+PictoCategories   []string `json:"PICTO_CATEGORIES,omitempty"`   // filtre du pool (catégories)
+PictoDifficulties []int    `json:"PICTO_DIFFICULTIES,omitempty"` // filtre du pool (1 à 3)
+```
+
+- **`PICTO_SOURCE`** : `WORDS` (ou absent) garde le comportement v13.0.0 (mots saisis, tirage libre) ; `RESERVOIR`
+  tire un mot du Pool Picto. Une autre valeur est refusée à l'enregistrement (`POST /questions`, `PICTO_SOURCE_INVALID`).
+- **Filtre** : exigé avec `RESERVOIR` (`PICTO_FILTER_INVALID` si vide, hors plage, ou si une catégorie est inconnue) ; il n'est pas secret.
+- **Pool vide** : `START` est refusé par `POOL_EMPTY` (renvoyé en `PICTO_ERROR`) quand aucun mot n'est disponible pour le filtre. `READY` ne renvoie pas ce code : le blocage de la préparation passe par la conformité des participants.
+- **Pool Picto** (`files/picto/reservoir.json`, marquage `config/picto_used.json`) : entrées `p-NNN`, `QUESTION` = mot, `ANSWER`
+  toujours vide, `CATEGORY`, `DIFFICULTY`. Plafond : 5 000 entrées (`POOL_FULL`). Doublon interdit par catégorie, clé repliée
+  (`DUPLICATE`).
+
+### Question RAFALE_PICTO — v13.1.0, #318 (contracts/picto.md §17.2)
+
+Type « Rafale Picto » (🖍️), famille Picto. Hôte de question uniquement, non imbriquable, hors générateur IA.
+`PictoConfig()` lit les champs `RAFALE_PICTO_*` (le moteur ne lit jamais le préfixe).
+
+```go
+RafalePictoSource       string   `json:"RAFALE_PICTO_SOURCE,omitempty"`       // WORDS | RESERVOIR
+RafalePictoWords        []string `json:"RAFALE_PICTO_WORDS,omitempty"`        // SECRET : retiré des messages TV et tablette
+RafalePictoCategories   []string `json:"RAFALE_PICTO_CATEGORIES,omitempty"`
+RafalePictoDifficulties []int    `json:"RAFALE_PICTO_DIFFICULTIES,omitempty"`
+RafalePictoPassCost     int      `json:"RAFALE_PICTO_PASS_COST,omitempty"`    // 0 à 100 points retirés par passe ; 0 = gratuite
+RafalePictoPassLimit    int      `json:"RAFALE_PICTO_PASS_LIMIT,omitempty"`   // 0 = illimitées ; 1 = une seule passe
+RafalePictoPoolEnd      string   `json:"RAFALE_PICTO_POOL_END,omitempty"`     // END (absent = END) | LOOP
+```
+
+- **Champs propres** : le registre impose un champ par type (`OwnedFields`). `PICTO_*` reste à `PICTO`.
+- **`TIME`, `POINTS` (par mot trouvé) et `CATEGORY` (crédit)** sont réutilisés.
+- **Crédit** : `game.DefaultPointsTarget` renvoie `TEAM` pour la famille Picto, `RAFALE_PICTO` compris.
+- **Registre** : `OwnedFields` = les 7 champs ci-dessus, `MediaSlots` = aucun, `NestableInMotionCard` = `false`,
+  `HasPlayerInput` = `true`.
+- **Enregistrement** (`POST /questions`, multipart `rafale_picto_*`) : refus `400` préfixé par son code
+  (`PICTO_SOURCE_INVALID`, `PICTO_FILTER_INVALID`, `PICTO_WORDS_INVALID`, `PICTO_PASS_INVALID`, `PICTO_POOL_END_INVALID`).
+  `PICTO_PASS_INVALID` : coût hors de 0 à 100, ou limite autre que 0 et 1.
+
+### GameState de manche Rafale Picto — v13.1.0, #318 (contracts/picto.md §17.4)
+
+Champs de la famille, sans `omitempty`, remis à vide au `START`, au changement de question, à la relance, à
+`InitGameWith` et à `NEW_GAME`. Ils survivent à `stopUnsafe` et restent en `REVEALED`.
+
+| Champ | Type | Contenu |
+|---|---|---|
+| `PICTO_FOUND_COUNT` | int | Mots trouvés dans la manche (0 en Picto) |
+| `PICTO_FOUND_WORDS` | string[] | Mots **trouvés**, dans l'ordre (publics : dits à voix haute). Jamais un mot passé |
+| `PICTO_PASS_COUNT` | int | Passes utilisées |
+| `PICTO_PASSES_LEFT` | int | Passes restantes ; **−1 = illimité** (et valeur de Picto) |
+| `PICTO_ROUND_POINTS` | int | Crédit suggéré : `max(0, PICTO_FOUND_COUNT × POINTS − PICTO_PASS_COUNT × RAFALE_PICTO_PASS_COST)`, calculé par le serveur |
+
+- **`PICTO_OUTCOME`** gagne `POOL_END` (Rafale Picto : plus de mot frais et rien à reboucler). `PICTO_REVEALED_WORD` vaut
+  alors `""`.
 
 ### GameState PICTO_* — v13.0.0, #192 (contracts/picto.md §5)
 
@@ -1701,10 +1757,12 @@ Diffusés aux clients web (admin, anim, TV, tablettes) ; jamais aux buzzers.
 | `PICTO_DRAWER_CONNECTED` | bool | Le dessinateur a une connexion `/ws/player` liée |
 | `PICTO_CANDIDATES` | `{ID, NAME, CONNECTED}[]` | VJoueurs de l'équipe ; seuls les connectés sont désignables |
 | `PICTO_WORDS_COUNT` | int | Nombre de mots de la question (affiché en préparation) |
-| `PICTO_CANVAS_EPOCH` | int | Époque de la feuille : +1 à chaque `START` d'une manche PICTO ; 0 avant la première |
-| `PICTO_OUTCOME` | string | `""` \| `FOUND` \| `TIMEOUT` \| `STOPPED` \| `NO_WORD` (issues de fin de manche, voir GAME_STATE_MACHINE « Fin de manche ») |
+| `PICTO_CANVAS_EPOCH` | int | Époque de la feuille : +1 à chaque `START` d'une manche PICTO ; en Rafale Picto, +1 à chaque nouveau mot tiré (`START`, puis chaque « Trouvé » ou « Passer » qui amène un mot ; un « Trouvé » ou « Passer » qui termine le pool, et un « Trouvé » sur le gong, ne l'incrémentent pas) ; 0 avant la première |
+| `PICTO_OUTCOME` | string | `""` \| `FOUND` \| `TIMEOUT` \| `STOPPED` \| `NO_WORD` \| `POOL_END` (Rafale Picto) (issues de fin de manche, voir GAME_STATE_MACHINE « Fin de manche ») |
 | `PICTO_REVEALED_WORD` | string | Mot de la manche, **seulement en `REVEALED`** ; `""` sinon |
 | `PICTO_REVEALED_CATEGORY` | string | Catégorie du crédit, en `REVEALED` ; `""` sinon |
+| `PICTO_POOL_AVAILABLE` | int | Mots encore tirables : pool filtré et non utilisé (source `RESERVOIR`), mots saisis (source `WORDS`) — v13.1.0, #324. En manche Rafale Picto : mots jamais montrés, plus les passés en attente si `RAFALE_PICTO_POOL_END = LOOP` |
+| `PICTO_WORD_CATEGORY` | string | Catégorie du mot en cours (pool), sinon celle de la question — indice TV / anim, jamais le mot — v13.1.0, #324 |
 
 - **Remise à vide** : la préparation (`PICTO_TEAM`, `PICTO_DRAWER`, `PICTO_CANDIDATES`) au changement de question, à
   `InitGameWith` et à `NEW_GAME`. Elle est conservée entre `PREPARE` et `READY`, et à la relance de la même question.

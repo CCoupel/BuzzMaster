@@ -168,7 +168,7 @@ func pruneHistoryBackups(dir string) {
 func (e *Engine) ReassignRafaleCategory(from, to string) (int, error) {
 	e.mu.Lock()
 	n := 0
-	for _, q := range e.rafaleQuestions {
+	for _, q := range e.rafalePool.entries {
 		if string(q.Category) == from {
 			q.Category = QuestionCategory(to)
 			n++
@@ -186,7 +186,7 @@ func (e *Engine) CountRafaleCategory(key string) int {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	n := 0
-	for _, q := range e.rafaleQuestions {
+	for _, q := range e.rafalePool.entries {
 		if string(q.Category) == key {
 			n++
 		}
@@ -199,10 +199,10 @@ func (e *Engine) CountRafaleCategory(key string) int {
 func (e *Engine) DeleteRafaleQuestionsByCategory(key string) (int, error) {
 	e.mu.Lock()
 	n := 0
-	for id, q := range e.rafaleQuestions {
+	for id, q := range e.rafalePool.entries {
 		if string(q.Category) == key {
-			delete(e.rafaleQuestions, id)
-			delete(e.rafaleUsed, id)
+			delete(e.rafalePool.entries, id)
+			delete(e.rafalePool.used, id)
 			n++
 		}
 	}

@@ -2133,7 +2133,8 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 | `PICTO_SET_TEAM` | `{ "TEAM": string }` | admin, anim | `PREPARE`, `READY` |
 | `PICTO_SET_DRAWER` | `{ "PLAYER": string }` (ID de bumper) | admin, anim | `PREPARE`, `READY` |
 | `PICTO_DRAW_DRAWER` | `{}` (tirage au hasard parmi les VJoueurs connectés de l'équipe) | admin, anim | `PREPARE`, `READY` |
-| `PICTO_FOUND` | `{}` (« Trouvé ! » : arrête la manche et la révèle dans la même action) | admin, anim | `STARTED`, `PAUSED`, et `STOPPED` après `TIMEOUT` |
+| `PICTO_FOUND` | `{ "EPOCH"?: int }` (« Trouvé ! » : compte le mot ; en Picto, arrête la manche et la révèle dans la même action). **`EPOCH` obligatoire en Rafale Picto** (sinon `STALE_WORD`) : la manche passe au mot suivant | admin, anim | `STARTED`, `PAUSED`, et `STOPPED` après `TIMEOUT` (réponse sur le gong) |
+| `PICTO_PASS` (v13.1.0, #318) | `{ "EPOCH": int }` : la passe est annoncée à voix haute par le dessinateur, déclenchée par l'admin ou l'anim. Le mot passé entre dans la file, puis le mot suivant arrive. **Rafale Picto seulement** (sinon `NOT_RAFALE`) | admin, anim (jamais une tablette) | `STARTED` |
 | `PICTO_STROKES` | `{ "EPOCH": int, "STROKES": [ { "ID": int, "PTS": [[x, y], ...], "END": bool } ] }` | VJoueur dessinateur | `STARTED` |
 | `PICTO_CANVAS_SYNC` | `{}` | tv, admin, anim ; VJoueur seulement s'il est le dessinateur | toutes |
 
@@ -2145,7 +2146,7 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 
 | Action | Destinataires | Payload |
 |---|---|---|
-| `UPDATE` (existant) | tous les clients web | `GameState` avec les champs `PICTO_*` (sans le mot) |
+| `UPDATE` (existant) | tous les clients web | `GameState` avec les champs `PICTO_*` (sans le mot). v13.1.0 (#324) : `PICTO_POOL_AVAILABLE` et `PICTO_WORD_CATEGORY` (indice de catégorie, jamais le mot) |
 | `PICTO_WORD` | dessinateur seul, admin, anim | `{ "WORD": string, "CATEGORY": string, "EPOCH": int }` |
 | `PICTO_STROKES` | tv, admin, anim (envoi non bloquant) | `{ "EPOCH": int, "SEQ": int, "STROKES": [...] }` |
 | `PICTO_CANVAS` | le demandeur seul | `{ "EPOCH": int, "SEQ": int, "STROKES": [...] }` (feuille entière de l'époque) |
@@ -2164,6 +2165,10 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 | `NOT_DRAWER` | trame ou synchronisation d'un VJoueur qui n'est pas le dessinateur |
 | `INVALID_STROKES` | forme de trame non valable |
 | `CANVAS_FULL` | journal plein (6 000 traits ou 60 000 points) : trame refusée, rien relayé |
+| `POOL_EMPTY` | `START` refusé : le filtre du Pool Picto n'a aucun mot disponible (source `RESERVOIR`) |
+| `PASS_LIMIT_REACHED` | `PICTO_PASS` refusé : plus aucune passe (limite de la question atteinte) |
+| `NOT_RAFALE` | `PICTO_PASS` sur une question Picto à un mot |
+| `STALE_WORD` | `PICTO_FOUND` ou `PICTO_PASS` sans `EPOCH` (Rafale Picto) ou d'une autre époque que le mot affiché : refusé, sans effet |
 | `RATE_LIMITED` | débit dépassé : 40 trames/s pour `PICTO_STROKES`, 2/s pour `PICTO_CANVAS_SYNC` ; une erreur au plus par seconde |
 
 ### Relais et rattrapage
@@ -2175,10 +2180,12 @@ Référence : `contracts/picto.md` §8, §9, §10. Aucun buzzer ne reçoit une a
 
 ### Confidentialité
 
-- `QUESTION.PICTO_WORDS` est retiré des messages `/ws/tv` et `/ws/player` (les trois sites de sérialisation). Il reste
-  présent pour `/ws/admin` et `/ws/anim`.
-- Le mot de la manche n'est dans aucun `UPDATE` ni message à la TV ou à une tablette non dessinatrice ; il n'apparaît dans
-  `GameState` qu'en `REVEALED`, avec `PICTO_REVEALED_WORD` (et `PICTO_REVEALED_CATEGORY`). Les `UPDATE` de la TV et des
+- `QUESTION.PICTO_WORDS` et `QUESTION.RAFALE_PICTO_WORDS` sont retirés des messages `/ws/tv` et `/ws/player` (les trois sites
+  de sérialisation, liste partagée `SecretQuestionFields`). Ils restent
+  présents pour `/ws/admin` et `/ws/anim`.
+- Le mot en cours et les mots passés n'apparaissent dans aucun `UPDATE` ni message à la TV ou à une tablette non dessinatrice.
+  Le mot en cours n'entre dans `GameState` qu'en `REVEALED`, avec `PICTO_REVEALED_WORD` (et `PICTO_REVEALED_CATEGORY`).
+  En Rafale Picto, seuls les mots trouvés (`PICTO_FOUND_WORDS`) sont publics en cours de manche (dits à voix haute). Les `UPDATE` de la TV et des
   tablettes portent le mot seul, sans payload de « Trouvé par ».
 
 ## References

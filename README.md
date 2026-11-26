@@ -30,7 +30,9 @@ BuzzControl est une solution complete pour animer des jeux de quiz avec des buzz
 | **QCM** | 4 choix colores (Rouge, Vert, Jaune, Bleu) |
 | **MEMORY** | Jeu de paires a memoriser |
 | **ROUE** | Roue de la Fortune : phrase a deviner, les equipes tournent la roue, proposent des consonnes et achetent des voyelles ; BONUS (marque 🎁 sur une case à points, éphémère ou permanent ; cadeau de l'animateur) ; composition de la roue par question (points, Banqueroute, Perdu, BONUS : global ou personnalise) |
-| **PICTO** | ✏️ Picto : un dessinateur (joueur VJoueur de l'équipe, choisi ou tiré au hasard) dessine un mot secret sur sa tablette, l'équipe le devine à l'oral ; mots saisis dans la question (1 à 20), un mot tiré au lancement ; « Trouvé ! » (y compris sur le gong), temps écoulé, arrêt, relance ; crédit manuel à l'équipe ; LED de l'équipe qui dessine |
+| **RAFALE** | 🌀 Rafale Speedy : une manche de questions qui s'enchaînent, avec le pool « Pool Speedy » (génération IA, catégories, difficultés) |
+| **PICTO** | ✏️ Picto : un dessinateur (joueur VJoueur de l'équipe, choisi ou tiré au hasard) dessine un mot secret sur sa tablette, l'équipe le devine à l'oral ; mots saisis dans la question (1 à 20) ou Pool Picto (tirage stratifié), un mot tiré au lancement ; « Trouvé ! » (y compris sur le gong), temps écoulé, arrêt, relance ; crédit manuel à l'équipe ; LED de l'équipe qui dessine |
+| **RAFALE_PICTO** | 🖍️ Rafale Picto : même dessinateur du début à la fin ; le plus de mots possible en un temps donné ; passes annoncées à l'oral et déclenchées par l'admin ou l'anim (coût en points, 1 passe ou illimitées) ; fin de pool : reboucler sur les mots passés ou finir la manche ; mots du Pool Picto ou saisis ; crédit pré-rempli (mots trouvés × points − passes × coût) |
 
 ### Interface d'Administration
 
@@ -72,6 +74,7 @@ BuzzControl est une solution complete pour animer des jeux de quiz avec des buzz
 - Penalites d'erreur (optionnel)
 - Historique complet avec recalcul automatique
 - Temps et points de la page Jeu repris de la question, pour tous les types
+- Présélection des gagnants (#321) : la page Jeu coche d'office les équipes ou joueurs désignés par la question ; le crédit reste manuel
 
 ---
 

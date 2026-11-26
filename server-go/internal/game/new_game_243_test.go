@@ -23,14 +23,14 @@ func TestNewGame243_RafaleReservoirFollowsResetQuestions(t *testing.T) {
 	for _, reset := range []bool{true, false} {
 		e := NewEngine()
 		e.mu.Lock()
-		e.rafaleUsed["r1"] = true
-		e.rafaleUsed["r2"] = true
+		e.rafalePool.used["r1"] = true
+		e.rafalePool.used["r2"] = true
 		e.mu.Unlock()
 
 		e.InitGameWith(allOptions243(false, false, false, reset))
 
 		e.mu.RLock()
-		n := len(e.rafaleUsed)
+		n := len(e.rafalePool.used)
 		e.mu.RUnlock()
 		if reset && n != 0 {
 			t.Errorf("RESET_QUESTIONS=true : réservoir RAFALE remis à zéro (%d entrées)", n)

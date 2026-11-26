@@ -83,7 +83,7 @@ var soundSiteRegistry = map[soundSite]soundDecision{
 		"depart again; see _work/reports/plan-verif-front-227-20260921-103500.md"},
 	{Func: "setupCallbacks"}: {"OnRafaleInvalid (CueRafaleMauvaise — replaces CuePerdu, D4 #231 — classic RAFALE " +
 		"invalidate/timeout only), OnRafaleCorrect (CueRafaleBonne) / OnRafaleCardInvalid (CueRafaleMauvaise, card-scoped), " +
-		"OnRafaleLotEnd (CueRafaleFinLot — fired AFTER the verdict cue, review m1) and " +
+		"OnRafaleLotEnd (CueRafaleFinLot — fired AFTER the verdict cue, review m1) — also fired by the RAFALE_PICTO engine (v13.1.0 #318, contracts/picto.md §17.11: PICTO_FOUND = rafale-bonne, PICTO_PASS = rafale-mauvaise via OnRafaleCardInvalid, POOL_END = rafale-fin-lot; no new site) and " +
 		"OnTimeUp (CueTempsEcoule) callbacks wired here"},
 	{Func: "setupRoueCallbacks"}: {"OnRoueNotice (v12.0.0 #144): CueRafaleMauvaise on an absent/repeated letter or " +
 		"BANQUEROUTE, CueGagne on the credit, CueRafaleBonne on a points case carrying the BONUS mark (v12.1.0 #308, v12.2.0 #316) — existing cues only"},

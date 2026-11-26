@@ -145,11 +145,11 @@ func (e *Engine) drawNextRafaleAlphaUnsafe() (*RafaleQuestion, error) {
 	for len(e.rafaleAlpha.queue) > 0 {
 		q := e.rafaleAlpha.queue[0]
 		e.rafaleAlpha.queue = e.rafaleAlpha.queue[1:]
-		if e.rafaleUsed[q.ID] {
+		if e.rafalePool.used[q.ID] {
 			continue
 		}
 		drawn := *q
-		e.rafaleUsed[drawn.ID] = true
+		e.rafalePool.used[drawn.ID] = true
 		return &drawn, nil
 	}
 	return nil, ErrRafalePoolEmpty
@@ -178,7 +178,7 @@ func (e *Engine) refreshRafaleLettersUnsafe(current *RafaleQuestion) {
 		}
 	}
 	for _, q := range e.rafaleAlpha.queue {
-		if !e.rafaleUsed[q.ID] {
+		if !e.rafalePool.used[q.ID] {
 			mark(q)
 		}
 	}

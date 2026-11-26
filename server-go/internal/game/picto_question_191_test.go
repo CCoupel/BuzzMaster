@@ -36,8 +36,9 @@ func TestPicto_RegistryDescriptor(t *testing.T) {
 	if d.Type != QuestionTypePicto {
 		t.Errorf("descriptor.Type = %q, want PICTO", d.Type)
 	}
-	if !reflect.DeepEqual(d.OwnedFields, []string{"PICTO_WORDS"}) {
-		t.Errorf("OwnedFields = %v, want [PICTO_WORDS]", d.OwnedFields)
+	// v13.1.0 (#324, contracts/picto.md §17.2): source and filter join the words.
+	if want := []string{"PICTO_WORDS", "PICTO_SOURCE", "PICTO_CATEGORIES", "PICTO_DIFFICULTIES"}; !reflect.DeepEqual(d.OwnedFields, want) {
+		t.Errorf("OwnedFields = %v, want %v", d.OwnedFields, want)
 	}
 	if len(d.MediaSlots) != 0 {
 		t.Errorf("MediaSlots = %v, want none (le mot est du texte)", d.MediaSlots)

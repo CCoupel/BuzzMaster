@@ -527,7 +527,7 @@ Fichiers : `components/AnimMotionActions.{jsx,css}` (nouveaux). Première occupa
 - **`GRID`** → bandeau rappel équipe active ; pas de bouton (sélection via grille)
 - **`SELECTED`** → boutons `DÉMARRER` (go, vert) + `ANNULER` (optional, bleu)
 - **`QUESTION`** → boutons `STOP CHRONO` (optional) + `RÉVÉLER` (go si chrono ≥0) + `SANS VAINQUEUR` (optional)
-- **`REVEAL`** → boutons équipe courante (go, couleur équipe) + `PERSONNE` (optional)
+- **`REVEAL`** → boutons équipe courante (go, couleur équipe) + `PERSONNE` (optional). **v13.1.0 (#321)** : avec `confirmWinner` (activé par `AnimPage` via `AnimConductPanel.confirmMotionWinner`), le choix d'équipe est présélectionné (`aria-pressed`) et n'est envoyé qu'après le bouton **VALIDER** (`onDoneMotionCard`) ; sans l'option, le geste envoie aussitôt (comportement inchangé). Voir `contracts/award-preselect.md` §4.
 
 **Palette** : boutons `anim-conduct-btn-{go|optional|danger|off}`, réutilisée depuis `AnimConductPanel` (L1).
 
@@ -2115,6 +2115,69 @@ Règles d'interface :
 **Comportement** :
 - Inclus/exclus `data/files/rafale/` ET `data/config/rafale_used.json` ensemble
 - Aucune sélection partielle
+
+---
+
+## Pool Picto et pools paramétrés — v13.1.0 (#324)
+
+Le réservoir Picto réutilise l'interface du réservoir Speedy : une seule page, paramétrée par instance.
+
+- **`web/src/utils/poolInstances.js`** : `POOL_INSTANCES`, deux entrées. `rafale` = « Pool Speedy » (valeurs identiques à
+  l'ancien code en dur) ; `picto` = « Pool Picto » (colonne « Mot », pas de réponse, collage activé, paliers IA 10 / 20 / 50).
+  `getPoolInstance(key)` et `poolUrls(inst)` (chemins `/api/rafale/*` ou `/api/picto/*`).
+- **`web/src/pages/PoolPage.jsx`** : `PoolPage({ instance })`. Le tableau filtrable, le formulaire, la génération IA et
+  l'alerte sont communs. `RafalePage.jsx` n'est plus qu'une enveloppe sur l'instance `rafale`.
+- **Onglets de `QuestionsPage`** : « Pool Speedy » et « Pool Picto » (`?tab=picto`). Le formulaire Pool Picto propose
+  « Un mot » / « Une liste » (chips `rafale-chip`) ; la liste passe par `POST /api/picto/words/batch`. Les refus par
+  ligne sont affichés dans le formulaire.
+- **Génération IA** : `components/PoolAIGenerateModal.jsx` paramétré (titre, paliers, `TARGET`). Une
+  erreur `409 picto_round_in_progress` est traduite en « Génération refusée : une manche Picto est en cours. Réessayez
+  une fois la manche terminée. » (`aiJobHelpers.js`). Le chargement de la liste, lui, affiche « Pool indisponible pendant
+  une manche Picto » (`role="status"`, `PoolPage.jsx`), au lieu d'une erreur HTTP brute. `PoolAlert.jsx` est l'alerte commune, reprise par `RafalePoolAlert.jsx`.
+- **Source du type Picto** : `components/picto/PictoWordsSource.jsx` (`SOURCE_POOL = 'RESERVOIR'`) affiche le choix
+  « Pool Picto » / mots saisis, le filtre catégories × difficultés et l'alerte. Une nouvelle question prend « Pool Picto ».
+- **Page Jeu et anim** : `pictoWordsInfo` (`components/picto/pictoState.js`, utilisé par `PictoPanel.jsx` et `AnimPicto.jsx`)
+  affiche « 🗂 Pool Picto · N mot(s) disponible(s) » à partir de `PICTO_POOL_AVAILABLE`.
+- **TV et anim** : l'indice de catégorie vient de `PICTO_WORD_CATEGORY` (TV `PlayerDisplay.jsx`, anim `AnimPicto.jsx`).
+  Ce champ ne contient jamais le mot.
+- **Sauvegarde** : `BackupPage.jsx`, catégorie « Pools » à trois états (`POOL_OPTIONS = { rafale: 'Pool Speedy', picto: 'Pool Picto' }`).
+
+Contrats : `contracts/picto-pool.md` (rév. 3) §4 à §7.
+
+---
+
+## Rafale Picto — composants et branchements (v13.1.0, #318)
+
+Le type `RAFALE_PICTO` est une variante de la famille Picto. Les règles de famille passent par `utils/pictoFamily.js`
+(`isPictoFamily`), jamais par un test `== 'PICTO'`.
+
+- **`utils/pictoFamily.js`** : `isPictoFamily(type)` couvre `PICTO` et `RAFALE_PICTO`. Il sert à la préparation, au
+  crédit (`utils/pointsAward.js`), au panneau Picto, au relais de dessin et à la page Questions (durée, titre, champs).
+- **`questionTypeMeta.js`** : `RAFALE_PICTO`, libellé « Rafale Picto », icône 🖍️, non imbriquable.
+- **Éditeur** : `components/picto/PictoEditor.jsx`, bloc « Passes » (coût 0 à 100, « 1 passe » / « Illimitées »,
+  « 🔁 reboucle » / « ⏹ fin à la dernière »). Le sous-éditeur « Mots à dessiner » partagé écrit les champs
+  `rafale_picto_*` (`RAFALE_PICTO_*`). Les cartes sont empilées (`picto-grid-stacked`, une par ligne) pour Rafale Picto ;
+  Picto (un mot) garde deux colonnes. Avec la source Pool de Rafale Picto, c'est `QuestionsPage.jsx` qui masque le sélecteur
+  unique de catégorie (`!(RAFALE_PICTO && RESERVOIR)`) ; la catégorie du crédit est alors la première du filtre. Le
+  `PictoWordsSource` ne fait que l'apparence : `variant='rafale'` règle les sélecteurs multiples (libellés par défaut, sans
+  étoiles vides), `variant='picto'` reste inchangé. « Ajouter » est grisé tant que `isPictoReady` est faux (filtre incomplet).
+- **Conduite admin et anim** : `components/picto/PictoRafaleConduct.jsx`. Boutons « ⏭ Passer » (avec le coût, ou « Plus
+  de passe disponible ») et « ✅ Trouvé » (« Trouvé sur le gong » après un temps écoulé). Les deux envoient l'époque du mot
+  affiché (`EPOCH`). Zone compacte (maquette M9 A) : bandeau `picto-rafale-banner` au-dessus de la zone de jeu (état, trouvés, passes,
+  restants, « Crédit X pts ⓘ » dont la formule est en info-bulle seulement), puis la ligne « Mot : … » (`picto-rafale-word`,
+  « (nᵉ présentation) » via `presentationCount`) avec Passer / Trouvé. Le fil (`picto-thread`, flex-wrap, fond = couleur de
+  l'équipe qui joue, repli `#475569`) est regroupé par `groupThread` : trouvés un à un, passés dédoublonnés « ×n ». Le mot en cours est sur la ligne « Mot : » (`picto-rafale-word`, gras), et non dans le fil. Révélé : pastille jaune du mot (`picto-revealed-chip`). À l'arrêt après pool épuisé (`STOPPED` + `POOL_END`), la ligne « Mot » et ses boutons sont masqués. Aucun mot à venir n'est affiché.
+  Admin (`variant="admin"`) et anim (`variant="anim"`, boutons larges) partagent le même composant.
+- **En-tête et ligne pool** : `components/picto/PictoPanel.jsx` les masque pendant la manche, l'arrêt et la révélation Rafale Picto
+  (`!(rafale && (isDrawing || revealed))`, `isDrawing` = `STARTED`, `PAUSED`, `STOPPED`) ; ils restent avant le départ (préparation et `COUNTDOWN`).
+- **Affichage des mots** : `components/picto/pictoRafaleState.js` (`PICTO_FOUND_FLASH_MS = 1000`, états `found`,
+  `passed`, `current`, `revealed`).
+- **TV** : `components/picto/PictoTv.jsx` et `components/picto/useRafaleFlash.js`. Le grand compteur de mots trouvés ; le
+  mot trouvé reste 1 s sur le dessin, en surimpression, puis la feuille vierge. Une passe ne montre jamais le mot.
+  Le récapitulatif est une ligne, tronquée au-delà d'une dizaine de mots.
+- **Tablette du dessinateur** (`PictoDrawerScreen`) : pas de bouton « Passer » ; un compteur de mots trouvés et la catégorie du mot, sans récapitulatif. Le récapitulatif (`PictoGuesserScreen`) est sur les autres tablettes.
+- **Crédit** : `pages/GamePage.jsx` pré-remplit le champ « Points » à `PICTO_ROUND_POINTS` à l'entrée en `REVEALED`
+  (équipe présélectionnée, #321). `pages/AnimPage.jsx` (`getTeamAward`) donne la même valeur.
 
 ---
 

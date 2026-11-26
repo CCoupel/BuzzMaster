@@ -22,6 +22,17 @@ export function createPictoCanvasStore() {
   let held = [] // trames reçues pendant l'attente d'une feuille
   const listeners = new Set()
 
+  // Rafale Picto (v13.1.0, #318, picto.md §17.5) — TV seulement : quand le mot est trouvé, la TV garde l'ancienne
+  // feuille `holdMs` pendant que les traits de la NOUVELLE époque s'accumulent normalement (ils s'affichent aussitôt
+  // après la seconde). `frozen` = traits montrés pendant la tenue ; `holdMs` = durée armée (0 = désarmé).
+  let holdMs = 0
+  let frozen = null
+  let holdTimer = null
+  const releaseHold = () => {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null }
+    if (frozen !== null) { frozen = null; notify() }
+  }
+
   const notify = () => { version += 1; listeners.forEach(fn => fn()) }
   const clear = () => { seq = 0; strokes = []; held = []; syncing = false }
 
@@ -53,7 +64,7 @@ export function createPictoCanvasStore() {
     getEpoch: () => epoch,
     getSeq: () => seq,
     getVersion: () => version,
-    getStrokes: () => strokes,
+    getStrokes: () => (frozen !== null ? frozen : strokes),
     isSyncing: () => syncing,
     /** Plus grand ID de trait connu (le dessinateur continue la numérotation après une resynchronisation). */
     maxStrokeId: () => strokes.reduce((m, s) => Math.max(m, s.ID), 0),
@@ -61,6 +72,11 @@ export function createPictoCanvasStore() {
     /** Époque issue d'un UPDATE (`PICTO_CANVAS_EPOCH`) : tout changement efface la feuille. */
     setEpoch(e) {
       if (!Number.isInteger(e) || e === epoch) return
+      // Tenue armée : l'ancienne feuille reste visible `holdMs` (la nouvelle époque s'accumule derrière)
+      if (holdMs > 0 && epoch !== null && strokes.length > 0 && frozen === null) {
+        frozen = strokes
+        holdTimer = setTimeout(() => { holdTimer = null; frozen = null; notify() }, holdMs)
+      }
       epoch = e
       clear()
       notify()
@@ -109,11 +125,18 @@ export function createPictoCanvasStore() {
      * alors que `PICTO_CANVAS_EPOCH` ne change qu'au START (le serveur vide son journal au READY).
      */
     clearSheet() {
+      releaseHold()
       if (!strokes.length && !seq && !held.length && !syncing) return
       clear()
       notify()
     },
 
-    reset() { clear(); epoch = null; notify() },
+    /** Arme (ms > 0) ou désarme (0) la tenue de l'ancienne feuille au changement d'époque (TV Rafale Picto). */
+    armHold(ms) { holdMs = Number.isFinite(ms) && ms > 0 ? ms : 0; if (!holdMs) releaseHold() },
+    /** Met fin à la tenue tout de suite (passe : la feuille se vide aussitôt). */
+    releaseHold,
+    isHolding: () => frozen !== null,
+
+    reset() { releaseHold(); clear(); epoch = null; notify() },
   }
 }

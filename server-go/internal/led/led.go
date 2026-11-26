@@ -596,7 +596,7 @@ func (c *Controller) sendLEDSetForBuzzerPicto(mac string, bumper *game.Bumper, p
 // the others dimmed, from the moment the team is chosen.
 func (c *Controller) PictoTeams() {
 	state := c.h.Engine().GetState()
-	if state.Question == nil || state.Question.Type != game.QuestionTypePicto {
+	if state.Question == nil || !game.IsPictoFamily(state.Question.Type) {
 		return
 	}
 	tb := c.h.Engine().GetTeamsAndBumpers()
@@ -699,7 +699,7 @@ func (c *Controller) AllBuzzers() {
 			c.sendLEDSetForBuzzerRafale(mac, bumper, phase, state)
 		case state.Question != nil && state.Question.Type == game.QuestionTypeRoue:
 			c.sendLEDSetForBuzzerRoue(mac, bumper, phase, state) // v12.0.0, #144
-		case state.Question != nil && state.Question.Type == game.QuestionTypePicto:
+		case state.Question != nil && game.IsPictoFamily(state.Question.Type):
 			c.sendLEDSetForBuzzerPicto(mac, bumper, phase, state) // v13.0.0, #194
 		case state.Question != nil && state.Question.Type == game.QuestionTypeMemotion:
 			// MEMOTION: buzzers display team color (same as NORMAL)
