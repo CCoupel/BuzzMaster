@@ -7,7 +7,7 @@
 **Maquettes** : `_work/mockup/v13.1.0/ui/` (M3 éditeur, M4 TV, M5 tablettes, M6 anim, M7 admin), `conception/game_state_picto_rafale__words.html` (M8)
 **Tests automatiques** : `tests/INDEX.md` (lignes #318)
 
-> **Cycle 5 (13.1.0.8)** : les scénarios 1 à 11 ont été validés OK en 13.1.0.7 ; à revérifier sur les points modifiés (éditeur, fil des mots, zone de jeu admin).
+> **Cycle 6 (13.1.0.9)** : les scénarios 1 à 11 ont été validés en 13.1.0.7 / 13.1.0.8 ; seul le scénario 12 (zone admin compacte, maquette `_work/mockup/v13.1.0/ui/admin_game_picto_rafale__revealed_compact.propositions.html`, variante A) est nouveau, plus un rejeu rapide d'une manche.
 > Sauvegarder `data/` avant. Prévoir un Pool Picto de 10 mots au moins, 3 équipes avec joueurs, une tablette de dessinateur, TV, `/admin` et `/anim` ouverts.
 
 ## Prérequis
@@ -186,10 +186,24 @@
 
 ---
 
+## Scénario 12 — Zone admin Rafale Picto compacte (maquette M9 A)
+
+**Validation** : HUMAIN — **Issues** : #318
+
+**Objectif** : Zone admin Rafale Picto compacte (maquette M9 A).
+
+| Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sur /admin, jouer une manche Rafale Picto jusqu'à la révélation : observer le bandeau au-dessus de la zone de jeu, la ligne « Mot », le fil, puis la révélation ; refaire jusqu'à épuisement du pool (avec crédit nul, puis avec crédit > 0) ; comparer avec /anim ; passer coût de passe à 0 | Bandeau d'UNE ligne au-dessus de la zone de jeu : « Rafale Picto · état · ✅ n · ⏭ passes · 🗂 n restants · Crédit X pts ⓘ » (formule en info-bulle, un seul montant) ; ligne « Mot : … (nᵉ présentation) » avec Passer / Trouvé (« −0 pts » masqué si le coût est nul) ; fil regroupé : trouvés puis passés (« Lion ×5 ») sur fond de la couleur de l'équipe ; révélé : pastille jaune + « → crédit dans la colonne Équipes ⓘ » ; pool épuisé : « Plus aucun mot dans le pool » + Révéler, puis « Fin de pool · crédit nul : rien n'est coché » si crédit 0 ; ligne Mot et boutons absents en fin de pool ; en-tête et ligne Pool Picto masqués pendant manche, arrêt et révélation ; même fil sur l'anim | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Criteres de Validation
 
 - [ ] Scénario 0 PASS
-- [ ] Scénarios 1 à 11 PASS (manche complète sur TV et tablettes réelles)
+- [ ] Scénarios 1 à 12 PASS (manche complète sur TV et tablettes réelles)
 - [ ] Les questions Picto v13.0.0 et Rafale Speedy se comportent comme avant
 
 ## Notes QA
