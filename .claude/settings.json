@@ -21,6 +21,6 @@
       }
     ]
   },
-  "model": "opus",
+  "model": "sonnet",
   "effortLevel": "medium"
 }
