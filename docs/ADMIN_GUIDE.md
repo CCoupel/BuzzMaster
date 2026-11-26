@@ -2504,10 +2504,10 @@ de la question, avec le même dessinateur du début à la fin. Le mot passe au s
 1. Préparer comme un Picto : équipe, puis dessinateur (choix ou tirage parmi les joueurs connectés). Le lancement exige un dessinateur connecté.
 2. **START** : le premier mot part au dessinateur (sa tablette) ; le chrono global démarre.
 3. Le dessinateur dessine. Quand l'équipe trouve : **✅ Trouvé** (le mot suivant arrive, la TV affiche le mot 1 s).
-4. Quand le dessinateur **annonce une passe à voix haute** : **⏭ Passer** (le coût est affiché sur le bouton). Le mot passé
+4. Quand le dessinateur **annonce une passe à voix haute** : **⏭ Passer** (le coût est affiché sur le bouton s'il est supérieur à 0). Le mot passé
    ne réapparaîtra qu'avec le rebouclage. Le bouton est désactivé quand la passe est épuisée, et hors de la manche en cours (pause, arrêt).
 5. Au temps écoulé, la manche s'arrête (`STOPPED`). Si le mot en cours a été donné sur le gong, **Trouvé sur le gong** (une seule fois) le compte et révèle ; sinon, **Révéler**.
-6. **Fin** : la révélation montre le mot en cours (s'il n'a pas été trouvé), en pastille jaune. Les mots passés ne sont jamais montrés. Si le pool est épuisé, la zone affiche « Fin de pool · crédit nul : rien n'est coché » quand le crédit est à 0.
+6. **Fin** : la révélation montre le mot en cours (s'il n'a pas été trouvé), en pastille jaune. Les mots passés ne sont jamais montrés. Si le pool est épuisé, la zone affiche « Plus aucun mot dans le pool : la manche est terminée » avec Révéler ; à la révélation, « Fin de pool », et « crédit nul : rien n'est coché » si le crédit est 0.
 
 **Crédit** : le champ « Points » est pré-rempli à `mots trouvés × points − passes × coût`, sans descendre sous 0.
 L'équipe est présélectionnée. Vous pouvez modifier le montant avant « Attribuer les points ». Les passes ne débitent

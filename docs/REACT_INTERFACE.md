@@ -2167,10 +2167,10 @@ Le type `RAFALE_PICTO` est une variante de la famille Picto. Les règles de fami
   restants, « Crédit X pts ⓘ » dont la formule est en info-bulle seulement), puis la ligne « Mot : … » (`picto-rafale-word`,
   « (nᵉ présentation) » via `presentationCount`) avec Passer / Trouvé. Le fil (`picto-thread`, flex-wrap, fond = couleur de
   l'équipe qui joue, repli `#475569`) est regroupé par `groupThread` : trouvés un à un, passés dédoublonnés « ×n », mot en
-  cours en gras. Révélé : pastille jaune du mot (`picto-revealed-chip`). Aucun mot à venir n'est affiché.
+  Le mot en cours est sur la ligne « Mot : » (`picto-rafale-word`, gras), et non dans le fil. Révélé : pastille jaune du mot (`picto-revealed-chip`). À l'arrêt après pool épuisé (`STOPPED` + `POOL_END`), la ligne « Mot » et ses boutons sont masqués. Aucun mot à venir n'est affiché.
   Admin (`variant="admin"`) et anim (`variant="anim"`, boutons larges) partagent le même composant.
-- **En-tête et ligne pool** : `components/picto/PictoPanel.jsx` les masque pendant la manche et la révélation Rafale Picto
-  (`!(rafale && (isDrawing || revealed))`) ; ils restent en préparation.
+- **En-tête et ligne pool** : `components/picto/PictoPanel.jsx` les masque pendant la manche, l'arrêt et la révélation Rafale Picto
+  (`!(rafale && (isDrawing || revealed))`, `isDrawing` = `STARTED`, `PAUSED`, `STOPPED`) ; ils restent avant le départ (préparation et `COUNTDOWN`).
 - **Affichage des mots** : `components/picto/pictoRafaleState.js` (`PICTO_FOUND_FLASH_MS = 1000`, états `found`,
   `passed`, `current`, `revealed`).
 - **TV** : `components/picto/PictoTv.jsx` et `components/picto/useRafaleFlash.js`. Le grand compteur de mots trouvés ; le
