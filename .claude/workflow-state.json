@@ -65,10 +65,10 @@
     }
   },
   "cycles": 6,
-  "frozen": false,
+  "frozen": true,
   "description": "PICTO RAFALE — pool Picto (moteur généralisé), type Rafale Picto, présélection des gains (#321), x/net (#322)",
   "started_at": "2026-11-24T16:52:12Z",
-  "updated_at": "2026-11-26T08:34:52Z",
+  "updated_at": "2026-11-26T08:37:35Z",
   "phases": {
     "init": {
       "status": "completed"

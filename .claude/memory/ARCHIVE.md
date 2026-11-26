@@ -363,3 +363,13 @@
   - pas de script lint npm ;
   - `StartImmediate` sans la garde `participantsConform` (proposé depuis v12.0, non traité) ;
   - stash : 18 entrées anciennes toujours non nettoyées.
+
+## v13.0.0 — Picto (archive, RETEX 2026-11-26)
+
+- Milestone #30 PICTO : type Picto (#191), manche jouable (#192, #193, #194), jeton de session des tablettes (#319),
+  `gorilla/websocket` mis à jour (#320). QUALIF 13.0.0.30, CI verte ; PROD publiée par deployer.
+- Décisions : une manche = un mot, sans passe ; mot saisi dans la question, sans réservoir ni IA (reportés en v13.1.0,
+  #48 / #318) ; mode RAFALE de PICTO reporté en v13.1.0.
+- Points de vigilance à l'époque : #259 (endpoints sans authentification), tests Go lents sous `-race`, `gofmt -l`,
+  `StartImmediate` sans garde `participantsConform`, libellé « Reveal » dans `PictoPanel.jsx`.
+

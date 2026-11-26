@@ -3,39 +3,50 @@
 > Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
-## État courant (2026-11-24) — v13.0.0 (Picto) : milestone livré, PROD à publier
+## État courant (2026-11-26) — v13.1.0 (Picto Rafale) : milestone livré, PROD à publier
 
-- **Milestone v13.0.0 — PICTO** (#30) : GATE 4 et GATE 4d validés par l'utilisateur le 2026-11-24. QUALIF 13.0.0.30, CI verte
-  (run 45380755436). **PROD : à publier par deployer** (SHA et tag à compléter après publication).
+- **Milestone v13.1.0 — PICTO RAFALE** (#48) : GATE 4 validé le 2026-11-26, code freeze. Documentation finalisée
+  (CHANGELOG daté 2026-11-26, README à jour). **PROD : à publier par deployer** (SHA et tag à compléter après publication).
 - **Contenu livré** :
-  - Type de question **Picto** (#191) : mots saisis dans la question (1 à 20), éditeur, durée 30 à 300 s (90 par défaut).
-  - Manche jouable (#192, #193, #194) : équipe puis dessinateur (choix ou tirage parmi les VJoueurs connectés), mot tiré au
-    lancement et envoyé seulement au dessinateur, admin et animateur ; dessin en direct sur la TV ; issues trouvé (y compris
-    sur le gong), temps écoulé, arrêt, sans mot ; révélation du mot seul sur la TV et les tablettes ; crédit manuel à l'équipe
-    (ligne commune, pré-remplie aux points) ; relance de la question ; LED de l'équipe qui dessine.
-  - Page Jeu : temps et points repris de la question, pour tous les types (#192).
-  - Jeton de session des tablettes (#319) : un 2e joueur ne s'inscrit pas sur un navigateur qui garde une place ; libération
-    par l'animateur ; `vplayer_sessions.json` (empreintes seules, écriture synchrone) ; WARN commun démarrage et restauration.
-  - Sécurité : `gorilla/websocket` mis à jour (#320, GO-2026-6278).
-  - Perf : relais `PICTO_STROKES` sérialisé une seule fois (#193).
-- **Décisions de ce milestone** : une manche = un mot, sans passe (passes reportées v13.1.0) ; mot saisi dans la question, pas de
-  réservoir ni d'IA (reportés v13.1.0, #48 / #318) ; mode RAFALE de PICTO (maximum de mots) reporté v13.1.0.
-- **Travail en cours** : aucun. Milestone à clore après PROD.
-- **Backlog / points de vigilance** :
-  - **#259** : endpoints sans authentification (`/questions`, `/files`, `/ws/*`) ; les mots Picto sont lisibles avant correction.
-  - **#318 / #48** (v13.1.0) : réservoir Picto, génération IA, catégorie « Pools » de la sauvegarde, mode RAFALE de PICTO.
-  - Tests Go lents sous `-race` (`cmd/server`, `internal/server`, `internal/game`) : découpage à prévoir.
-  - `gofmt -l` : fichiers non conformes préexistants ; pas de script lint npm ; stash ancien non nettoyé.
-  - `StartImmediate` sans la garde `participantsConform` (proposé depuis v12.0, non traité).
-  - Libellé « Reveal » dans le texte d'issue TIMEOUT de `PictoPanel.jsx:78` (le bouton admin s'appelle « REPONSE ») : à aligner.
-  - Point UX non bloquant (v11.4) : écran Groupes — lignes provisoires `cfg-` remplacées à l'arrivée de l'inventaire (clic perdu possible).
-  - Panneau milestone-panel : sélection PLANNING à remonter au template (`teamleader.template.md`).
-- **Hors milestone** : #209 #281 #296 #297 #298 #300 #301 #302 #303 #304 #306 #307. #306 : chargeur du dossier d'effets (mêmes refus
-  que l'import) ; #307 : sauvegarde des effets lumière (case cochée par défaut, restauration contrôlée).
-- **À remonter au template** : Go 1.26.11 dans `env-template.yaml` ; défauts des modèles de procédure (messages d'échec adressés
-  à `"main"` au lieu de `"team-lead"`, suivi CI à viser `release.yml`, contrôle CHANGELOG cherchant `X.Y.Z.a`) ; `deploy.md`
-  compagnon : exception QUALIF `access.verified` (infra 2026-11-12) ; liste « Nommage des Agents » de `teamleader.template.md`
-  (`dev-plugin` absent, `marketing` omis).
+  - **Présélection des gagnants au crédit (#321)** : à la révélation, la page Jeu coche d'office les unités gagnantes
+    (Picto, Mémoire, Rafale Speedy, QCM, Speedy, Ardoise, Memotion). Crédit toujours manuel. Chip « +N pts » sur l'équipe cochée.
+  - **x/net v0.62.0, x/sys v0.49.0 (#322)** : GO-2026-6866, GO-2026-6860.
+  - **Pool Picto (#324)** : réservoir de mots sur le moteur de pool généralisé (deux instances, Pool Speedy et Pool Picto),
+    génération IA 10/20/50, collage d'une liste, sauvegarde « Pools » à trois états, verrou 409 pendant une manche Picto.
+    Renommage d'affichage : « Rafale Speedy » / « Pool Speedy » (identifiants inchangés).
+  - **Rafale Picto (#318)** : type à part entière (🖍️), famille Picto. Le plus de mots possible en un temps donné, même
+    dessinateur ; passes annoncées à l'oral et déclenchées par admin ou anim (coût 0 à 100, 1 passe ou illimitées) ; fin de
+    pool en reboucle ou fin de manche ; crédit suggéré `max(0, trouvés × points − passes × coût)` ; TV avec mot trouvé 1 s.
+  - **Décompte Picto sur la tablette du dessinateur (#326).**
+- **Documentation** : `contracts/picto.md` §17, `picto-pool.md` rév. 3, `award-preselect.md` rév. 3 ; docs techniques
+  (DATA_MODELS, WEBSOCKET_PROTOCOL, GAME_STATE_MACHINE, REACT_INTERFACE, ADMIN_GUIDE) à jour.
+- **Décisions de ce milestone** : Rafale Picto est un type (pas un mode de PICTO) ; le pool Picto est une instance du moteur
+  Speedy généralisé ; présélection du crédit à la révélation, sans nouvel envoi serveur.
+- **Travail en cours** : aucun.
+
+## Backlog et points pour la prochaine session
+
+- **#259** : endpoints sans authentification (`/api/picto/*`, `/questions`, `/files`, `/ws/*`) ; la liste des mots Picto est
+  lisible hors manche par qui peut joindre le serveur (refus 409 seulement pendant `STARTED` / `PAUSED`).
+- **#325** : flake `TestCategories285_HistoryBackups_RotateToFive_…` (RemoveAll sur un TempDir, sauvegarde asynchrone).
+- **#327** : à reprendre selon le suivi GitHub.
+- `PoolPage` ne se recharge pas à la fin de la manche Picto (il faut rouvrir l'onglet).
+- Récapitulatif TV et tablette tronqué au-delà d'une dizaine de mots trouvés (voulu : TV statique).
+- Taille `22vh` du décompte du dessinateur (tablette) : non vérifiée sur appareil.
+- Scénarios IA 4 et 5 (génération Pool Picto et Pool Speedy, job croisé) jamais testés avec une clé API réelle ; à rejouer
+  à la QUALIF finale.
+- Tests Go lents sous `-race` (`cmd/server`, `internal/server`, `internal/game`) : découpage à prévoir.
+- `gofmt -l` : fichiers non conformes préexistants ; pas de script lint npm ; stash ancien non nettoyé.
+- `StartImmediate` sans la garde `participantsConform` (proposé depuis v12.0, non traité).
+- Libellé « Reveal » dans le texte d'issue TIMEOUT de `PictoPanel.jsx` (le bouton admin s'appelle « REPONSE ») : à aligner.
+- Point UX non bloquant (v11.4) : écran Groupes — lignes provisoires `cfg-` remplacées à l'arrivée de l'inventaire.
+- Panneau milestone-panel : sélection PLANNING à remonter au template (`teamleader.template.md`).
+- **Hors milestone** : #209 #281 #296 #297 #298 #300 #301 #302 #303 #304 #306 #307. #306 : chargeur du dossier d'effets
+  (mêmes refus que l'import) ; #307 : sauvegarde des effets lumière (case cochée par défaut, restauration contrôlée).
+- **À remonter au template** : Go 1.26.11 dans `env-template.yaml` ; défauts des modèles de procédure (messages d'échec
+  adressés à `"main"` au lieu de `"team-lead"`, suivi CI à viser `release.yml`, contrôle CHANGELOG cherchant `X.Y.Z.a`) ;
+  `deploy.md` compagnon : exception QUALIF `access.verified` (infra 2026-11-12) ; liste « Nommage des Agents » de
+  `teamleader.template.md` (`dev-plugin` absent, `marketing` omis).
 - Site marketing : règle des badges « Nouveau » = majeure en cours + 2 dernières mineures, retrait à chaque republication
   (`.claude/agents/marketing-release.md`). Carte : 1 à 2 phrases, visuel + gameplay, mots clés en `<strong>`.
 
@@ -45,6 +56,12 @@
 3. Maquettes ouvertes dans Chrome (extension claude-in-chrome) par l'URL du serveur web du launcher — `commands/context/MOCKUPS.md` 14.9.
 4. Jamais d'amend ni de réécriture dans le dépôt principal. (porté par `CLAUDE.md` « Branche courante et worktrees »)
 5. Environnement des agents : conteneur Claude-Launcher (Linux, pas de `/mnt/c`) ; Go 1.26.11 et Node Linux v22.23.3 portés par `project-config.json` → `commands.env` (à évaluer avant toute commande `commands.*`) ; worktrees jetables sous `.claude/worktrees/<nom>` (`agents/context/COMMON.md` « Confinement ») ; `actionlint` absent. Mémoire auto `project_go_path_agents`.
+
+## Migration RETEX v13.1.0
+
+Éléments de MEMORY examinés pour migration (`commands/context-audit.md` §2.4) : aucun nouvel élément de règle permanente.
+Les règles du milestone (contrats Picto, libellés, secrets `RAFALE_PICTO_WORDS`, présélection, pool) sont déjà dans les docs
+projet (`docs/*.md`, `contracts/`, CHANGELOG). Les points restants sont du backlog, gardés ici pour la prochaine session.
 
 ## Leçons en fichiers (`.claude/memory/feedback_*.md`)
 
@@ -70,4 +87,4 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
 ## Archives
 
-États antérieurs (v11.0.0 → v12.1.0, synchronisations du template v3.14 → v4.2) : `.claude/memory/ARCHIVE.md`.
+États antérieurs (v11.0.0 → v13.0.0, synchronisations du template) : `.claude/memory/ARCHIVE.md`.
