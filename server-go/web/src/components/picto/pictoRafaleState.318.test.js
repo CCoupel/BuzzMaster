@@ -80,3 +80,29 @@ describe('fil de la manche (advanceThread / closeThread)', () => {
     expect(closeThread(thread, { found: 1 }, { found: 1, passes: 0 })).toEqual(thread)
   })
 })
+
+import { groupThread, presentationCount, stateChipLabel } from './pictoRafaleState'
+describe('groupThread / presentationCount / stateChipLabel (M9 A)', () => {
+  const T = (word, status, epoch) => ({ word, status, epoch })
+  it('trouvés un à un dans l\'ordre, puis passés regroupés « n » par mot (casse et espaces repliés)', () => {
+    const g = groupThread([T('Chat', 'found', 1), T('Lion', 'passed', 2), T(' lion ', 'passed', 3), T('Tortue', 'passed', 4), T('Zèbre', 'found', 5), T('Maison', 'current', 6)])
+    expect(g.map(x => [x.status, x.word.trim(), x.count])).toEqual([['found', 'Chat', 1], ['found', 'Zèbre', 1], ['passed', 'Lion', 2], ['passed', 'Tortue', 1]])
+  })
+  it('le mot en cours et le mot révélé ne sont pas dans le fil ; fil vide si rien', () => {
+    expect(groupThread([T('A', 'current', 1)])).toEqual([])
+    expect(groupThread([T('A', 'revealed', 1)])).toEqual([])
+    expect(groupThread(undefined)).toEqual([])
+  })
+  it('presentationCount : occurrences du mot dans le fil, lui compris', () => {
+    expect(presentationCount([T('Lion', 'passed', 1), T('Lion', 'passed', 2), T('Lion', 'current', 3)], 'lion')).toBe(3)
+    expect(presentationCount([], 'Lion')).toBe(0)
+    expect(presentationCount([T('Lion', 'current', 1)], '')).toBe(0)
+  })
+  it('stateChipLabel', () => {
+    expect(stateChipLabel({ phase: 'STARTED' })).toBe('en cours')
+    expect(stateChipLabel({ phase: 'PAUSED' })).toBe('⏸ pause')
+    expect(stateChipLabel({ phase: 'STOPPED', PICTO_OUTCOME: 'TIMEOUT' })).toBe('⏰ temps écoulé')
+    expect(stateChipLabel({ phase: 'REVEALED', PICTO_OUTCOME: 'POOL_END' })).toBe('⛔ pool épuisé')
+    expect(stateChipLabel({ phase: 'STOPPED', PICTO_OUTCOME: 'STOPPED' })).toBe('⏹ arrêtée')
+  })
+})

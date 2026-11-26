@@ -62,7 +62,7 @@ export function AnimPictoView({ gameState: gs, teams = {}, bumpers = {}, actions
             </div>
             <div className="anim-picto-side">
               {rafale ? (
-                <PictoRafaleConduct gs={gs} word={word} thread={thread} actions={actions} variant="anim" customCategories={customCategories} onReveal={onReveal} />
+                <PictoRafaleConduct gs={gs} word={word} thread={thread} actions={actions} variant="anim" onReveal={onReveal} />
               ) : (<>
               <div className="picto-wordbox">
                 {/* Libellé de la carte du mot : texte exact des maquettes validées (anim_picto__found_credit) */}

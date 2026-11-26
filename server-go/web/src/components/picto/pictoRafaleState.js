@@ -79,3 +79,42 @@ export const THREAD_ICON = { found: '✅', passed: '⏭', current: '✏️', rev
 
 /** Mots nécessaires estimés pour la manche : plafond(TIME / 10) (picto.md §17.3). */
 export const neededWords = (q) => (Number(q?.TIME) > 0 ? Math.ceil(Number(q.TIME) / 10) : 0)
+
+/**
+ * Fil compact (maquette M9 A) : les mots TROUVÉS restent un à un dans l'ordre ; les mots PASSÉS sont regroupés par mot
+ * avec le nombre de passes (« Lion ×5 »), à la place de leur première occurrence ; le mot en cours (✏️) et le mot
+ * révélé (⌛) n'en font pas partie (ils ont leur propre ligne). Regroupement par mot replié (casse et espaces).
+ *
+ * @param {Array<{word:string, epoch:number, status:string}>} thread
+ * @returns {Array<{key:string, word:string, status:'found'|'passed', count:number}>} trouvés d'abord, puis passés regroupés
+ */
+export function groupThread(thread) {
+  const foundList = []
+  const passed = []
+  const passedIdx = new Map()
+  for (const t of thread || []) {
+    if (t.status === 'found') { foundList.push({ key: `f-${t.epoch}-${foundList.length}`, word: t.word, status: 'found', count: 1 }); continue }
+    if (t.status !== 'passed') continue
+    const k = String(t.word || '').trim().toLowerCase()
+    if (passedIdx.has(k)) { passed[passedIdx.get(k)].count += 1; continue }
+    passedIdx.set(k, passed.length)
+    passed.push({ key: `p-${k}`, word: t.word, status: 'passed', count: 1 })
+  }
+  return [...foundList, ...passed] // trouvés (ordre), puis passés regroupés (ordre de première passe) — maquette M9 A
+}
+
+/** Nombre de fois où le mot en cours a déjà été présenté dans le fil, lui compris (« 6ᵉ présentation »). */
+export function presentationCount(thread, word) {
+  const k = String(word || '').trim().toLowerCase()
+  if (!k) return 0
+  return (thread || []).filter(t => String(t.word || '').trim().toLowerCase() === k).length
+}
+
+/** Étiquette d'état du bandeau : en cours, pause, temps écoulé, arrêtée, pool épuisé. */
+export function stateChipLabel(gs) {
+  if (gs?.PICTO_OUTCOME === 'POOL_END') return '⛔ pool épuisé'
+  if (gs?.PICTO_OUTCOME === 'TIMEOUT') return '⏰ temps écoulé'
+  if (gs?.phase === 'PAUSED') return '⏸ pause'
+  if (gs?.phase === 'STARTED') return 'en cours'
+  return '⏹ arrêtée'
+}

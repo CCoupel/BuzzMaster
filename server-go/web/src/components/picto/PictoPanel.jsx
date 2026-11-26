@@ -49,6 +49,7 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
 
   return (
     <div className="picto-panel" data-testid="picto-panel">
+      {!(rafale && (isDrawing(gs.phase) || revealed)) && (<>
       {/* Titre exact de la maquette validée admin_game_picto__found_credit : « ✏️ Picto — révélé · ✅ Trouvé » en REVEALED */}
       <div className="picto-title" data-testid={revealed && gs.PICTO_OUTCOME ? 'picto-outcome' : undefined}>
         {rafale ? '🖍️ Rafale Picto' : '✏️ Picto'} — {isPreparing(gs.phase) ? 'préparation' : revealed ? `révélé${gs.PICTO_OUTCOME ? ` · ${outcomeLabel(gs)}` : ''}` : 'manche en cours'}
@@ -59,6 +60,7 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
           : <>✍️ <b>{words} mot{words > 1 ? 's' : ''}</b> dans la question</>}
         {cat ? ` · ${cat.icon ? `${cat.icon} ` : ''}${cat.label}` : ''} · {rafale ? 'mots tirés au fil de la manche' : 'un mot tiré au lancement'}
       </p>
+      </>)}
       {isPreparing(gs.phase) && <PictoPrepare gs={gs} teamList={teamList} actions={actions} />}
       {rafale && isPreparing(gs.phase) && (
         <p className={`picto-muted${available < neededWords(q) ? ' picto-err' : ''}`} data-testid="picto-rafale-prep-hint">
@@ -66,7 +68,7 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
         </p>
       )}
       {rafale && (isDrawing(gs.phase) || revealed) && (
-        <PictoRafaleConduct gs={gs} word={word} thread={thread} actions={actions} variant="admin" customCategories={customCategories} />
+        <PictoRafaleConduct gs={gs} word={word} thread={thread} actions={actions} variant="admin" />
       )}
       {!rafale && (isDrawing(gs.phase) || gs.phase === 'REVEALED') && (
         <div className="picto-live">
@@ -94,11 +96,9 @@ export default function PictoPanel({ gameState: gs, actions, error, teamList = [
           {gs.PICTO_OUTCOME === 'TIMEOUT' ? ' — le mot n\'est pas encore affiché : « Trouvé » crédite encore l\'équipe, « REPONSE » montre le mot à tous, sans points.' : ''}
         </p>
       )}
-      {revealed && (
+      {revealed && !rafale && (
         <p className="picto-muted">
-          {rafale
-            ? 'Crédit manuel par la colonne Équipes : l\'équipe de la manche est présélectionnée avec le montant suggéré par le serveur (ajustable) ; il déclenche l\'animation commune des points sur la TV.'
-            : <>Crédit par la colonne Équipes (champ Points pré-rempli à {q.POINTS ?? '—'}), comme pour les autres types ; il déclenche l'animation commune des points sur la TV.</>}
+          Crédit par la colonne Équipes (champ Points pré-rempli à {q.POINTS ?? '—'}), comme pour les autres types ; il déclenche l'animation commune des points sur la TV.
         </p>
       )}
       <PictoDisconnectAlert gs={gs} />

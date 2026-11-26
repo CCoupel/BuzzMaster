@@ -148,6 +148,14 @@ describe('GamePage — présélection à l’entrée en REVEALED (#321)', () => 
     expect(game.teamPointsBatch).toHaveBeenCalledWith('rp', [{ team: 'Rouges', points: 25 }])
   })
 
+  it('Rafale Picto (M9 A) : le bandeau de la manche est AU-DESSUS de la zone de jeu (aperçu TV)', () => {
+    reveal({ phase: 'STARTED', question: { ID: 'rp', TYPE: 'RAFALE_PICTO', QUESTION: 'RP', ANSWER: '—', POINTS: '10', STATUS: 'STARTED' }, PICTO_TEAM: 'Rouges', PICTO_ROUND_POINTS: 0, PICTO_FOUND_COUNT: 0, PICTO_PASS_COUNT: 0, PICTO_FOUND_WORDS: [] })
+    const banner = screen.getByTestId('picto-rafale-stats')
+    const game = document.querySelector('.tv-preview-container')
+    expect(game).not.toBeNull()
+    expect(banner.compareDocumentPosition(game) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('modification manuelle du champ « Points » après REVEALED : ne recoche ni ne décoche rien', () => {
     reveal({ question: { ID: '1', TYPE: 'QCM', QUESTION: 'Q', ANSWER: 'x', POINTS: '3', QCM_ANSWERS: { GREEN: 'b' }, QCM_CORRECT: 'GREEN', STATUS: 'REVEALED' } })
     fireEvent.click(box('Bleus'))
