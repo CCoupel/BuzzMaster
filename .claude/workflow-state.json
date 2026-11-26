@@ -2,7 +2,7 @@
   "type": "FEATURE",
   "version": "13.1.0",
   "branch": "milestone/v13.1.0",
-  "status": "in_progress",
+  "status": "completed",
   "milestone_num": 48,
   "issue_nums": [
     322,
@@ -65,10 +65,10 @@
     }
   },
   "cycles": 6,
-  "frozen": true,
+  "frozen": false,
   "description": "PICTO RAFALE — pool Picto (moteur généralisé), type Rafale Picto, présélection des gains (#321), x/net (#322)",
   "started_at": "2026-11-24T16:52:12Z",
-  "updated_at": "2026-11-26T08:37:35Z",
+  "updated_at": "2026-11-26T09:05:02Z",
   "phases": {
     "init": {
       "status": "completed"
@@ -83,7 +83,7 @@
       }
     },
     "dev": {
-      "status": "in_progress",
+      "status": "completed",
       "lot": "LOT-3"
     }
   }
