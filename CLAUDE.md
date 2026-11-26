@@ -141,6 +141,16 @@ cd server-go && ./build.ps1  # Build portable Windows/Linux (script Windows, lan
   clearable : `/clear` puis la tâche dans le même tour. Spawn seulement : team du milestone au GATE 2, agents
   `ponctuel`, agent perdu.
 - **Lots** : aucun ordre pour LOT-N+1 tant que LOT-N n'est pas terminé ET validé (`cdp.template.md` « Verrou »).
+- **GATE LOT / GATE 4** : seul document présenté = le **plan de test HTML** `_work/test-plan/plan-de-test__*.html`,
+  commandé au `test-writer` (ordre `PLAN DE TEST`) après DEPLOY QUALIF + QA. Jamais le `.md` de procédure ; pas de
+  `DONE`/HTML → pas de question (`cdp.template.md` « GATE de validation par tests »).
+- **Maquettes et plans de test : toujours ouverts dans Chrome** (`mcp__claude-in-chrome__*`, `tabs_create_mcp` +
+  `navigate`) avant la question, **jamais** juste cités ; chemin exact aussi dans la question. URL = celle du serveur
+  web du launcher (`browser_url`, `commands/context/MOCKUPS.md` 14.9), jamais `file://`. Chrome inaccessible : le dire,
+  ne pas bloquer.
+- **Résultat des tests** : lire le rapport **seulement après** la réponse de l'utilisateur (jamais pendant l'attente),
+  dans l'onglet déjà ouvert, via `javascript_tool` → `window.__planTestReport()` (pas `get_page_text`, qui ignore
+  l'état OK/KO).
 
 <!-- END TEAMLEADER_PROTOCOL -->
 
