@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [13.1.0] - 2026-11-24 — Rafale Picto, Pool Picto, présélection des gagnants au crédit, sécurité des dépendances Go (#318, #321, #322, #324, #326)
+## [13.1.0] - 2026-11-26 — Rafale Picto, Pool Picto, présélection des gagnants au crédit, sécurité des dépendances Go (#318, #321, #322, #324, #326)
 
 Cette version ajoute le type Rafale Picto (#318) et le Pool Picto avec génération IA (#324), corrige le décompte Picto sur la tablette du dessinateur (#326), et ajoute la présélection des gagnants au crédit (#321) ; la mise à jour x/net est en #322.
 
