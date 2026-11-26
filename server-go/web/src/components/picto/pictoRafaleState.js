@@ -81,8 +81,8 @@ export const THREAD_ICON = { found: '✅', passed: '⏭', current: '✏️', rev
 export const neededWords = (q) => (Number(q?.TIME) > 0 ? Math.ceil(Number(q.TIME) / 10) : 0)
 
 /**
- * Fil compact (maquette M9 A) : les mots TROUVÉS restent un à un dans l'ordre ; les mots PASSÉS sont regroupés par mot
- * avec le nombre de passes (« Lion ×5 »), à la place de leur première occurrence ; le mot en cours (✏️) et le mot
+ * Fil compact (maquette M9 A) : d'abord les mots TROUVÉS, un à un dans l'ordre où ils ont été trouvés ; puis les mots PASSÉS
+ * regroupés par mot avec le nombre de passes (« Lion ×5 »), dans l'ordre de leur première passe ; le mot en cours (✏️) et le mot
  * révélé (⌛) n'en font pas partie (ils ont leur propre ligne). Regroupement par mot replié (casse et espaces).
  *
  * @param {Array<{word:string, epoch:number, status:string}>} thread

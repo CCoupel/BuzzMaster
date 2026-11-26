@@ -27,7 +27,8 @@ export default function PictoRafaleConduct({ gs, word, thread = [], actions, var
   const poolEnd = gs.PICTO_OUTCOME === 'POOL_END'
   const canPass = canPictoPass(gs)
   const canFound = canRafaleFound(gs)
-  const live = !revealed && gs.phase !== 'PREPARE' && gs.phase !== 'READY'
+  // Ligne « Mot : … » + boutons : seulement tant qu'un mot est en jeu (ni préparation, ni révélation, ni fin de pool : plus de mot)
+  const live = !revealed && !poolEnd && gs.phase !== 'PREPARE' && gs.phase !== 'READY'
   const grouped = groupThread(thread)
   const nth = presentationCount(thread, word)
 

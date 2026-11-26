@@ -80,7 +80,12 @@ describe.each([['admin (M7)', admin, 'admin'], ['anim (M6)', anim, 'anim']])('Co
   it('fin du pool : message dédié, pas de « Trouvé »/« Passer » proposés', () => {
     mount(gs({ phase: 'STOPPED', PICTO_OUTCOME: 'POOL_END' }))
     expect(screen.getByTestId('picto-rafale-poolend')).toBeTruthy()
-    expect(screen.getByTestId('picto-rafale-found').disabled).toBe(true)
+    // plus de mot en jeu : ni ligne « Mot : — » ni boutons (même grisés), absents de la maquette M9
+    expect(screen.queryByTestId('picto-rafale-word')).toBeNull()
+    expect(screen.queryByTestId('picto-rafale-found')).toBeNull()
+    expect(screen.queryByTestId('picto-rafale-pass')).toBeNull()
+    expect(document.body.textContent).not.toContain('Mot :')
+    expect(screen.getByTestId('picto-rafale-state').textContent).toBe('⛔ pool épuisé')
   })
   it('révélation : mot révélé, récapitulatif avec la formule du crédit, plus de boutons', () => {
     mount(gs({ phase: 'REVEALED', PICTO_REVEALED_WORD: 'Maison', PICTO_OUTCOME: 'TIMEOUT' }))
