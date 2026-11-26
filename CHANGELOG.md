@@ -53,7 +53,7 @@ Le crédit reste manuel : rien n'est attribué tant que l'admin ne clique pas su
   (mots trouvés × points − passes × coût) est en info-bulle. Une ligne « Mot » porte le mot en cours, sa présentation
   (« 2ᵉ présentation ») et les boutons Passer / Trouvé. Le fil regroupe les mots trouvés un à un et les mots passés
   dédoublonnés (« Lion ×5 »), sur fond de la couleur de l'équipe qui joue. Révélé : le mot est une pastille jaune ; pool
-  épuisé : « Fin de pool · crédit nul ». L'en-tête et la ligne du Pool Picto ne s'affichent qu'en préparation.
+  épuisé : « Fin de pool · crédit nul : rien n'est coché ». L'en-tête et la ligne du Pool Picto ne s'affichent qu'en préparation.
 - **Pool Picto (#324)** — réservoir de mots pour le type Picto, sur le même moteur que le Pool Speedy (deux instances
   d'un même moteur). Onglet « Pool Picto » de la page Questions (`?tab=picto`) : tableau filtrable (catégories,
   difficulté, « Non utilisés »), « Remettre tout disponible », formulaire « Nouveau mot ».
