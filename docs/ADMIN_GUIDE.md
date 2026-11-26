@@ -2507,13 +2507,15 @@ de la question, avec le même dessinateur du début à la fin. Le mot passe au s
 4. Quand le dessinateur **annonce une passe à voix haute** : **⏭ Passer** (le coût est affiché sur le bouton). Le mot passé
    ne réapparaîtra qu'avec le rebouclage. Le bouton est désactivé quand la passe est épuisée, et hors de la manche en cours (pause, arrêt).
 5. Au temps écoulé, la manche s'arrête (`STOPPED`). Si le mot en cours a été donné sur le gong, **Trouvé sur le gong** (une seule fois) le compte et révèle ; sinon, **Révéler**.
-6. **Fin** : la révélation montre le mot en cours (s'il n'a pas été trouvé). Les mots passés ne sont jamais montrés.
+6. **Fin** : la révélation montre le mot en cours (s'il n'a pas été trouvé), en pastille jaune. Les mots passés ne sont jamais montrés. Si le pool est épuisé, la zone affiche « Fin de pool · crédit nul » quand le crédit est à 0.
 
 **Crédit** : le champ « Points » est pré-rempli à `mots trouvés × points − passes × coût`, sans descendre sous 0.
 L'équipe est présélectionnée. Vous pouvez modifier le montant avant « Attribuer les points ». Les passes ne débitent
 jamais le score : elles réduisent seulement le montant suggéré.
 
-> ℹ️ Le dessinateur ne voit jamais de bouton « Passer » : c'est vous ou l'animateur qui déclenchez la passe. Si l'admin
+> ℹ️ En haut de la zone, le bandeau donne l'état, les compteurs et le crédit suggéré ; la formule est en info-bulle sur le crédit. Le fil regroupe les passes (« Lion ×5 »).
+>
+> Le dessinateur ne voit jamais de bouton « Passer » : c'est vous ou l'animateur qui déclenchez la passe. Si l'admin
 > et l'anim cliquent en même temps, un seul mot avance : le second geste, daté d'un mot déjà remplacé, est refusé.
 
 ### Pool Picto — réservoir de mots (v13.1.0, #324)

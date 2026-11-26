@@ -2163,8 +2163,14 @@ Le type `RAFALE_PICTO` est une variante de la famille Picto. Les règles de fami
   étoiles vides), `variant='picto'` reste inchangé. « Ajouter » est grisé tant que `isPictoReady` est faux (filtre incomplet).
 - **Conduite admin et anim** : `components/picto/PictoRafaleConduct.jsx`. Boutons « ⏭ Passer » (avec le coût, ou « Plus
   de passe disponible ») et « ✅ Trouvé » (« Trouvé sur le gong » après un temps écoulé). Les deux envoient l'époque du mot
-  affiché (`EPOCH`). Le fil des mots (rangée de pastilles en `flex-wrap`, fond = couleur de l'équipe qui joue, repli `#475569`) montre le mot en cours (gras), les trouvés (✅) et les passés (barrés, ⏭). Aucun mot à venir n'est affiché.
-  La variante `anim` a des boutons larges.
+  affiché (`EPOCH`). Zone compacte (maquette M9 A) : bandeau `picto-rafale-banner` au-dessus de la zone de jeu (état, trouvés, passes,
+  restants, « Crédit X pts ⓘ » dont la formule est en info-bulle seulement), puis la ligne « Mot : … » (`picto-rafale-word`,
+  « (nᵉ présentation) » via `presentationCount`) avec Passer / Trouvé. Le fil (`picto-thread`, flex-wrap, fond = couleur de
+  l'équipe qui joue, repli `#475569`) est regroupé par `groupThread` : trouvés un à un, passés dédoublonnés « ×n », mot en
+  cours en gras. Révélé : pastille jaune du mot (`picto-revealed-chip`). Aucun mot à venir n'est affiché.
+  Admin (`variant="admin"`) et anim (`variant="anim"`, boutons larges) partagent le même composant.
+- **En-tête et ligne pool** : `components/picto/PictoPanel.jsx` les masque pendant la manche et la révélation Rafale Picto
+  (`!(rafale && (isDrawing || revealed))`) ; ils restent en préparation.
 - **Affichage des mots** : `components/picto/pictoRafaleState.js` (`PICTO_FOUND_FLASH_MS = 1000`, états `found`,
   `passed`, `current`, `revealed`).
 - **TV** : `components/picto/PictoTv.jsx` et `components/picto/useRafaleFlash.js`. Le grand compteur de mots trouvés ; le
